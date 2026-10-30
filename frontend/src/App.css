@@ -3,6 +3,7 @@
 :root {
   --bg-main: #f8fafc;
   --bg-card: #ffffff;
+  --bg-card-alt: #f1f5f9;
   --bg-header: #0f172a;
   --bg-input: #ffffff;
   --text-main: #334155;
@@ -29,6 +30,7 @@
 body.dark-mode {
   --bg-main: #0f172a;
   --bg-card: #1e293b;
+  --bg-card-alt: #273449;
   --bg-header: #1e293b;
   --bg-input: #0f172a;
   --text-main: #f1f5f9;
@@ -171,7 +173,7 @@ body {
 .nav-links {
   justify-self: center;
   display: flex;
-  gap: 8px;
+  gap: 2px;
   flex-wrap: nowrap;
   align-items: center;
 }
@@ -179,10 +181,26 @@ body {
 .nav-link {
   color: #94a3b8;
   text-decoration: none;
-  font-size: 14px;
-  padding: 8px 12px;
+  font-size: 13px;
+  padding: 8px 10px;
   border-radius: 6px;
   white-space: nowrap;
+}
+
+/* 메뉴가 많아 노트북 해상도에서 오른쪽 버튼이 잘리지 않도록 간격을 줄임 */
+@media (min-width: 769px) and (max-width: 1400px) {
+  .desktop-header-bar {
+    padding: 0 8px;
+  }
+
+  .nav-logo {
+    font-size: 18px;
+  }
+
+  .nav-link {
+    font-size: 12px;
+    padding: 8px 6px;
+  }
 }
 
 .nav-link:hover {
@@ -201,14 +219,14 @@ body {
   justify-self: end;
   display: flex;
   align-items: center;
-  gap: 20px;
+  gap: 12px;
 }
 
 .user-info {
   display: flex;
-  gap: 16px;
+  gap: 10px;
   border-left: 1px solid #475569;
-  padding-left: 16px;
+  padding-left: 12px;
   align-items: center;
 }
 
@@ -216,6 +234,17 @@ body {
   color: #e2e8f0;
   font-size: 14px;
   white-space: nowrap;
+}
+
+/* 상단바는 테마와 관계없이 어두운 배경이므로 밝은 글자로 고정 */
+.navbar .btn-neutral {
+  color: #e2e8f0;
+  border-color: #475569;
+}
+
+.navbar .btn-neutral:hover {
+  color: #f8fafc;
+  background-color: rgba(255, 255, 255, 0.08);
 }
 
 /* PATTERN LIBRARY (Layout & Input) */
@@ -442,6 +471,258 @@ body {
   font-size: 11px;
   font-weight: 700;
   height: 26px;
+}
+
+/* PATTERN LIBRARY (Page Helpers) */
+.header-time {
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.cell-time {
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.dashboard-card {
+  overflow: hidden;
+}
+
+.card-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.action-btn-group {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+/* PATTERN LIBRARY (Badges) */
+.badge {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.card-count-badge {
+  padding: 4px 10px;
+  border-radius: 9999px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background-color: var(--bg-card-alt);
+}
+
+.ip-badge {
+  padding: 3px 8px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-btn);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  color: var(--text-main);
+  background-color: var(--bg-main);
+}
+
+.badge-blue,
+.badge-primary {
+  color: var(--color-primary);
+  background-color: rgba(14, 165, 233, 0.12);
+}
+
+.badge-green,
+.badge-success {
+  color: var(--color-success);
+  background-color: rgba(16, 185, 129, 0.12);
+}
+
+.badge-danger {
+  color: var(--color-danger);
+  background-color: rgba(239, 68, 68, 0.12);
+}
+
+.badge-warning {
+  color: var(--color-warning);
+  background-color: rgba(245, 158, 11, 0.12);
+}
+
+.badge-gray {
+  color: var(--text-muted);
+  background-color: var(--bg-card-alt);
+}
+
+/* PATTERN LIBRARY (Button Variants) */
+.btn-action-reject {
+  color: var(--color-danger);
+  background-color: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+}
+
+.btn-action-reject:hover:not(:disabled) {
+  background-color: rgba(239, 68, 68, 0.22);
+}
+
+.btn-action-edit {
+  color: var(--text-main);
+  background-color: var(--bg-card-alt);
+  border: 1px solid var(--border-input);
+}
+
+.btn-action-edit:hover:not(:disabled) {
+  background-color: var(--border-color);
+}
+
+.btn-action-cancel {
+  color: #fff;
+  background-color: var(--color-neutral);
+}
+
+.btn-action-cancel:hover:not(:disabled) {
+  filter: brightness(0.9);
+}
+
+.btn-action-outline {
+  height: 26px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--color-primary);
+  background-color: transparent;
+  border: 1px solid var(--color-primary);
+  border-radius: var(--radius-btn);
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+.btn-action-outline:hover:not(:disabled) {
+  background-color: rgba(14, 165, 233, 0.12);
+}
+
+/* PATTERN LIBRARY (Auth Forms) */
+.auth-wrapper {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 60px 16px;
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 420px;
+  padding: 36px 32px;
+}
+
+.captive-card {
+  border-top: 5px solid var(--color-primary);
+}
+
+.auth-header {
+  margin-bottom: 28px;
+  text-align: center;
+}
+
+.auth-icon {
+  margin-bottom: 8px;
+  font-size: 38px;
+}
+
+.auth-title {
+  margin: 0 0 6px 0;
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text-title);
+}
+
+.auth-subtitle {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  text-align: left;
+}
+
+.form-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.auth-submit-btn {
+  width: 100%;
+  height: 44px;
+  margin-top: 8px;
+  border: none;
+  border-radius: var(--radius-btn);
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+.captive-success-box {
+  padding: 24px;
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  border-radius: 8px;
+  text-align: center;
+  background-color: rgba(16, 185, 129, 0.12);
+}
+
+.captive-success-icon {
+  margin-bottom: 8px;
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--color-success);
+}
+
+.captive-success-title {
+  margin: 0 0 8px 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--color-success);
+}
+
+.captive-success-desc {
+  margin: 0 0 20px 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-main);
+}
+
+.btn-success-action {
+  width: 100%;
+  padding: 12px;
+  border: none;
+  border-radius: var(--radius-btn);
+  font-size: 14px;
+  font-weight: 700;
+  color: #fff;
+  background-color: var(--color-success);
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+.btn-success-action:hover {
+  filter: brightness(0.9);
 }
 
 /* SETTINGS DROPDOWN */
