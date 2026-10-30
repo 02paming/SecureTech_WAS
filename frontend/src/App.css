@@ -510,7 +510,10 @@ a.btn-action {
 .custom-table td {
   height: 44px;
   padding: 8px 14px;
+  overflow: hidden;
   border-bottom: 1px solid var(--border-color);
+  text-overflow: ellipsis;
+  white-space: nowrap;
   vertical-align: middle;
 }
 
