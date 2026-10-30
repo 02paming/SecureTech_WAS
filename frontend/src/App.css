@@ -772,7 +772,7 @@ body.dark-mode .auth-admin {
 
 .auth-title {
   margin: 0 0 6px 0;
-  font-size: 22px;
+  font-size: 20px;
   font-weight: 700;
   color: var(--text-title);
 }
