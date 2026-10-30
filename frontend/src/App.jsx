@@ -9,6 +9,11 @@ import {
   useLocation,
   useNavigate,
 } from "react-router-dom";
+import "@fontsource/pretendard/400.css";
+import "@fontsource/pretendard/600.css";
+import "@fontsource/pretendard/700.css";
+import "@fontsource/jetbrains-mono/400.css";
+import "@fontsource/jetbrains-mono/700.css";
 import "./App.css";
 import api from "./api";
 

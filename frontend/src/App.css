@@ -1,6 +1,6 @@
-@import url("https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700&display=swap");
-
 :root {
+  --font-sans: "Pretendard", "Malgun Gothic", sans-serif;
+  --font-mono: "JetBrains Mono", "Pretendard", Consolas, monospace;
   --bg-main: #f8fafc;
   --bg-card: #ffffff;
   --bg-card-alt: #f1f5f9;
@@ -60,7 +60,7 @@ html {
 
 body {
   margin: 0;
-  font-family: "Noto Sans KR", sans-serif;
+  font-family: var(--font-sans);
   background-color: var(--bg-main);
   color: var(--text-main);
   -webkit-font-smoothing: antialiased;
@@ -912,7 +912,7 @@ body.dark-mode .auth-admin {
 }
 
 .tag-mono {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-family: var(--font-mono);
   font-weight: 400;
 }
 
@@ -1020,7 +1020,7 @@ body.dark-mode .auth-admin {
 }
 
 .cell-mono {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-family: var(--font-mono);
 }
 
 .row-danger td {
@@ -1834,7 +1834,7 @@ textarea.custom-input {
   min-height: 0;
   padding: 16px;
   overflow-y: auto;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
 }
 
