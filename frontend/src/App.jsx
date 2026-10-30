@@ -1,320 +1,629 @@
-import React, { useState, useEffect } from "react";
+import { lazy, memo, Suspense, useEffect, useState } from "react";
 import {
   BrowserRouter,
-  Routes,
-  Route,
-  NavLink,
   Link,
-  useNavigate,
+  Navigate,
+  NavLink,
+  Route,
+  Routes,
   useLocation,
+  useNavigate,
 } from "react-router-dom";
-import axios from "axios";
 import "./App.css";
+import api from "./api";
 
-// 페이지 컴포넌트 임포트
-import Home from "./pages/Home";
-import HomeEdit from "./pages/HomeEdit";
-import Dashboard from "./pages/Dashboard";
-import Signup from "./pages/Signup";
-import SignupApproval from "./pages/SignupApproval";
-import PolicyManage from "./pages/PolicyManage";
-import MyPage from "./pages/MyPage";
-import Login from "./pages/Login"; // 관리자 콘솔 로그인 (3.23 전용)
-import UserLogin from "./pages/UserLogin"; // 일반 홈페이지 로그인 (1.23 전용)
-import CaptiveAuth from "./pages/CaptiveAuth";
-import EmployeeManage from "./pages/EmployeeManage";
-import TestLab from "./pages/TestLab";
+const Home = lazy(() => import("./pages/Home"));
+const Login = lazy(() => import("./pages/auth/Login"));
+const Signup = lazy(() => import("./pages/auth/Signup"));
+const CaptiveAuth = lazy(() => import("./pages/auth/CaptiveAuth"));
+const EmployeeManage = lazy(() => import("./pages/employee/EmployeeManage"));
+const EmployeeAuth = lazy(() => import("./pages/employee/EmployeeAuth"));
+const SignupApproval = lazy(() => import("./pages/employee/SignupApproval"));
+const MyPage = lazy(() => import("./pages/employee/MyPage"));
+const Dashboard = lazy(() => import("./pages/policy/Dashboard"));
+const PolicyManage = lazy(() => import("./pages/policy/PolicyManage"));
+const AiPolicyManage = lazy(() => import("./pages/policy/AiPolicyManage"));
+const LogAnalysis = lazy(() => import("./pages/policy/LogAnalysis"));
+const TestLab = lazy(() => import("./pages/policy/TestLab"));
 
-// -------------------------------------------------------------
-// 상단 내비게이션 바 컴포넌트
-// -------------------------------------------------------------
-function NavigationBar({
+const DEV_MODE = true;
+
+const checkIsManager = (u) => {
+  if (!u) return false;
+  return (
+    u.is_manager === true ||
+    String(u.is_manager) === "1" ||
+    String(u.is_manager).toLowerCase() === "true" ||
+    u.employee_id === "admin" ||
+    u.emp_id === "admin"
+  );
+};
+
+const NavigationBar = memo(function NavigationBar({
   user,
   setUser,
-  isInternalAdminNetwork,
   isAdminPortal,
+  toggleTheme,
+  isDarkMode,
+  layoutWidth,
+  setLayoutWidth,
+  isInternalAdminNetwork,
 }) {
   const navigate = useNavigate();
   const location = useLocation();
-  const currentHost = window.location.hostname;
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-  const rawBaseUrl =
-    import.meta.env.VITE_API_BASE_URL || `http://${currentHost}:8000`;
-  const baseUrl = rawBaseUrl.replace(/\/+$/, "");
-
-  // 로그인 화면에서는 상단바 숨김
-  if (["/login", "/admin-login", "/user-login"].includes(location.pathname)) {
+  if (["/login", "/admin-login", "/user-login"].includes(location.pathname))
     return null;
-  }
 
-  // 로그아웃 처리
   const handleLogout = async () => {
     if (!window.confirm("로그아웃 하시겠습니까?")) return;
-
     try {
-      if (user && (user.employee_id || user.emp_id)) {
-        await axios.post(`${baseUrl}/auth/logout/`, {
+      if (user && (user.employee_id || user.emp_id))
+        await api.post(`/api/auth/logout/`, {
           employee_id: user.employee_id || user.emp_id,
         });
-      }
     } catch (err) {
-      console.error("로그아웃 요청 에러:", err);
+      console.error("로그아웃 실패:", err);
     } finally {
       localStorage.removeItem("user");
+      sessionStorage.removeItem("user");
       sessionStorage.removeItem("adminPortalMode");
       setUser(null);
       alert("로그아웃되었습니다.");
-      navigate("/");
+      navigate(isInternalAdminNetwork ? "/admin-login" : "/", {
+        replace: true,
+      });
     }
   };
 
-  // 💡 핵심 보안 규칙:
-  // 1.23(일반 홈페이지)에서는 관리자 계정이라도 관리자 메뉴를 절대 노출하지 않음
-  // 사내 관리망(3.23)이거나 관리자 로그인 창을 통해 정식 진입했을 때만 노출
   const showAdminMenu = Boolean(
-    user && user.is_manager && isInternalAdminNetwork && isAdminPortal,
+    DEV_MODE ||
+    (user && checkIsManager(user) && (isInternalAdminNetwork || isAdminPortal)),
   );
 
   return (
-    <header className="navbar">
-      {/* 로고: 관리자망 진입 상태일 때만 대시보드로 이동, 일반 홈페이지에서는 항상 홈으로 이동 */}
-      <Link to={showAdminMenu ? "/dashboard" : "/"} className="nav-logo">
-        🛡️ SecureTech
-      </Link>
+    <div className="navbar">
+      <style>{`
+        .mobile-header-bar { display: none; }
+        .mobile-menu-overlay { display: none; }
+        @media (max-width: 768px) {
+          .desktop-header-bar { display: none !important; }
+          .mobile-header-bar { display: flex !important; flex-wrap: nowrap !important; flex-direction: row !important; justify-content: space-between !important; align-items: center !important; width: 100% !important; height: 64px !important; padding: 0 20px !important; box-sizing: border-box !important; }
+          .m-logo { display: inline-flex !important; align-items: center !important; gap: 6px !important; text-decoration: none !important; color: #38bdf8 !important; font-weight: 700 !important; font-size: 20px !important; white-space: nowrap !important; margin: 0 !important; padding: 0 !important; flex: 0 0 auto !important; }
+          .m-btn { display: inline-flex !important; align-items: center !important; gap: 4px !important; background: transparent !important; border: none !important; color: #94a3b8 !important; font-size: 15px !important; font-weight: 600 !important; padding: 0 !important; margin: 0 !important; cursor: pointer !important; white-space: nowrap !important; flex: 0 0 auto !important; }
+          .mobile-menu-overlay { display: flex; flex-direction: column; position: absolute; top: 64px; left: 0; width: 100%; background-color: var(--bg-header); padding: 20px; z-index: 1000; box-shadow: 0 4px 6px rgba(0,0,0,0.1); height: calc(100vh - 64px); overflow-y: auto; gap: 10px; box-sizing: border-box; }
+          .mobile-nav-link { color: #f8fafc; text-decoration: none; font-size: 16px; padding: 15px; border-bottom: 1px solid #334155; }
+        }
+      `}</style>
 
-      <nav className="nav-links">
-        {/* 공통 기본 메뉴: 홈 */}
-        <NavLink
-          to="/"
-          className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`}
+      <div className="mobile-header-bar">
+        <Link to="/" className="m-logo">
+          <span style={{ fontSize: "20px" }}>🛡️</span> SecureTech
+        </Link>
+        <button
+          className="m-btn"
+          onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
         >
-          홈
-        </NavLink>
+          {isMobileMenuOpen ? "✖ 닫기" : "⚙️ 설정"}
+        </button>
+      </div>
 
-        {/* 💡 사내 관리망(3.23) 콘솔에서만 노출되는 관리자 메뉴 */}
-        {showAdminMenu && (
-          <>
-            <NavLink
-              to="/dashboard"
-              className={({ isActive }) =>
-                `nav-link ${isActive ? "active" : ""}`
-              }
-            >
-              관제 대시보드
-            </NavLink>
-            <NavLink
-              to="/policies"
-              className={({ isActive }) =>
-                `nav-link ${isActive ? "active" : ""}`
-              }
-            >
-              차단 정책 관리
-            </NavLink>
-            <NavLink
-              to="/approvals"
-              className={({ isActive }) =>
-                `nav-link ${isActive ? "active" : ""}`
-              }
-            >
-              가입 승인
-            </NavLink>
-            <NavLink
-              to="/employees"
-              className={({ isActive }) =>
-                `nav-link ${isActive ? "active" : ""}`
-              }
-            >
-              사원 관리
-            </NavLink>
-            <NavLink
-              to="/home-edit"
-              className={({ isActive }) =>
-                `nav-link ${isActive ? "active" : ""}`
-              }
-            >
-              홈페이지 관리
-            </NavLink>
-          </>
-        )}
+      <div className="desktop-header-bar">
+        <div className="nav-left-group">
+          <Link to="/" className="nav-logo">
+            🛡️ SecureTech
+          </Link>
+        </div>
 
-        {/* 로그인 사용자 공통 마이페이지 */}
-        {user && (
+        {/* 메뉴 영역만 중앙으로 강제 분리 */}
+        <nav className="nav-links">
           <NavLink
-            to="/mypage"
+            to="/"
             className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`}
           >
-            마이페이지
+            홈
           </NavLink>
-        )}
-      </nav>
-
-      {/* 우측 상단 인증 버튼 영역 */}
-      <div className="nav-right">
-        <div className="user-info">
-          {user ? (
+          {showAdminMenu && (
             <>
-              <span className="user-greeting">
-                👤 <strong>{user.name}</strong> 님
-              </span>
-              <button
-                type="button"
-                onClick={handleLogout}
-                className="btn-logout"
+              <NavLink
+                to="/dashboard"
+                className={({ isActive }) =>
+                  `nav-link ${isActive ? "active" : ""}`
+                }
               >
-                로그아웃
-              </button>
+                관제 대시보드
+              </NavLink>
+              <NavLink
+                to="/log-analysis"
+                className={({ isActive }) =>
+                  `nav-link ${isActive ? "active" : ""}`
+                }
+              >
+                로그 분석실
+              </NavLink>
+              <NavLink
+                to="/employee-auth"
+                className={({ isActive }) =>
+                  `nav-link ${isActive ? "active" : ""}`
+                }
+              >
+                사원 인증 현황
+              </NavLink>
+              <NavLink
+                to="/policies"
+                className={({ isActive }) =>
+                  `nav-link ${isActive ? "active" : ""}`
+                }
+              >
+                차단 정책 관리
+              </NavLink>
+              <NavLink
+                to="/ai-policies"
+                className={({ isActive }) =>
+                  `nav-link ${isActive ? "active" : ""}`
+                }
+              >
+                AI 차단 현황 관리
+              </NavLink>
+              <NavLink
+                to="/approvals"
+                className={({ isActive }) =>
+                  `nav-link ${isActive ? "active" : ""}`
+                }
+              >
+                가입 승인
+              </NavLink>
+              <NavLink
+                to="/employees"
+                className={({ isActive }) =>
+                  `nav-link ${isActive ? "active" : ""}`
+                }
+              >
+                사원 관리
+              </NavLink>
+              <NavLink
+                to="/test-lab"
+                className={({ isActive }) =>
+                  `nav-link ${isActive ? "active" : ""}`
+                }
+              >
+                보안 테스트실
+              </NavLink>
             </>
-          ) : (
-            <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
-              <Link
-                to="/user-login"
-                className="nav-link"
-                style={{
-                  padding: "6px 14px",
-                  border: "1px solid #475569",
-                  borderRadius: "4px",
-                  textDecoration: "none",
-                }}
-              >
-                로그인
-              </Link>
-              <Link
-                to="/signup"
-                className="btn-primary"
-                style={{
-                  padding: "8px 16px",
-                  fontSize: "13px",
-                  textDecoration: "none",
-                }}
-              >
-                가입 신청
-              </Link>
-            </div>
           )}
+          {user && (
+            <NavLink
+              to="/mypage"
+              className={({ isActive }) =>
+                `nav-link ${isActive ? "active" : ""}`
+              }
+            >
+              마이페이지
+            </NavLink>
+          )}
+        </nav>
+
+        <div className="nav-right">
+          <div style={{ position: "relative" }}>
+            <button
+              type="button"
+              className="btn-action btn-neutral btn-w-md btn-header"
+              onClick={() => setIsSettingsOpen(!isSettingsOpen)}
+              title="화면 설정"
+            >
+              ⚙️ 설정
+            </button>
+            {isSettingsOpen && (
+              <div className="settings-dropdown">
+                <div className="settings-section">
+                  <span className="settings-label">화면 테마</span>
+                  <div className="settings-btn-group">
+                    <button
+                      className={`settings-btn ${!isDarkMode ? "active" : ""}`}
+                      onClick={() => toggleTheme(false)}
+                    >
+                      🌞 라이트
+                    </button>
+                    <button
+                      className={`settings-btn ${isDarkMode ? "active" : ""}`}
+                      onClick={() => toggleTheme(true)}
+                    >
+                      🌙 다크
+                    </button>
+                  </div>
+                </div>
+                <div className="settings-section" style={{ marginTop: "12px" }}>
+                  <span className="settings-label">해상도 너비</span>
+                  <div className="settings-btn-group">
+                    <button
+                      className={`settings-btn ${layoutWidth === "standard" ? "active" : ""}`}
+                      onClick={() => setLayoutWidth("standard")}
+                    >
+                      표준 (집중형)
+                    </button>
+                    <button
+                      className={`settings-btn ${layoutWidth === "wide" ? "active" : ""}`}
+                      onClick={() => setLayoutWidth("wide")}
+                    >
+                      넓게 (전체형)
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="user-info">
+            {user ? (
+              <>
+                <span className="user-greeting">
+                  👤 <strong>{user.name}</strong> 님
+                </span>
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  className="btn-action btn-danger btn-w-md btn-header"
+                >
+                  로그아웃
+                </button>
+              </>
+            ) : (
+              <>
+                <Link
+                  to="/user-login"
+                  className="btn-action btn-neutral btn-w-md btn-header"
+                  style={{ textDecoration: "none" }}
+                >
+                  로그인
+                </Link>
+                <Link
+                  to="/signup"
+                  className="btn-action btn-primary btn-w-md btn-header"
+                  style={{ textDecoration: "none" }}
+                >
+                  가입 신청
+                </Link>
+              </>
+            )}
+          </div>
         </div>
       </div>
-    </header>
+
+      {isMobileMenuOpen && (
+        <div className="mobile-menu-overlay">
+          <div
+            style={{
+              padding: "0 10px 15px",
+              borderBottom: "1px solid #334155",
+              marginBottom: "10px",
+            }}
+          >
+            <span
+              style={{
+                color: user ? "#38bdf8" : "#94a3b8",
+                fontSize: user ? "18px" : "14px",
+                fontWeight: user ? "bold" : "normal",
+              }}
+            >
+              {user ? `👤 ${user.name} 님` : "로그인이 필요합니다."}
+            </span>
+          </div>
+          <Link
+            to="/"
+            className="mobile-nav-link"
+            onClick={() => setIsMobileMenuOpen(false)}
+          >
+            홈
+          </Link>
+          {showAdminMenu && (
+            <>
+              <Link
+                to="/dashboard"
+                className="mobile-nav-link"
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
+                관제 대시보드
+              </Link>
+              <Link
+                to="/log-analysis"
+                className="mobile-nav-link"
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
+                로그 분석실
+              </Link>
+              <Link
+                to="/employee-auth"
+                className="mobile-nav-link"
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
+                사원 인증 현황
+              </Link>
+              <Link
+                to="/policies"
+                className="mobile-nav-link"
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
+                차단 정책 관리
+              </Link>
+              <Link
+                to="/ai-policies"
+                className="mobile-nav-link"
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
+                AI 차단 현황 관리
+              </Link>
+              <Link
+                to="/approvals"
+                className="mobile-nav-link"
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
+                가입 승인
+              </Link>
+              <Link
+                to="/employees"
+                className="mobile-nav-link"
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
+                사원 관리
+              </Link>
+              <Link
+                to="/test-lab"
+                className="mobile-nav-link"
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
+                보안 테스트실
+              </Link>
+            </>
+          )}
+          {user && (
+            <Link
+              to="/mypage"
+              className="mobile-nav-link"
+              onClick={() => setIsMobileMenuOpen(false)}
+            >
+              마이페이지
+            </Link>
+          )}
+        </div>
+      )}
+    </div>
   );
+});
+
+function RootRedirector({ user, isAdminPortal }) {
+  if (user && checkIsManager(user) && isAdminPortal) {
+    return <Navigate to="/dashboard" replace />;
+  }
+  return <Home user={user} />;
 }
 
-// -------------------------------------------------------------
-// App 메인 컴포넌트
-// -------------------------------------------------------------
 function App() {
   const [user, setUser] = useState(null);
   const [authLoaded, setAuthLoaded] = useState(false);
   const [isAdminPortal, setIsAdminPortal] = useState(false);
+  const [isDarkMode, setIsDarkMode] = useState(
+    () => localStorage.getItem("theme") === "dark",
+  );
+  const [layoutWidth, setLayoutWidth] = useState(
+    () => localStorage.getItem("layoutWidth") || "standard",
+  );
+
+  const toggleTheme = (forceDark) => setIsDarkMode(forceDark);
 
   const currentHost = window.location.hostname;
-
-  // 192.168.3.x 대역 또는 로컬 테스트 환경
-  const isInternalAdminNetwork =
-    currentHost.startsWith("192.168.3.") ||
-    currentHost === "localhost" ||
-    currentHost === "127.0.0.1";
-
-  const syncUserFromStorage = () => {
-    const saved = localStorage.getItem("user");
-    const adminFlag = sessionStorage.getItem("adminPortalMode") === "true";
-    setIsAdminPortal(adminFlag);
-
-    if (saved) {
-      try {
-        setUser(JSON.parse(saved));
-      } catch (e) {
-        localStorage.removeItem("user");
-        setUser(null);
-      }
-    } else {
-      setUser(null);
-    }
-  };
+  const isInternalAdminNetwork = DEV_MODE || currentHost.includes("192.168.3.");
+  const fallbackRoute = isInternalAdminNetwork ? "/admin-login" : "/user-login";
 
   useEffect(() => {
-    syncUserFromStorage();
-    setAuthLoaded(true);
+    const syncUserFromStorage = () => {
+      localStorage.removeItem("user");
+      const saved = sessionStorage.getItem("user");
+      const adminMode = sessionStorage.getItem("adminPortalMode") === "true";
 
-    const handleStorageChange = (e) => {
-      if (e.key === "user") {
-        syncUserFromStorage();
+      if (saved) {
+        try {
+          const parsedUser = JSON.parse(saved);
+          if (isInternalAdminNetwork) {
+            if (checkIsManager(parsedUser) && adminMode) {
+              setUser(parsedUser);
+              setIsAdminPortal(true);
+              return;
+            }
+          } else {
+            setUser(parsedUser);
+            setIsAdminPortal(Boolean(adminMode && checkIsManager(parsedUser)));
+            return;
+          }
+        } catch {}
       }
+      sessionStorage.removeItem("user");
+      sessionStorage.removeItem("adminPortalMode");
+      setUser(null);
+      setIsAdminPortal(false);
     };
 
-    window.addEventListener("storage", handleStorageChange);
-    return () => window.removeEventListener("storage", handleStorageChange);
-  }, []);
+    const timer = setTimeout(() => {
+      syncUserFromStorage();
+      setAuthLoaded(true);
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [isInternalAdminNetwork]);
+
+  useEffect(() => {
+    document.body.classList.toggle("dark-mode", isDarkMode);
+    localStorage.setItem("theme", isDarkMode ? "dark" : "light");
+  }, [isDarkMode]);
+
+  useEffect(() => {
+    localStorage.setItem("layoutWidth", layoutWidth);
+  }, [layoutWidth]);
 
   if (!authLoaded) return null;
 
-  // 관리자 콘솔 접근 권한: 사내 관리망 환경 + 관리자 계정 + 관리자 콘솔 모드
   const canAccessAdmin = Boolean(
-    user?.is_manager && isInternalAdminNetwork && isAdminPortal,
+    DEV_MODE ||
+    (isInternalAdminNetwork && user && checkIsManager(user) && isAdminPortal),
   );
 
   return (
     <BrowserRouter>
-      <div className="app-container">
+      <div className={`app-container layout-${layoutWidth}`}>
         <NavigationBar
           user={user}
           setUser={setUser}
-          isInternalAdminNetwork={isInternalAdminNetwork}
           isAdminPortal={isAdminPortal}
+          toggleTheme={toggleTheme}
+          isDarkMode={isDarkMode}
+          layoutWidth={layoutWidth}
+          setLayoutWidth={setLayoutWidth}
+          isInternalAdminNetwork={isInternalAdminNetwork}
         />
         <main className="main-content">
-          <Routes>
-            {/* 1. 일반 홈페이지 공개 페이지 (192.168.1.23) */}
-            <Route path="/" element={<Home />} />
-            <Route path="/home" element={<Home />} />
-            <Route path="/signup" element={<Signup />} />
-            <Route
-              path="/user-login"
-              element={<UserLogin setUser={setUser} />}
-            />
-
-            {/* 2. 사내 관리자 콘솔 로그인 (192.168.3.23) */}
-            <Route
-              path="/login"
-              element={
-                isInternalAdminNetwork ? <Login setUser={setUser} /> : <Home />
-              }
-            />
-            <Route
-              path="/admin-login"
-              element={
-                isInternalAdminNetwork ? <Login setUser={setUser} /> : <Home />
-              }
-            />
-
-            {/* 3. 관리자 전용 관제 콘솔 라우트 (일반 홈페이지에서는 홈으로 원천 차단) */}
-            <Route
-              path="/dashboard"
-              element={canAccessAdmin ? <Dashboard /> : <Home />}
-            />
-            <Route
-              path="/approvals"
-              element={canAccessAdmin ? <SignupApproval /> : <Home />}
-            />
-            <Route
-              path="/policies"
-              element={canAccessAdmin ? <PolicyManage /> : <Home />}
-            />
-            <Route
-              path="/employees"
-              element={canAccessAdmin ? <EmployeeManage /> : <Home />}
-            />
-            <Route
-              path="/home-edit"
-              element={canAccessAdmin ? <HomeEdit /> : <Home />}
-            />
-            <Route
-              path="/test-lab"
-              element={canAccessAdmin ? <TestLab /> : <Home />}
-            />
-
-            {/* 4. 사용자 공통 및 인증 라우트 */}
-            <Route path="/mypage" element={user ? <MyPage /> : <Home />} />
-            <Route path="/captive" element={<CaptiveAuth />} />
-          </Routes>
+          <Suspense
+            fallback={
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "center",
+                  alignItems: "center",
+                  height: "100%",
+                  color: "#94a3b8",
+                }}
+              >
+                페이지를 불러오는 중입니다...
+              </div>
+            }
+          >
+            <Routes>
+              <Route
+                path="/"
+                element={
+                  <RootRedirector
+                    user={user}
+                    isAdminPortal={isAdminPortal}
+                    isInternalAdminNetwork={isInternalAdminNetwork}
+                  />
+                }
+              />
+              <Route path="/home" element={<Home user={user} />} />
+              <Route path="/signup" element={<Signup />} />
+              <Route
+                path="/user-login"
+                element={
+                  user ? (
+                    <Navigate to="/" replace />
+                  ) : (
+                    <Login setUser={setUser} isAdminMode={false} />
+                  )
+                }
+              />
+              <Route
+                path="/admin-login"
+                element={
+                  !isInternalAdminNetwork ? (
+                    <Navigate to="/user-login" replace />
+                  ) : canAccessAdmin ? (
+                    <Navigate to="/dashboard" replace />
+                  ) : (
+                    <Login setUser={setUser} isAdminMode={true} />
+                  )
+                }
+              />
+              <Route
+                path="/login"
+                element={<Navigate to={fallbackRoute} replace />}
+              />
+              <Route
+                path="/dashboard"
+                element={
+                  canAccessAdmin ? (
+                    <Dashboard />
+                  ) : (
+                    <Navigate to={fallbackRoute} replace />
+                  )
+                }
+              />
+              <Route
+                path="/log-analysis"
+                element={
+                  canAccessAdmin ? (
+                    <LogAnalysis />
+                  ) : (
+                    <Navigate to={fallbackRoute} replace />
+                  )
+                }
+              />
+              <Route
+                path="/employee-auth"
+                element={
+                  canAccessAdmin ? (
+                    <EmployeeAuth />
+                  ) : (
+                    <Navigate to={fallbackRoute} replace />
+                  )
+                }
+              />
+              <Route
+                path="/policies"
+                element={
+                  canAccessAdmin ? (
+                    <PolicyManage />
+                  ) : (
+                    <Navigate to={fallbackRoute} replace />
+                  )
+                }
+              />
+              <Route
+                path="/ai-policies"
+                element={
+                  canAccessAdmin ? (
+                    <AiPolicyManage />
+                  ) : (
+                    <Navigate to={fallbackRoute} replace />
+                  )
+                }
+              />
+              <Route
+                path="/approvals"
+                element={
+                  canAccessAdmin ? (
+                    <SignupApproval />
+                  ) : (
+                    <Navigate to={fallbackRoute} replace />
+                  )
+                }
+              />
+              <Route
+                path="/employees"
+                element={
+                  canAccessAdmin ? (
+                    <EmployeeManage />
+                  ) : (
+                    <Navigate to={fallbackRoute} replace />
+                  )
+                }
+              />
+              <Route
+                path="/test-lab"
+                element={
+                  canAccessAdmin ? (
+                    <TestLab />
+                  ) : (
+                    <Navigate to={fallbackRoute} replace />
+                  )
+                }
+              />
+              <Route
+                path="/mypage"
+                element={
+                  user ? <MyPage /> : <Navigate to={fallbackRoute} replace />
+                }
+              />
+              <Route path="/captive" element={<CaptiveAuth />} />
+            </Routes>
+          </Suspense>
         </main>
       </div>
     </BrowserRouter>

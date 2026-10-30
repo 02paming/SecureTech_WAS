@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import axios from "axios";
 import { Link } from "react-router-dom";
 
@@ -9,36 +9,44 @@ const CaptiveAuth = () => {
   const [isSuccess, setIsSuccess] = useState(false);
   const [userName, setUserName] = useState("");
 
-  // VITE_API_BASE_URL 슬래시 중복 방지 정규화
+  // 백엔드 API 기본 주소 설정
   const baseUrl = (
-    import.meta.env.VITE_API_BASE_URL || "http://localhost:8000"
+    import.meta.env.VITE_API_BASE_URL ||
+    `http://${window.location.hostname}:8000`
   ).replace(/\/+$/, "");
 
+  // 사내망 캡티브 포털 인증 요청
   const handleAuth = async (e) => {
     e.preventDefault();
-    setLoading(true);
+    if (!employeeId.trim() || !password) {
+      alert("사번과 비밀번호를 모두 입력해 주세요.");
+      return;
+    }
 
+    setLoading(true);
     try {
-      const res = await axios.post(`${baseUrl}/auth/captive-login/`, {
+      // 💡 백엔드 captive_login API 호출 (views.py captive_login과 연동)
+      const res = await axios.post(`${baseUrl}/api/auth/captive-login/`, {
         employee_id: employeeId.trim(),
         password: password,
       });
 
       if (res.data.status === "success") {
         const user = res.data.user || {};
-        setUserName(user.name || "");
+        const displayName = user.name || "사원";
+        setUserName(displayName);
         setIsSuccess(true);
 
-        // 로그인 세션 보관 (다른 페이지 이동 시 로그인 상태 유지)
+        // 로그인 사용자 로컬 스토리지 보관
         const userData = {
           ...user,
-          employee_id: user.employee_id || user.emp_id,
-          emp_id: user.emp_id || user.employee_id,
+          employee_id: user.emp_id || user.employee_id || employeeId.trim(),
+          emp_id: user.emp_id || user.employee_id || employeeId.trim(),
         };
         localStorage.setItem("user", JSON.stringify(userData));
 
         alert(
-          `[인증 성공]\n${user.name || ""} 사원님 인증이 완료되었습니다.\n외부 인터넷 통신이 인가되었습니다.`,
+          `[인증 성공]\n${displayName} 사원님 인증이 완료되었습니다.\n외부 인터넷 통신이 인가되었습니다.`,
         );
       }
     } catch (err) {
@@ -112,7 +120,7 @@ const CaptiveAuth = () => {
                 className="custom-input"
                 value={employeeId}
                 onChange={(e) => setEmployeeId(e.target.value)}
-                placeholder="예: developer01 또는 ST2026..."
+                placeholder="예: developer01 또는 사원 아이디"
                 required
                 autoFocus
               />

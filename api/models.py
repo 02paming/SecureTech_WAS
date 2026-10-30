@@ -1,88 +1,167 @@
 from django.db import models
+from django.utils import timezone
 
 
-# 1. 가입 대기자 테이블 (prospective_members)
+class DjangoMigrations(models.Model):
+    id = models.BigAutoField(primary_key=True)
+    app = models.CharField(max_length=255)
+    name = models.CharField(max_length=255)
+    applied = models.DateTimeField()
+
+    class Meta:
+        managed = False
+        db_table = "django_migrations"
+
+
 class ProspectiveMembers(models.Model):
-    member_id = models.CharField(max_length=50, primary_key=True)  # PK
+    members_table_id = models.AutoField(primary_key=True)
+    member_id = models.CharField(unique=True, max_length=50)
     password = models.CharField(max_length=255)
     name = models.CharField(max_length=255)
-    email = models.CharField(max_length=255, unique=True)
+    email = models.CharField(unique=True, max_length=255)
     address = models.CharField(max_length=255)
-    phone_number = models.CharField(max_length=11, unique=True)
-    jumin_no = models.CharField(max_length=13, unique=True)
-    is_employee_applicant = models.BooleanField(
-        default=True
-    )  # True: 사원 신청, False: 일반 회원
-    date_of_request = models.DateField(auto_now_add=True)
+    phone_number = models.CharField(unique=True, max_length=11)
+    jumin_no = models.CharField(unique=True, max_length=13)
+    date_of_request = models.DateField(default=timezone.now)
 
     class Meta:
-        db_table = 'prospective_members'
+        managed = False
+        db_table = "prospective_members"
 
 
-# 2. 정직원 테이블 (employees)
 class Employees(models.Model):
-    employee_number = models.AutoField(
-        primary_key=True
-    )  # PK (INT AUTO_INCREMENT)
-    employee_id = models.CharField(
-        max_length=50, unique=True
-    )  # 사원 아이디 (member_id 복사)
+    employee_number = models.AutoField(primary_key=True)
+    employee_id = models.CharField(unique=True, max_length=50)
     password = models.CharField(max_length=255)
     name = models.CharField(max_length=255)
-    email = models.CharField(max_length=255, unique=True)
+    email = models.CharField(unique=True, max_length=255)
     address = models.CharField(max_length=255)
-    phone_number = models.CharField(max_length=11, unique=True)
-    jumin_no = models.CharField(max_length=13, unique=True)
-    hire_date = models.DateField(auto_now_add=True)
+    phone_number = models.CharField(unique=True, max_length=11)
+    jumin_no = models.CharField(unique=True, max_length=13)
+    hire_date = models.DateField(default=timezone.now)
     is_manager = models.BooleanField(default=False)
-    deleted_at = models.DateField(null=True, blank=True)
+    deleted_at = models.DateField(blank=True, null=True)
+    otp_secret = models.CharField(max_length=128, blank=True, null=True)
 
     class Meta:
-        db_table = 'employees'
+        managed = False
+        db_table = "employees"
 
 
-# 3. 차단 정책 테이블 (no_access_addr)
-class NoAccessAddr(models.Model):
-    no_access_domain = models.CharField(max_length=255, primary_key=True)  # PK
-    deleted_at = models.DateField(null=True, blank=True)
-
-    class Meta:
-        db_table = 'no_access_addr'
-
-
-# 4. 차단 로그 테이블 (no_access_addr_log)
-class NoAccessAddrLog(models.Model):
-    employee = models.ForeignKey(
-        Employees, on_delete=models.CASCADE, db_column='employee_id'
-    )
-    no_access_domain = models.ForeignKey(
-        NoAccessAddr, on_delete=models.CASCADE, db_column='no_access_domain'
-    )
-    access_time = models.DateTimeField(auto_now_add=True)
+class WhitelistAddr(models.Model):
+    whitelist_id = models.AutoField(primary_key=True)
+    whitelist_domain = models.CharField(max_length=255)
+    deleted_at = models.DateField(blank=True, null=True)
+    is_protected = models.BooleanField(default=False)
+    source = models.CharField(max_length=50)
 
     class Meta:
-        db_table = 'no_access_addr_log'
+        managed = False
+        db_table = "whitelist_addr"
 
 
-# 5. 실시간 온라인 IP 로그 테이블 (online_ip_log)
-class OnlineIpLog(models.Model):
-    employee = models.ForeignKey(
-        Employees, on_delete=models.CASCADE, db_column='employee_id'
-    )
-    online_ip = models.CharField(max_length=45, db_index=True)
-    login_time = models.DateTimeField(auto_now_add=True, db_index=True)
-    logout_time = models.DateTimeField(null=True, blank=True)
+class BlacklistAddr(models.Model):
+    blacklist_id = models.AutoField(primary_key=True)
+    blacklist_domain = models.CharField(max_length=255)
+    deleted_at = models.DateField(blank=True, null=True)
+    source = models.CharField(max_length=50)
 
     class Meta:
-        db_table = 'online_ip_log'
-        ordering = ['-login_time']
+        managed = False
+        db_table = "blacklist_addr"
 
 
-# 6. 차단 예외 화이트리스트 테이블 (whitelist_addr)
-class WhiteListAddr(models.Model):
-    domain = models.CharField(max_length=255, primary_key=True)  # PK (예외 도메인)
-    description = models.CharField(max_length=255, blank=True, default='')  # 비고/용도
-    created_at = models.DateTimeField(auto_now_add=True)
+class OnlineList(models.Model):
+    employee = models.OneToOneField(Employees, models.DO_NOTHING, primary_key=True)
+    online_ip = models.IntegerField()
+    login_time = models.DateTimeField(default=timezone.now)
+    online_mac_addr = models.CharField(max_length=17)
 
     class Meta:
-        db_table = 'whitelist_addr'
+        managed = False
+        db_table = "online_list"
+
+
+class OnlineListLog(models.Model):
+    online_list_log_id = models.AutoField(primary_key=True)
+    employee = models.ForeignKey(Employees, models.DO_NOTHING)
+    online_ip = models.IntegerField()
+    login_time = models.DateTimeField(default=timezone.now)
+    online_mac_addr = models.CharField(max_length=17)
+
+    class Meta:
+        managed = False
+        db_table = "online_list_log"
+
+
+class WebAccessLog(models.Model):
+    web_access_log_id = models.AutoField(primary_key=True)
+    online_list_log = models.ForeignKey(OnlineListLog, models.DO_NOTHING)
+    target_url = models.CharField(max_length=255)
+    access_flag = models.CharField(max_length=50)
+    ai_score = models.FloatField(default=-1.0, blank=True, null=True)
+    access_time = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        managed = False
+        db_table = "web_access_log"
+
+
+class OnlineIpMacMismatchLog(models.Model):
+    online_ip_mac_mismatch_log_id = models.AutoField(primary_key=True)
+    online_list_log = models.ForeignKey(OnlineListLog, models.DO_NOTHING)
+    mismatch_mac_addr = models.CharField(max_length=17)
+    insert_time = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        managed = False
+        db_table = "online_ip_mac_mismatch_log"
+
+
+class EqpRunTime(models.Model):
+    eqp_run_time_id = models.AutoField(primary_key=True)
+    work_start_time = models.TimeField()
+    work_end_time = models.TimeField()
+    waiting_time = models.TimeField()
+
+    class Meta:
+        managed = False
+        db_table = "eqp_run_time"
+
+
+class FixedWhitelistAddr(models.Model):
+    fixed_whitelist_id = models.AutoField(primary_key=True)
+    fixed_whitelist_domain = models.CharField(max_length=255)
+
+    class Meta:
+        managed = False
+        db_table = "fixed_whitelist_addr"
+
+
+class FixedBlacklistAddr(models.Model):
+    fixed_blacklist_id = models.AutoField(primary_key=True)
+    fixed_blacklist_domain = models.CharField(max_length=255)
+
+    class Meta:
+        managed = False
+        db_table = "fixed_blacklist_addr"
+
+
+class AiModelMetrics(models.Model):
+    ai_model_metrics_id = models.AutoField(db_column="AI_model_metrics_id", primary_key=True)
+    version_name = models.CharField(unique=True, max_length=50)
+    model_algorithm = models.CharField(max_length=100)
+    trained_at = models.DateTimeField()
+    hyperparameters = models.JSONField(default=dict)
+    tp_count = models.IntegerField()
+    tn_count = models.IntegerField()
+    fp_count = models.IntegerField()
+    fn_count = models.IntegerField()
+    accuracy = models.FloatField()
+    precision = models.FloatField()
+    f1_score = models.FloatField()
+    is_active = models.BooleanField(default=False)
+
+    class Meta:
+        managed = False
+        db_table = "AI_model_metrics"

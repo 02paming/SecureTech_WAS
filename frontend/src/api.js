@@ -1,51 +1,61 @@
 import axios from "axios";
 
-// 환경 변수 끝의 슬래시(/)를 안전하게 제거하여 이중 슬래시 방지
-const rawBaseUrl = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
-const cleanBaseUrl = rawBaseUrl.replace(/\/+$/, "");
+const getBaseUrl = () => {
+  try {
+    const host = window.location.hostname;
+    if (
+      host === "localhost" ||
+      host === "127.0.0.1" ||
+      host.startsWith("192.168.") ||
+      host.startsWith("100.")
+    ) {
+      return `http://${host}:8000`;
+    }
+    if (host.includes("securetechkg.digital")) {
+      return "https://api.securetechkg.digital";
+    }
+  } catch {
+    // 예외 발생 시 기본값
+  }
+  return `http://${window.location.hostname}:8000`;
+};
 
-const api = axios.create({
-  baseURL: cleanBaseUrl,
-  headers: {
-    "Content-Type": "application/json",
-  },
+export const api = axios.create({
+  baseURL: getBaseUrl(),
+  headers: { "Content-Type": "application/json" },
   timeout: 10000,
+  withCredentials: true,
 });
 
-// 요청 인터셉터: 로그인 사용자 ID 헤더 자동 주입
+// 요청 인터셉터: 세션 저장소 양쪽 모두 확인하여 사용자 ID 자동 주입
 api.interceptors.request.use(
   (config) => {
-    const loggedInUser = localStorage.getItem("user");
+    const loggedInUser =
+      sessionStorage.getItem("user") || localStorage.getItem("user");
     if (loggedInUser) {
       try {
         const user = JSON.parse(loggedInUser);
         const userId = user.employee_id || user.emp_id;
-        if (userId) {
-          config.headers["X-User-Id"] = userId;
-        }
+        if (userId) config.headers["X-User-Id"] = userId;
       } catch (e) {
         console.error("사용자 정보 파싱 실패:", e);
       }
     }
     return config;
   },
-  (error) => {
-    return Promise.reject(error);
-  },
+  (error) => Promise.reject(error),
 );
 
-// 응답 인터셉터: 공통 에러 핸들링
+// 응답 인터셉터: 에러 발생 시 앱이 죽지 않고 안전하게 처리
 api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response) {
-      // 403 Forbidden: 망분리 접근 거부 또는 권한 없음
-      if (error.response.status === 403) {
-        console.warn(
-          "접근 권한 거부 (403):",
-          error.response.data?.message || "권한이 없습니다.",
-        );
-      }
+      console.warn(
+        `[API 경고] ${error.config?.url} 요청 실패 (상태코드: ${error.response.status})`,
+      );
+    } else {
+      console.warn("[API 경고] 백엔드 서버와 통신할 수 없습니다.");
     }
     return Promise.reject(error);
   },
