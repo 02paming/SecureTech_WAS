@@ -146,4 +146,9 @@ urlpatterns = [
         name="promote_ai_policy",
     ),
     path("api/policies/ai/", policy_views.get_ai_policies, name="get_ai_policies"),
+    path(
+        "api/policies/ai/metrics/",
+        policy_views.get_ai_model_metrics,
+        name="get_ai_model_metrics",
+    ),
 ]

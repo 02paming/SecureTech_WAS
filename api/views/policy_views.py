@@ -7,7 +7,7 @@ from django.utils import timezone
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
-from api.models import BlacklistAddr, Employees, WhitelistAddr
+from api.models import AiModelMetrics, BlacklistAddr, Employees, WhitelistAddr
 
 from .utils import get_client_ip, notify_pcap_delta, sync_pcap_json_files
 
@@ -219,6 +219,24 @@ def force_delete_whitelist(request):
     )
 
 
+def _activate_as_user(model, domain_field, domain):
+    """도메인을 정식(USER) 정책으로 만든다. 같은 도메인의 다른 활성 행은 삭제 처리해 중복을 막는다."""
+    rows = list(model.objects.filter(**{domain_field: domain}).order_by("pk"))
+    if not rows:
+        model.objects.create(**{domain_field: domain, "source": "USER"})
+        return
+
+    keep = next(
+        (r for r in rows if r.deleted_at is None and r.source == "USER"), rows[0]
+    )
+    keep.source = "USER"
+    keep.deleted_at = None
+    keep.save()
+    model.objects.filter(
+        **{domain_field: domain}, deleted_at__isnull=True
+    ).exclude(pk=keep.pk).update(deleted_at=timezone.now().date())
+
+
 @api_view(["POST"])
 def promote_ai_policy(request):
     action = request.data.get("action")
@@ -236,6 +254,8 @@ def promote_ai_policy(request):
     if not is_valid:
         return Response({"error": error_msg}, status=403)
 
+    today = timezone.now().date()
+    released = 0
     try:
         with transaction.atomic():
             for raw_domain in domains:
@@ -246,40 +266,48 @@ def promote_ai_policy(request):
                 if action == "to_user_white":
                     BlacklistAddr.objects.filter(
                         blacklist_domain=domain, deleted_at__isnull=True
-                    ).update(deleted_at=timezone.now().date())
-                    WhitelistAddr.objects.filter(
-                        whitelist_domain=domain, source="AI"
-                    ).update(source="USER", is_protected=False)
-                    if not WhitelistAddr.objects.filter(
-                        whitelist_domain=domain, source="USER"
-                    ).exists():
-                        WhitelistAddr.objects.create(
-                            whitelist_domain=domain, source="USER", is_protected=False
-                        )
+                    ).update(deleted_at=today)
+                    _activate_as_user(WhitelistAddr, "whitelist_domain", domain)
 
                 elif action == "to_user_black":
+                    if WhitelistAddr.objects.filter(
+                        whitelist_domain=domain,
+                        deleted_at__isnull=True,
+                        is_protected=True,
+                    ).exists():
+                        raise ValueError(
+                            f"'{domain}'은(는) 시스템 보호 도메인이라 차단으로 이관할 수 없습니다."
+                        )
                     WhitelistAddr.objects.filter(
                         whitelist_domain=domain, deleted_at__isnull=True
-                    ).update(deleted_at=timezone.now().date())
-                    BlacklistAddr.objects.filter(
-                        blacklist_domain=domain, source="AI"
-                    ).update(source="USER")
-                    if not BlacklistAddr.objects.filter(
-                        blacklist_domain=domain, source="USER"
-                    ).exists():
-                        BlacklistAddr.objects.create(
-                            blacklist_domain=domain, source="USER"
-                        )
+                    ).update(deleted_at=today)
+                    _activate_as_user(BlacklistAddr, "blacklist_domain", domain)
+
+                elif action == "release":
+                    # AI 안전/위험으로 확정된 자동 등록 건만 해제 (의심·수동 정책은 대상 아님)
+                    released += WhitelistAddr.objects.filter(
+                        whitelist_domain=domain, deleted_at__isnull=True, source="AI"
+                    ).update(deleted_at=today)
+                    released += BlacklistAddr.objects.filter(
+                        blacklist_domain=domain, deleted_at__isnull=True, source="AI"
+                    ).update(deleted_at=today)
+
                 else:
                     raise ValueError("잘못된 이관 명령입니다.")
 
-        sync_pcap_json_files("white" if "white" in action else "black")
-        return Response(
-            {
-                "status": "success",
-                "message": f"{len(domains)}건의 정책 이관이 완료되었습니다.",
-            }
+            if action == "release" and released == 0:
+                raise ValueError("해제할 수 있는 AI 판별 도메인이 없습니다.")
+
+        # 허용·차단 목록이 함께 바뀌므로 엔진에는 양쪽 모두 동기화
+        sync_pcap_json_files("all")
+        message = (
+            f"{released}건의 AI 정책이 해제되었습니다."
+            if action == "release"
+            else f"{len(domains)}건의 정책 이관이 완료되었습니다."
         )
+        return Response({"status": "success", "message": message})
+    except ValueError as e:
+        return Response({"error": str(e)}, status=400)
     except Exception as e:
         return Response({"error": str(e)}, status=500)
 
@@ -311,5 +339,32 @@ def get_ai_policies(request):
         # 최신순 정렬
         data.sort(key=lambda x: x["detect_time"], reverse=True)
         return Response({"status": "success", "ai_data": data})
+    except Exception as e:
+        return Response({"error": str(e)}, status=500)
+
+
+@api_view(["GET"])
+def get_ai_model_metrics(request):
+    """AI_model_metrics 조회 전용 API. 학습 순서대로 내려준다."""
+    try:
+        metrics = []
+        for m in AiModelMetrics.objects.order_by("trained_at", "pk"):
+            metrics.append(
+                {
+                    "version_name": m.version_name,
+                    "model_algorithm": m.model_algorithm,
+                    "trained_at": m.trained_at.strftime("%Y-%m-%d %H:%M:%S"),
+                    "hyperparameters": m.hyperparameters,
+                    "tp_count": m.tp_count,
+                    "tn_count": m.tn_count,
+                    "fp_count": m.fp_count,
+                    "fn_count": m.fn_count,
+                    "accuracy": m.accuracy,
+                    "precision": m.precision,
+                    "f1_score": m.f1_score,
+                    "is_active": m.is_active,
+                }
+            )
+        return Response({"status": "success", "metrics": metrics})
     except Exception as e:
         return Response({"error": str(e)}, status=500)

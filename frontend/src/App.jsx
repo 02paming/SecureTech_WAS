@@ -28,6 +28,7 @@ const MyPage = lazy(() => import("./pages/employee/MyPage"));
 const Dashboard = lazy(() => import("./pages/policy/Dashboard"));
 const PolicyManage = lazy(() => import("./pages/policy/PolicyManage"));
 const AiPolicyManage = lazy(() => import("./pages/policy/AiPolicyManage"));
+const AiModelMetrics = lazy(() => import("./pages/policy/AiModelMetrics"));
 const LogAnalysis = lazy(() => import("./pages/policy/LogAnalysis"));
 const TestLab = lazy(() => import("./pages/policy/TestLab"));
 
@@ -158,6 +159,14 @@ const NavigationBar = memo(function NavigationBar({
                 }
               >
                 AI 차단 현황 관리
+              </NavLink>
+              <NavLink
+                to="/ai-metrics"
+                className={({ isActive }) =>
+                  `nav-link ${isActive ? "active" : ""}`
+                }
+              >
+                AI 모델 성능
               </NavLink>
               <NavLink
                 to="/approvals"
@@ -331,6 +340,13 @@ const NavigationBar = memo(function NavigationBar({
                 onClick={() => setIsMobileMenuOpen(false)}
               >
                 AI 차단 현황 관리
+              </Link>
+              <Link
+                to="/ai-metrics"
+                className="mobile-nav-link"
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
+                AI 모델 성능
               </Link>
               <Link
                 to="/approvals"
@@ -592,6 +608,16 @@ function App() {
                 element={
                   canAccessAdmin ? (
                     <AiPolicyManage />
+                  ) : (
+                    <Navigate to={fallbackRoute} replace />
+                  )
+                }
+              />
+              <Route
+                path="/ai-metrics"
+                element={
+                  canAccessAdmin ? (
+                    <AiModelMetrics />
                   ) : (
                     <Navigate to={fallbackRoute} replace />
                   )

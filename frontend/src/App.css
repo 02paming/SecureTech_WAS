@@ -20,6 +20,9 @@
   --chart-normal: #38bdf8;
   --chart-threat: #f87171;
   --chart-ai: #f59e0b;
+  --series-1: #0284c7;
+  --series-2: #7c3aed;
+  --series-3: #c2410c;
   --spacing-page-px: 32px;
   --spacing-card-p: 24px;
   --radius-card: 12px;
@@ -32,6 +35,9 @@
 
 body.dark-mode {
   color-scheme: dark;
+  --series-1: #0c94d6;
+  --series-2: #a855f7;
+  --series-3: #ea580c;
   --bg-main: #0f172a;
   --bg-card: #1e293b;
   --bg-card-alt: #273449;
@@ -317,11 +323,13 @@ body {
   margin: 0;
 }
 
+/* 입력칸 유무와 관계없이 새로고침 버튼 위치가 같도록 높이를 입력칸에 맞춤 */
 .header-actions {
   display: flex;
   align-items: center;
   flex-shrink: 0;
   gap: 16px;
+  min-height: var(--height-input);
   margin-left: 24px;
 }
 
@@ -1044,6 +1052,10 @@ body.dark-mode .auth-admin {
   background-color: rgba(245, 158, 11, 0.06);
 }
 
+.row-selected td {
+  background-color: rgba(14, 165, 233, 0.1);
+}
+
 .empty-state {
   display: flex;
   justify-content: center;
@@ -1100,6 +1112,10 @@ body.dark-mode .auth-admin {
   background-color: var(--bg-card);
   cursor: pointer;
   transition: 0.2s;
+}
+
+.stat-card.is-static {
+  cursor: default;
 }
 
 .stat-card.is-active {
@@ -1428,6 +1444,68 @@ body.dark-mode .auth-admin {
 
 .card-fill-wide {
   flex: 2.2;
+}
+
+.panel-col.card-fill-wide {
+  flex: 1.5;
+}
+
+.card-auto {
+  flex: none;
+}
+
+.tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+/* 혼동 행렬: 건수가 많을수록 진한 한 가지 색 */
+.matrix-grid {
+  display: grid;
+  flex: 1;
+  grid-template-columns: auto 1fr 1fr;
+  grid-template-rows: auto 1fr 1fr;
+  gap: 6px;
+  min-height: 0;
+}
+
+.matrix-head {
+  align-self: center;
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+  white-space: nowrap;
+  color: var(--text-muted);
+}
+
+.matrix-cell {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  min-height: 56px;
+  padding: 4px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+}
+
+.matrix-code {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.matrix-value {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-title);
+}
+
+.matrix-label {
+  font-size: 11px;
+  color: var(--text-main);
 }
 
 .panel-col {

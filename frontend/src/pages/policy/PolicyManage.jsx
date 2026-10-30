@@ -128,7 +128,7 @@ const PolicyManage = () => {
             <span className="count-badge badge-success">총 {whitePolicies.length}건</span>
           </div>
           <form onSubmit={handleAddWhitePolicy} className="inline-form">
-            <input type="text" className="custom-input" placeholder="도메인 입력 (예: safe.com)" value={whiteDomain} onChange={(e) => setWhiteDomain(e.target.value)} required />
+            <input type="text" className="custom-input search-input" placeholder="도메인 입력 (예: safe.com)" value={whiteDomain} onChange={(e) => setWhiteDomain(e.target.value)} required />
             <button type="submit" className="btn-action btn-success btn-w-md btn-header">허용</button>
           </form>
           <div className="table-responsive table-fill">
@@ -181,7 +181,7 @@ const PolicyManage = () => {
             <span className="count-badge badge-danger">총 {policies.length}건</span>
           </div>
           <form onSubmit={handleAddPolicy} className="inline-form">
-            <input type="text" className="custom-input" placeholder="도메인 입력 (예: evil.com)" value={newDomain} onChange={(e) => setNewDomain(e.target.value)} required />
+            <input type="text" className="custom-input search-input" placeholder="도메인 입력 (예: evil.com)" value={newDomain} onChange={(e) => setNewDomain(e.target.value)} required />
             <button type="submit" className="btn-action btn-danger btn-w-md btn-header">차단</button>
           </form>
           <div className="table-responsive table-fill">

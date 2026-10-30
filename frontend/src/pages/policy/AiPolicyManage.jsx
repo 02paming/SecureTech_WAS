@@ -72,14 +72,14 @@ const AiPolicyManage = () => {
     if (!empId) return alert("로그인 정보가 만료되었습니다. 다시 로그인 해주세요.");
 
     try {
-      await axios.post(`${baseUrl}/api/policies/promote/`, {
+      const res = await axios.post(`${baseUrl}/api/policies/promote/`, {
         domains: authModal.domains, action: authModal.action, employee_id: empId, password: adminPassword,
       });
-      alert(`성공적으로 수동 정책으로 이관되었습니다.`);
+      alert(res.data.message);
       closeAuthModal();
       fetchAiPolicies();
     } catch (err) {
-      alert(err.response?.data?.error || "이관 실패 (비밀번호 확인)");
+      alert(err.response?.data?.error || "처리 실패 (비밀번호 확인)");
     }
   };
 
@@ -109,18 +109,33 @@ const AiPolicyManage = () => {
     return <span className="text-muted">-</span>;
   };
 
+  // 의심은 관리자가 허용/차단을 결정하고, AI가 확정한 안전/위험은 해제만 가능
+  const renderActions = (domain, aiStatus) => {
+    if (aiStatus === "의심") {
+      return (
+        <div className="action-btn-group">
+          <button type="button" onClick={() => openAuthModal([domain], "to_user_white")} className="btn-action btn-success btn-w-sm">허용 이관</button>
+          <button type="button" onClick={() => openAuthModal([domain], "to_user_black")} className="btn-action btn-danger btn-w-sm">차단 이관</button>
+        </div>
+      );
+    }
+    return <button type="button" onClick={() => openAuthModal([domain], "release")} className="btn-action btn-danger btn-w-sm">해제</button>;
+  };
+
+  const isRelease = authModal.action === "release";
+
   return (
     <div className="page-container admin-page">
       {authModal.isOpen && (
         <div className="dialog-overlay">
           <div className="dialog-box">
             <h3 className="dialog-title">관리자 권한 확인</h3>
-            <p className="dialog-desc">선택한 <strong>{authModal.domains.length}건</strong>의 도메인을 정식 수동 정책으로 이관하시려면 관리자 비밀번호를 입력해주세요.</p>
+            <p className="dialog-desc">선택한 <strong>{authModal.domains.length}건</strong>의 도메인을 {isRelease ? "AI 정책에서 해제하시려면" : "정식 수동 정책으로 이관하시려면"} 관리자 비밀번호를 입력해주세요.</p>
             <div className="dialog-form">
               <input type="password" className="custom-input" placeholder="비밀번호 입력" value={adminPassword} onChange={(e) => setAdminPassword(e.target.value)} onKeyDown={(e) => e.key === "Enter" && confirmPromote()} autoFocus />
               <div className="dialog-actions">
                 <button type="button" onClick={closeAuthModal} className="btn-action btn-neutral btn-w-md btn-header">취소</button>
-                <button type="button" onClick={confirmPromote} className="btn-action btn-primary btn-w-lg btn-header">승인 및 이관</button>
+                <button type="button" onClick={confirmPromote} className={`btn-action btn-w-lg btn-header ${isRelease ? "btn-danger" : "btn-primary"}`}>{isRelease ? "승인 및 해제" : "승인 및 이관"}</button>
               </div>
             </div>
           </div>
@@ -168,22 +183,18 @@ const AiPolicyManage = () => {
                   <th className="col-check"><input type="checkbox" onChange={() => toggleSelectAll(paginatedWhite, selectedWhite, setSelectedWhite)} checked={paginatedWhite.filter((p) => !p.isEmpty).length > 0 && paginatedWhite.filter((p) => !p.isEmpty).every((p) => selectedWhite.includes(p.domain))} /></th>
                   <th className="col-status">상태</th>
                   <th className="th-main">도메인 (URL)</th>
-                  <th className="col-time">탐지 일시</th>
-                  <th className="col-action-sm">관리</th>
+                  <th className="col-action">관리</th>
                 </tr>
               </thead>
               <tbody>
                 {paginatedWhite.map((p, idx) => (
                   <tr key={p.isEmpty ? `w-empty-${idx}` : p.domain} className={!p.isEmpty && p.ai_status === "의심" ? "row-warning" : ""}>
-                    {p.isEmpty ? (<td colSpan="5">&nbsp;</td>) : (
+                    {p.isEmpty ? (<td colSpan="4">&nbsp;</td>) : (
                       <>
                         <td><input type="checkbox" checked={selectedWhite.includes(p.domain)} onChange={() => toggleSelect(p.domain, selectedWhite, setSelectedWhite)} /></td>
                         <td>{renderBadge("white", p.ai_status)}</td>
                         <td className="cell-main">{p.domain}</td>
-                        <td className="cell-time">{p.detect_time}</td>
-                        <td>
-                          <button type="button" onClick={() => openAuthModal([p.domain], "to_user_white")} className="btn-action btn-success btn-w-sm">허용 이관</button>
-                        </td>
+                        <td>{renderActions(p.domain, p.ai_status)}</td>
                       </>
                     )}
                   </tr>
@@ -225,22 +236,18 @@ const AiPolicyManage = () => {
                   <th className="col-check"><input type="checkbox" onChange={() => toggleSelectAll(paginatedBlack, selectedBlack, setSelectedBlack)} checked={paginatedBlack.filter((p) => !p.isEmpty).length > 0 && paginatedBlack.filter((p) => !p.isEmpty).every((p) => selectedBlack.includes(p.domain))} /></th>
                   <th className="col-status">상태</th>
                   <th className="th-main">도메인 (URL)</th>
-                  <th className="col-time">탐지 일시</th>
-                  <th className="col-action-sm">관리</th>
+                  <th className="col-action">관리</th>
                 </tr>
               </thead>
               <tbody>
                 {paginatedBlack.map((p, idx) => (
                   <tr key={p.isEmpty ? `b-empty-${idx}` : p.domain} className={!p.isEmpty && p.ai_status === "의심" ? "row-warning" : ""}>
-                    {p.isEmpty ? (<td colSpan="5">&nbsp;</td>) : (
+                    {p.isEmpty ? (<td colSpan="4">&nbsp;</td>) : (
                       <>
                         <td><input type="checkbox" checked={selectedBlack.includes(p.domain)} onChange={() => toggleSelect(p.domain, selectedBlack, setSelectedBlack)} /></td>
                         <td>{renderBadge("black", p.ai_status)}</td>
                         <td className="cell-main">{p.domain}</td>
-                        <td className="cell-time">{p.detect_time}</td>
-                        <td>
-                          <button type="button" onClick={() => openAuthModal([p.domain], "to_user_black")} className="btn-action btn-danger btn-w-sm">차단 이관</button>
-                        </td>
+                        <td>{renderActions(p.domain, p.ai_status)}</td>
                       </>
                     )}
                   </tr>
