@@ -34,7 +34,7 @@ const PolicyManage = () => {
       ]);
       setPolicies(Array.isArray(resBlock.data) ? resBlock.data : []);
       setWhitePolicies(Array.isArray(resWhite.data) ? resWhite.data : []);
-      setLastUpdated(new Date().toLocaleTimeString());
+      setLastUpdated(new Date().toLocaleTimeString("ko-KR", { hour12: false }));
     } catch (err) {
       console.error("정책 조회 실패:", err);
     }
@@ -158,7 +158,7 @@ const PolicyManage = () => {
                               </>
                             ) : (
                               <>
-                                <button type="button" onClick={() => handleAuthRequest("upgrade", p.domain)} className="btn-action-outline btn-w-sm">보호</button>
+                                <button type="button" onClick={() => handleAuthRequest("upgrade", p.domain)} className="btn-action btn-outline btn-w-sm">보호</button>
                                 <button type="button" onClick={() => handleDeleteWhitePolicy(p.domain)} className="btn-action btn-danger btn-w-sm">해제</button>
                               </>
                             )}

@@ -1,5 +1,7 @@
 import axios from "axios";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import PageHeader from "../../components/PageHeader";
+import PaginationBar from "../../components/PaginationBar";
 
 function useDebounce(value, delay) {
   const [debouncedValue, setDebouncedValue] = useState(value);
@@ -16,99 +18,6 @@ const padRows = (arr, length) => {
   return padded;
 };
 
-const tdStyle = {
-  padding: "8px 10px",
-  borderRight: "1px solid var(--border-color)",
-  verticalAlign: "middle",
-  overflow: "hidden",
-  textOverflow: "ellipsis",
-  whiteSpace: "nowrap",
-  maxWidth: "1px",
-  fontSize: "13px",
-};
-const tdCenter = { ...tdStyle, textAlign: "center" };
-const tdLeft = { ...tdStyle, textAlign: "left" };
-
-const btnStyle = {
-  margin: 0,
-  height: "26px",
-  padding: "0 10px",
-  fontSize: "11px",
-};
-
-const modalOverlayStyle = {
-  position: "fixed",
-  inset: 0,
-  backgroundColor: "rgba(0,0,0,0.6)",
-  display: "flex",
-  justifyContent: "center",
-  alignItems: "center",
-  zIndex: 1000,
-  padding: "20px",
-};
-const modalBoxStyle = {
-  backgroundColor: "var(--bg-card)",
-  padding: "30px",
-  borderRadius: "12px",
-  width: "480px",
-  maxWidth: "100%",
-  border: "1px solid var(--border-color)",
-  boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.5)",
-};
-
-function PaginationBar({ page, totalPages, onPageChange }) {
-  const getPageNumbers = () => {
-    const pages = [];
-    let s = Math.max(1, page - 2);
-    let e = Math.min(totalPages, s + 4);
-    if (e - s < 4) s = Math.max(1, e - 4);
-    for (let i = s; i <= e; i++) pages.push(i);
-    return pages;
-  };
-  return (
-    <div
-      style={{
-        display: "flex",
-        justifyContent: "center",
-        gap: "6px",
-        paddingTop: "16px",
-        paddingBottom: "4px",
-        flexShrink: 0,
-      }}
-    >
-      <button
-        onClick={() => onPageChange(Math.max(page - 1, 1))}
-        disabled={page === 1}
-        className="btn-action"
-      >
-        이전
-      </button>
-      {getPageNumbers().map((p) => (
-        <button
-          key={p}
-          onClick={() => onPageChange(p)}
-          className="btn-action"
-          style={{
-            backgroundColor:
-              page === p ? "var(--color-primary)" : "var(--bg-main)",
-            color: page === p ? "#fff" : "var(--text-main)",
-            fontWeight: page === p ? "bold" : "normal",
-          }}
-        >
-          {p}
-        </button>
-      ))}
-      <button
-        onClick={() => onPageChange(Math.min(page + 1, totalPages))}
-        disabled={page === totalPages}
-        className="btn-action"
-      >
-        다음
-      </button>
-    </div>
-  );
-}
-
 const ResizableTh = ({
   colKey,
   label,
@@ -116,40 +25,18 @@ const ResizableTh = ({
   colWidths,
   handleMouseDown,
 }) => (
-  <th
-    style={{
-      width: colWidths[colKey],
-      borderRight: "1px solid var(--border-color)",
-      position: "relative",
-      padding: 0,
-    }}
-  >
+  <th className="th-resizable" style={{ width: colWidths[colKey] }}>
     <div
       onClick={onClick}
-      style={{
-        padding: "10px",
-        overflow: "hidden",
-        textOverflow: "ellipsis",
-        whiteSpace: "nowrap",
-        cursor: onClick ? "pointer" : "default",
-        fontSize: "13px",
-      }}
+      className={`th-inner ${onClick ? "th-sortable" : ""}`}
     >
       {label}
     </div>
     <div
+      className="col-resizer"
       onMouseDown={(e) => {
         e.stopPropagation();
         handleMouseDown(e, colKey);
-      }}
-      style={{
-        position: "absolute",
-        right: -4,
-        top: 0,
-        bottom: 0,
-        width: "8px",
-        cursor: "col-resize",
-        zIndex: 10,
       }}
       title="드래그하여 너비 조절"
     />
@@ -204,6 +91,7 @@ const EmployeeManage = () => {
   const [sortOrder, setSortOrder] = useState("asc");
   const itemsPerPage = 10;
   const [loading, setLoading] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState("");
 
   const [colWidths, setColWidths] = useState({
     empNum: 100,
@@ -215,7 +103,7 @@ const EmployeeManage = () => {
     birth: 120,
     address: 220,
     jumin: 140,
-    action: 90,
+    action: 160,
   });
 
   const baseUrl = useMemo(
@@ -256,21 +144,24 @@ const EmployeeManage = () => {
     return "[RRN Omitted]";
   };
 
-  useEffect(() => {
-    const controller = new AbortController();
-    const fetchEmployees = async () => {
+  const fetchEmployees = useCallback(
+    async (signal) => {
       try {
-        const res = await axios.get(`${baseUrl}/api/employees/`, {
-          signal: controller.signal,
-        });
+        const res = await axios.get(`${baseUrl}/api/employees/`, { signal });
         if (res?.data) setEmployees(res.data);
+        setLastUpdated(new Date().toLocaleTimeString("ko-KR", { hour12: false }));
       } catch (err) {
         if (err.name !== "CanceledError") console.error(err);
       }
-    };
-    fetchEmployees();
+    },
+    [baseUrl],
+  );
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetchEmployees(controller.signal);
     return () => controller.abort();
-  }, [baseUrl]);
+  }, [fetchEmployees]);
 
   useEffect(() => {
     sessionStorage.setItem("empFilterRole", filterRole);
@@ -504,169 +395,53 @@ const EmployeeManage = () => {
 
   return (
     <div className="page-container admin-page">
-      <div
-        className="page-header"
-        style={{ marginBottom: "20px", flexShrink: 0 }}
-      >
-        <div>
-          <h2 className="page-title">👥 사원 관리</h2>
-          <p className="page-subtitle">
-            사번을 클릭하여 사원의 상세 개인정보 및 인적 사항을 확인하세요.
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        title="사원 관리"
+        subtitle="사번을 클릭하여 사원의 상세 개인정보 및 인적 사항을 확인하세요."
+        lastUpdated={lastUpdated}
+        onRefresh={fetchEmployees}
+      />
 
-      <div
-        className="card"
-        style={{
-          flex: 1,
-          display: "flex",
-          flexDirection: "column",
-          padding: "20px",
-          minHeight: 0,
-          margin: 0,
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            marginBottom: "16px",
-            borderBottom: "1px solid var(--border-color)",
-            paddingBottom: "12px",
-            flexShrink: 0,
-          }}
-        >
-          <div style={{ display: "flex", gap: "12px" }}>
+      <div className="card dashboard-card card-fill">
+        <div className="card-toolbar">
+          <div className="btn-group">
             <button
-              style={{
-                height: "38px",
-                padding: "0 20px",
-                borderRadius: "8px",
-                fontWeight: "bold",
-                fontSize: "14px",
-                cursor: "pointer",
-                transition: "all 0.2s",
-                backgroundColor:
-                  filterRole === "active"
-                    ? "var(--color-primary)"
-                    : "var(--bg-main)",
-                color: filterRole === "active" ? "#fff" : "var(--text-muted)",
-                border:
-                  filterRole === "active"
-                    ? "1px solid var(--color-primary)"
-                    : "1px solid var(--border-color)",
-              }}
+              type="button"
+              className={`btn-action btn-toggle btn-w-auto btn-form ${filterRole === "active" ? "active" : ""}`}
               onClick={() => setFilterRole("active")}
             >
-              🏢 재직자 명부 ({totalEmployeesCount}명)
+              재직자 명부 ({totalEmployeesCount}명)
             </button>
             <button
-              style={{
-                height: "38px",
-                padding: "0 20px",
-                borderRadius: "8px",
-                fontWeight: "bold",
-                fontSize: "14px",
-                cursor: "pointer",
-                transition: "all 0.2s",
-                backgroundColor:
-                  filterRole === "deleted"
-                    ? "var(--color-danger)"
-                    : "var(--bg-main)",
-                color: filterRole === "deleted" ? "#fff" : "var(--text-muted)",
-                border:
-                  filterRole === "deleted"
-                    ? "1px solid var(--color-danger)"
-                    : "1px solid var(--border-color)",
-              }}
+              type="button"
+              className={`btn-action btn-toggle btn-w-auto btn-form ${filterRole === "deleted" ? "active" : ""}`}
               onClick={() => setFilterRole("deleted")}
             >
-              🚪 퇴사자 명부 ({totalDeletedCount}명)
+              퇴사자 명부 ({totalDeletedCount}명)
             </button>
           </div>
-
           <button
+            type="button"
             onClick={exportToCSV}
-            className="btn-primary"
-            style={{
-              height: "38px",
-              padding: "0 20px",
-              fontSize: "14px",
-              fontWeight: "bold",
-              backgroundColor: "#10b981",
-              margin: 0,
-              borderRadius: "8px",
-            }}
+            className="btn-action btn-neutral btn-w-auto btn-form"
           >
-            📥 CSV 다운로드
+            CSV 다운로드
           </button>
         </div>
 
-        <div
-          className="card-toolbar"
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            gap: "12px",
-            marginBottom: "16px",
-            flexShrink: 0,
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center" }}>
-            <input
-              type="text"
-              className="custom-input search-input"
-              style={{
-                width: "240px",
-                padding: "8px 12px",
-                fontSize: "13px",
-                height: "38px",
-              }}
-              placeholder="이름, 사번, 아이디 검색..."
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
-            />
-          </div>
-
-          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-            <div
-              style={{
-                display: "flex",
-                gap: "10px",
-                padding: "0 14px",
-                height: "38px",
-                backgroundColor: "var(--bg-main)",
-                borderRadius: "6px",
-                border: "1px solid var(--border-color)",
-                alignItems: "center",
-              }}
-            >
-              <span
-                style={{
-                  fontSize: "13px",
-                  fontWeight: "bold",
-                  color: "var(--text-title)",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                표시 항목:
-              </span>
+        <div className="card-toolbar">
+          <input
+            type="text"
+            className="custom-input search-input"
+            placeholder="이름, 사번, 아이디 검색..."
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+          />
+          <div className="toolbar-group">
+            <div className="column-picker">
+              <span className="fw-bold text-title">표시 항목:</span>
               {COLUMNS.map((col) => (
-                <label
-                  key={col.id}
-                  style={{
-                    fontSize: "13px",
-                    color: "var(--text-main)",
-                    cursor: "pointer",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "4px",
-                    whiteSpace: "nowrap",
-                  }}
-                >
+                <label key={col.id} className="check-label">
                   <input
                     type="checkbox"
                     checked={checkedCols[col.id]}
@@ -680,18 +455,10 @@ const EmployeeManage = () => {
             </div>
             <button
               type="button"
-              className="btn-primary"
+              className="btn-action btn-primary btn-w-md btn-form"
               onClick={() => {
                 setActiveCols(checkedCols);
                 setCurrentPage(1);
-              }}
-              style={{
-                height: "38px",
-                padding: "0 18px",
-                fontSize: "13px",
-                margin: 0,
-                fontWeight: "bold",
-                whiteSpace: "nowrap",
               }}
             >
               항목 적용
@@ -699,42 +466,10 @@ const EmployeeManage = () => {
           </div>
         </div>
 
-        <div
-          className="table-responsive"
-          style={{
-            flex: 1,
-            overflow: "hidden",
-            border: "1px solid var(--border-color)",
-            borderRadius: "6px",
-            display: "flex",
-            flexDirection: "column",
-          }}
-        >
-          <table
-            className="custom-table"
-            style={{
-              minWidth: "100%",
-              tableLayout: "fixed",
-              borderCollapse: "collapse",
-              margin: 0,
-              height: "100%",
-            }}
-          >
-            <thead
-              style={{
-                backgroundColor: "var(--bg-main)",
-                zIndex: 2,
-                position: "sticky",
-                top: 0,
-              }}
-            >
-              <tr
-                style={{
-                  borderBottom: "2px solid var(--border-color)",
-                  userSelect: "none",
-                  height: "46px",
-                }}
-              >
+        <div className="table-responsive table-fill">
+          <table className="custom-table">
+            <thead>
+              <tr>
                 {activeCols.empNum && (
                   <ResizableTh
                     colKey="empNum"
@@ -778,7 +513,6 @@ const EmployeeManage = () => {
                     handleMouseDown={handleMouseDown}
                   />
                 )}
-
                 {activeCols.phone && (
                   <ResizableTh
                     colKey="phone"
@@ -803,7 +537,6 @@ const EmployeeManage = () => {
                     handleMouseDown={handleMouseDown}
                   />
                 )}
-
                 {activeCols.jumin && (
                   <ResizableTh
                     colKey="jumin"
@@ -812,243 +545,113 @@ const EmployeeManage = () => {
                     handleMouseDown={handleMouseDown}
                   />
                 )}
-                <th
-                  style={{
-                    width: colWidths.action,
-                    padding: "8px",
-                    textAlign: "center",
-                    whiteSpace: "nowrap",
-                    position: "sticky",
-                    right: 0,
-                    backgroundColor: "var(--bg-card)",
-                    zIndex: 5,
-                    borderLeft: "1px solid var(--border-color)",
-                  }}
-                >
+                <th className="col-sticky-right" style={{ width: colWidths.action }}>
                   관리
                 </th>
               </tr>
             </thead>
-            <tbody style={{ flex: 1 }}>
-              {currentItems.map((emp, idx) => (
-                <tr
-                  key={emp.employee_id || `empty-${idx}`}
-                  style={{
-                    borderBottom: "1px solid var(--border-color)",
-                    backgroundColor:
-                      emp.is_deleted && !emp.isEmpty
-                        ? "var(--bg-card-alt)"
-                        : "transparent",
-                    height: "10%",
-                  }}
-                >
-                  {emp.isEmpty ? (
-                    // 💡 [핵심 수정 부분] 고정값 10 대신 계산된 visibleColCount를 적용
-                    <td colSpan={visibleColCount}>&nbsp;</td>
-                  ) : (
-                    <>
-                      {activeCols.empNum && (
-                        <td
-                          style={{
-                            ...tdCenter,
-                            cursor: "pointer",
-                            color: emp.is_deleted
-                              ? "var(--text-muted)"
-                              : "var(--color-primary)",
-                            fontWeight: "bold",
-                            textDecoration: emp.is_deleted
-                              ? "line-through"
-                              : "underline",
-                          }}
-                          onClick={() => handleEmpCardClick(emp)}
-                          title="클릭하여 상세 개인정보 보기"
-                        >
-                          {emp.emp_code || "-"}
-                        </td>
-                      )}
-
-                      {activeCols.joinDate && (
-                        <td
-                          style={{
-                            ...tdCenter,
-                            color: emp.is_deleted
-                              ? "var(--text-muted)"
-                              : "var(--text-main)",
-                          }}
-                        >
-                          {emp.hire_date || "-"}
-                        </td>
-                      )}
-
-                      {activeCols.name && (
-                        <td
-                          style={{
-                            ...tdCenter,
-                            fontWeight: "600",
-                            color: emp.is_deleted
-                              ? "var(--color-danger)"
-                              : "var(--text-title)",
-                          }}
-                        >
-                          {emp.name}{" "}
-                          {emp.is_deleted && (
-                            <span
-                              style={{
-                                fontSize: "11px",
-                                color: "var(--color-danger)",
-                                backgroundColor: "rgba(239, 68, 68, 0.15)",
-                                padding: "2px 6px",
-                                borderRadius: "4px",
-                                marginLeft: "4px",
-                              }}
+            <tbody>
+              {currentItems.map((emp, idx) => {
+                const subText = emp.is_deleted ? "text-muted" : "";
+                return (
+                  <tr
+                    key={emp.employee_id || `empty-${idx}`}
+                    className={emp.is_deleted && !emp.isEmpty ? "row-muted" : ""}
+                  >
+                    {emp.isEmpty ? (
+                      <td colSpan={visibleColCount}>&nbsp;</td>
+                    ) : (
+                      <>
+                        {activeCols.empNum && (
+                          <td
+                            className={`cell-ellipsis ${emp.is_deleted ? "cell-link-off" : "cell-link"}`}
+                            onClick={() => handleEmpCardClick(emp)}
+                            title="클릭하여 상세 개인정보 보기"
+                          >
+                            {emp.emp_code || "-"}
+                          </td>
+                        )}
+                        {activeCols.joinDate && (
+                          <td className={`cell-ellipsis ${subText}`}>
+                            {emp.hire_date || "-"}
+                          </td>
+                        )}
+                        {activeCols.name && (
+                          <td className={`cell-strong cell-ellipsis ${emp.is_deleted ? "text-danger" : ""}`}>
+                            {emp.name}{" "}
+                            {emp.is_deleted && (
+                              <span className="tag text-danger">퇴사</span>
+                            )}
+                          </td>
+                        )}
+                        {activeCols.userId && (
+                          <td className={`cell-ellipsis ${subText}`}>
+                            {emp.employee_id}
+                          </td>
+                        )}
+                        {activeCols.email && (
+                          <td className={`cell-left cell-ellipsis ${emp.is_deleted ? "text-muted" : "text-primary"}`}>
+                            {emp.email}
+                          </td>
+                        )}
+                        {activeCols.phone && (
+                          <td className={`cell-ellipsis ${subText}`}>
+                            {formatPhone(emp.phone_number)}
+                          </td>
+                        )}
+                        {activeCols.birth && (
+                          <td className={`cell-ellipsis ${subText}`}>
+                            {emp.birth_date}
+                          </td>
+                        )}
+                        {activeCols.address && (
+                          <td className={`cell-left cell-ellipsis ${subText}`}>
+                            {emp.address}
+                          </td>
+                        )}
+                        {activeCols.jumin && (
+                          <td className={`cell-ellipsis ${subText}`}>
+                            {emp.jumin_no ? renderMaskedJumin(emp.jumin_no) : "-"}
+                          </td>
+                        )}
+                        <td className="col-sticky-right" style={{ width: colWidths.action }}>
+                          {emp.is_deleted ? (
+                            <button
+                              type="button"
+                              className="btn-action btn-danger btn-w-sm"
+                              onClick={() =>
+                                handleHardDelete(emp.employee_id, emp.name)
+                              }
+                              disabled={loading}
                             >
-                              퇴사
-                            </span>
+                              완전 삭제
+                            </button>
+                          ) : (
+                            <div className="action-btn-group">
+                              <button
+                                type="button"
+                                className="btn-action btn-neutral btn-w-sm"
+                                onClick={() => handleEditClick(emp)}
+                              >
+                                수정
+                              </button>
+                              <button
+                                type="button"
+                                className="btn-action btn-danger btn-w-sm"
+                                onClick={() =>
+                                  handleDelete(emp.employee_id, emp.name)
+                                }
+                              >
+                                퇴사
+                              </button>
+                            </div>
                           )}
                         </td>
-                      )}
-
-                      {activeCols.userId && (
-                        <td
-                          style={{
-                            ...tdCenter,
-                            color: emp.is_deleted
-                              ? "var(--text-muted)"
-                              : "var(--text-main)",
-                          }}
-                        >
-                          {emp.employee_id}
-                        </td>
-                      )}
-                      {activeCols.email && (
-                        <td
-                          style={{
-                            ...tdLeft,
-                            color: emp.is_deleted
-                              ? "var(--text-muted)"
-                              : "var(--color-primary)",
-                          }}
-                        >
-                          {emp.email}
-                        </td>
-                      )}
-
-                      {activeCols.phone && (
-                        <td
-                          style={{
-                            ...tdCenter,
-                            color: emp.is_deleted
-                              ? "var(--text-muted)"
-                              : "var(--text-main)",
-                          }}
-                        >
-                          <span>{formatPhone(emp.phone_number)}</span>
-                        </td>
-                      )}
-                      {activeCols.birth && (
-                        <td
-                          style={{
-                            ...tdCenter,
-                            color: emp.is_deleted
-                              ? "var(--text-muted)"
-                              : "var(--text-main)",
-                          }}
-                        >
-                          {emp.birth_date}
-                        </td>
-                      )}
-                      {activeCols.address && (
-                        <td
-                          style={{
-                            ...tdLeft,
-                            color: emp.is_deleted
-                              ? "var(--text-muted)"
-                              : "var(--text-main)",
-                          }}
-                        >
-                          <span>{emp.address}</span>
-                        </td>
-                      )}
-
-                      {activeCols.jumin && (
-                        <td
-                          style={{
-                            ...tdCenter,
-                            color: emp.is_deleted
-                              ? "var(--text-muted)"
-                              : "var(--text-main)",
-                          }}
-                        >
-                          {emp.jumin_no ? renderMaskedJumin(emp.jumin_no) : "-"}
-                        </td>
-                      )}
-
-                      <td
-                        style={{
-                          width: colWidths.action,
-                          padding: "4px 8px",
-                          textAlign: "center",
-                          position: "sticky",
-                          right: 0,
-                          backgroundColor: emp.is_deleted
-                            ? "var(--bg-card-alt)"
-                            : "var(--bg-card)",
-                          zIndex: 2,
-                          borderLeft: "1px solid var(--border-color)",
-                        }}
-                      >
-                        {emp.is_deleted ? (
-                          <button
-                            type="button"
-                            className="btn-action btn-action-reject"
-                            style={{
-                              ...btnStyle,
-                              backgroundColor: "var(--color-danger)",
-                              color: "#fff",
-                              border: "none",
-                            }}
-                            onClick={() =>
-                              handleHardDelete(emp.employee_id, emp.name)
-                            }
-                            disabled={loading}
-                          >
-                            완전 삭제
-                          </button>
-                        ) : (
-                          <div
-                            className="action-btn-group"
-                            style={{
-                              display: "flex",
-                              justifyContent: "center",
-                              gap: "4px",
-                            }}
-                          >
-                            <button
-                              className="btn-action btn-action-edit"
-                              style={btnStyle}
-                              onClick={() => handleEditClick(emp)}
-                            >
-                              수정
-                            </button>
-                            <button
-                              className="btn-action btn-action-reject"
-                              style={{
-                                ...btnStyle,
-                                border: "1px solid var(--color-danger)",
-                              }}
-                              onClick={() =>
-                                handleDelete(emp.employee_id, emp.name)
-                              }
-                            >
-                              퇴사
-                            </button>
-                          </div>
-                        )}
-                      </td>
-                    </>
-                  )}
-                </tr>
-              ))}
+                      </>
+                    )}
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -1060,33 +663,12 @@ const EmployeeManage = () => {
       </div>
 
       {editModal.isOpen && (
-        <div style={modalOverlayStyle}>
-          <div style={{ ...modalBoxStyle, width: "400px" }}>
-            <h3
-              style={{
-                margin: "0 0 20px 0",
-                color: "var(--text-title)",
-                fontSize: "18px",
-              }}
-            >
-              ✏️ 사원 정보 수정
-            </h3>
-            <form
-              onSubmit={handleUpdate}
-              style={{ display: "flex", flexDirection: "column", gap: "16px" }}
-            >
-              <div>
-                <label
-                  style={{
-                    fontSize: "13px",
-                    fontWeight: "bold",
-                    color: "var(--text-muted)",
-                    display: "block",
-                    marginBottom: "6px",
-                  }}
-                >
-                  연락처
-                </label>
+        <div className="dialog-overlay">
+          <div className="dialog-box">
+            <h3 className="dialog-title">사원 정보 수정</h3>
+            <form onSubmit={handleUpdate} className="auth-form">
+              <div className="form-group">
+                <label className="form-label">연락처</label>
                 <input
                   type="text"
                   className="custom-input"
@@ -1098,22 +680,11 @@ const EmployeeManage = () => {
                     })
                   }
                   placeholder="연락처 입력 (숫자만 입력)"
-                  style={{ padding: "10px", width: "100%", fontSize: "14px" }}
                   maxLength={13}
                 />
               </div>
-              <div>
-                <label
-                  style={{
-                    fontSize: "13px",
-                    fontWeight: "bold",
-                    color: "var(--text-muted)",
-                    display: "block",
-                    marginBottom: "6px",
-                  }}
-                >
-                  이메일
-                </label>
+              <div className="form-group">
+                <label className="form-label">이메일</label>
                 <input
                   type="email"
                   className="custom-input"
@@ -1122,21 +693,10 @@ const EmployeeManage = () => {
                     setEditModal({ ...editModal, email: e.target.value })
                   }
                   placeholder="이메일 입력"
-                  style={{ padding: "10px", width: "100%", fontSize: "14px" }}
                 />
               </div>
-              <div>
-                <label
-                  style={{
-                    fontSize: "13px",
-                    fontWeight: "bold",
-                    color: "var(--text-muted)",
-                    display: "block",
-                    marginBottom: "6px",
-                  }}
-                >
-                  주소
-                </label>
+              <div className="form-group">
+                <label className="form-label">주소</label>
                 <input
                   type="text"
                   className="custom-input"
@@ -1145,20 +705,12 @@ const EmployeeManage = () => {
                     setEditModal({ ...editModal, address: e.target.value })
                   }
                   placeholder="주소 입력"
-                  style={{ padding: "10px", width: "100%", fontSize: "14px" }}
                 />
               </div>
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "flex-end",
-                  gap: "10px",
-                  marginTop: "10px",
-                }}
-              >
+              <div className="dialog-actions">
                 <button
                   type="button"
-                  className="btn-action btn-action-reject"
+                  className="btn-action btn-neutral btn-w-md btn-header"
                   onClick={() =>
                     setEditModal({
                       isOpen: false,
@@ -1168,23 +720,13 @@ const EmployeeManage = () => {
                       email: "",
                     })
                   }
-                  style={{
-                    height: "36px",
-                    padding: "0 20px",
-                    fontWeight: "bold",
-                  }}
                 >
                   취소
                 </button>
                 <button
                   type="submit"
-                  className="btn-primary"
+                  className="btn-action btn-primary btn-w-md btn-header"
                   disabled={loading}
-                  style={{
-                    height: "36px",
-                    padding: "0 20px",
-                    fontWeight: "bold",
-                  }}
                 >
                   저장
                 </button>
@@ -1195,154 +737,52 @@ const EmployeeManage = () => {
       )}
 
       {isDetailModalOpen && selectedEmpDetail && (
-        <div style={modalOverlayStyle}>
-          <div style={modalBoxStyle}>
-            <h3
-              style={{
-                margin: "0 0 20px 0",
-                color: "var(--color-primary)",
-                fontSize: "18px",
-              }}
-            >
-              📋 사원 상세 개인정보 조회
-            </h3>
-            <div
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                gap: "12px",
-                fontSize: "14px",
-                marginBottom: "24px",
-              }}
-            >
-              <div>
-                <strong
-                  style={{
-                    color: "var(--text-muted)",
-                    display: "inline-block",
-                    width: "100px",
-                  }}
-                >
-                  사번:
-                </strong>{" "}
-                {selectedEmpDetail.emp_code}
+        <div className="dialog-overlay">
+          <div className="dialog-box dialog-md">
+            <h3 className="dialog-title">사원 상세 개인정보 조회</h3>
+            <div>
+              <div className="info-row is-compact">
+                <span className="info-label">사번</span>
+                <span className="info-value">{selectedEmpDetail.emp_code}</span>
               </div>
-              <div>
-                <strong
-                  style={{
-                    color: "var(--text-muted)",
-                    display: "inline-block",
-                    width: "100px",
-                  }}
-                >
-                  아이디(ID):
-                </strong>{" "}
-                {selectedEmpDetail.employee_id}
+              <div className="info-row is-compact">
+                <span className="info-label">아이디(ID)</span>
+                <span className="info-value">{selectedEmpDetail.employee_id}</span>
               </div>
-              <div>
-                <strong
-                  style={{
-                    color: "var(--text-muted)",
-                    display: "inline-block",
-                    width: "100px",
-                  }}
-                >
-                  이름:
-                </strong>{" "}
-                <span
-                  style={{ fontWeight: "bold", color: "var(--text-title)" }}
-                >
-                  {selectedEmpDetail.name}
-                </span>
+              <div className="info-row is-compact">
+                <span className="info-label">이름</span>
+                <span className="info-value fw-bold text-title">{selectedEmpDetail.name}</span>
               </div>
-              <div>
-                <strong
-                  style={{
-                    color: "var(--text-muted)",
-                    display: "inline-block",
-                    width: "100px",
-                  }}
-                >
-                  입사일:
-                </strong>{" "}
-                {selectedEmpDetail.hire_date}
+              <div className="info-row is-compact">
+                <span className="info-label">입사일</span>
+                <span className="info-value">{selectedEmpDetail.hire_date}</span>
               </div>
-              <div>
-                <strong
-                  style={{
-                    color: "var(--text-muted)",
-                    display: "inline-block",
-                    width: "100px",
-                  }}
-                >
-                  생년월일:
-                </strong>{" "}
-                {selectedEmpDetail.birth_date || "-"}
+              <div className="info-row is-compact">
+                <span className="info-label">생년월일</span>
+                <span className="info-value">{selectedEmpDetail.birth_date || "-"}</span>
               </div>
-              <hr
-                style={{ borderColor: "var(--border-color)", margin: "8px 0" }}
-              />
-              <div>
-                <strong
-                  style={{
-                    color: "var(--text-muted)",
-                    display: "inline-block",
-                    width: "100px",
-                  }}
-                >
-                  이메일:
-                </strong>{" "}
-                {selectedEmpDetail.email}
+              <div className="info-row is-compact">
+                <span className="info-label">이메일</span>
+                <span className="info-value">{selectedEmpDetail.email}</span>
               </div>
-              <div>
-                <strong
-                  style={{
-                    color: "var(--text-muted)",
-                    display: "inline-block",
-                    width: "100px",
-                  }}
-                >
-                  연락처:
-                </strong>{" "}
-                {formatPhone(selectedEmpDetail.phone_number)}
+              <div className="info-row is-compact">
+                <span className="info-label">연락처</span>
+                <span className="info-value">{formatPhone(selectedEmpDetail.phone_number)}</span>
               </div>
-              <div>
-                <strong
-                  style={{
-                    color: "var(--text-muted)",
-                    display: "inline-block",
-                    width: "100px",
-                  }}
-                >
-                  주소:
-                </strong>{" "}
-                {selectedEmpDetail.address}
+              <div className="info-row is-compact">
+                <span className="info-label">주소</span>
+                <span className="info-value">{selectedEmpDetail.address}</span>
               </div>
-              <div>
-                <strong
-                  style={{
-                    color: "var(--text-muted)",
-                    display: "inline-block",
-                    width: "100px",
-                  }}
-                >
-                  주민등록번호:
-                </strong>{" "}
-                <span style={{ color: "var(--color-warning)" }}>
-                  {selectedEmpDetail.jumin_no}
-                </span>
+              <div className="info-row is-compact">
+                <span className="info-label">주민등록번호</span>
+                <span className="info-value text-warning">{selectedEmpDetail.jumin_no}</span>
               </div>
             </div>
-            <div style={{ textAlign: "right" }}>
+            <div className="dialog-actions">
               <button
                 type="button"
-                className="btn-primary"
+                className="btn-action btn-neutral btn-w-md btn-header"
                 onClick={() => setIsDetailModalOpen(false)}
-                style={{
-                  height: "36px",
-                  padding: "0 24px",
-                  fontWeight: "bold",
-                }}
               >
                 닫기
               </button>

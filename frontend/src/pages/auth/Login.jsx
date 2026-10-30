@@ -129,171 +129,61 @@ const Login = ({ setUser, isAdminMode = false }) => {
   };
 
   return (
-    <div
-      style={{
-        display: "flex",
-        justifyContent: "center",
-        alignItems: "center",
-        height: "100vh",
-        backgroundColor: "#f8fafc",
-      }}
-    >
-      <div
-        style={{
-          width: "100%",
-          maxWidth: "360px",
-          padding: "20px 24px",
-          backgroundColor: "#ffffff",
-          borderRadius: "10px",
-          border: "1px solid #e2e8f0",
-          boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)",
-        }}
-      >
+    <div className={`auth-wrapper is-full ${isAdminMode ? "auth-admin" : ""}`}>
+      <div className="card auth-card">
         {otpMode ? (
           <>
-            <div style={{ textAlign: "center", marginBottom: "12px" }}>
-              <div style={{ fontSize: "28px", marginBottom: "4px" }}>🔐</div>
-              <h2
-                style={{
-                  fontSize: "18px",
-                  fontWeight: "700",
-                  color: isAdminMode ? "#851216" : "#0284c7",
-                  margin: "0 0 4px 0",
-                }}
-              >
-                2단계 보안 인증
-              </h2>
-              <p style={{ fontSize: "11px", color: "#64748b", margin: 0 }}>
+            <div className="auth-header">
+              <h2 className="auth-title text-primary">2단계 보안 인증</h2>
+              <p className="auth-subtitle">
                 Google OTP 앱의 6자리 코드를 입력하세요.
               </p>
             </div>
 
             {otpSetupMode && (
-              <div
-                style={{
-                  backgroundColor: "#fef2f2",
-                  border: "1px solid #fca5a5",
-                  borderRadius: "8px",
-                  padding: "10px",
-                  marginBottom: "12px",
-                  textAlign: "center",
-                }}
-              >
-                <strong
-                  style={{
-                    display: "block",
-                    color: "#991b1b",
-                    fontSize: "12px",
-                    marginBottom: "8px",
-                  }}
-                >
-                  ※ 구글 OTP 최초 설정 ※
+              <div className="notice-box tone-danger is-center">
+                <strong className="notice-title text-danger">
+                  구글 OTP 최초 설정
                 </strong>
 
                 {otpUri && (
-                  <div
-                    style={{
-                      display: "inline-block",
-                      padding: "4px",
-                      backgroundColor: "#fff",
-                      border: "1px solid #f87171",
-                      borderRadius: "6px",
-                      marginBottom: "6px",
-                    }}
-                  >
+                  <div className="qr-frame">
                     <QRCode value={otpUri} size={100} />
                   </div>
                 )}
 
-                <p
-                  style={{
-                    margin: "0 0 6px 0",
-                    fontSize: "10.5px",
-                    color: "#7f1d1d",
-                    lineHeight: "1.3",
-                  }}
-                >
-                  앱 하단 <strong>[+]</strong> 버튼 ➔{" "}
+                <p className="notice-text">
+                  앱 하단 <strong>[+]</strong> 버튼 →{" "}
                   <strong>[QR 코드 스캔]</strong>
                 </p>
-
-                <hr
-                  style={{
-                    borderTop: "1px dashed #fca5a5",
-                    borderBottom: "none",
-                    margin: "6px 0",
-                  }}
-                />
-
-                <div style={{ fontSize: "11px", color: "#b91c1c" }}>
-                  카메라 불가 시 아래 설정 키 입력
-                  <br />
-                  <div
-                    style={{
-                      marginTop: "6px",
-                      fontSize: "10px",
-                      letterSpacing: "0.5px",
-                      backgroundColor: "#fee2e2",
-                      padding: "8px",
-                      borderRadius: "6px",
-                      fontWeight: "bold",
-                      wordBreak: "break-all",
-                    }}
-                  >
-                    {otpSecret}
-                  </div>
-                </div>
+                <p className="notice-text">카메라 불가 시 아래 설정 키 입력</p>
+                <div className="otp-secret">{otpSecret}</div>
               </div>
             )}
 
             <form
               onSubmit={handleOtpSubmit}
               autoComplete="off"
-              style={{ display: "flex", flexDirection: "column", gap: "10px" }}
+              className="auth-form"
             >
-              <div>
-                <input
-                  type="text"
-                  name="secure_otp_code"
-                  autoComplete="off"
-                  maxLength="6"
-                  placeholder="예: 123456"
-                  value={otpCode}
-                  onChange={(e) =>
-                    setOtpCode(e.target.value.replace(/[^0-9]/g, ""))
-                  }
-                  required
-                  autoFocus
-                  style={{
-                    width: "100%",
-                    padding: "10px",
-                    borderRadius: "6px",
-                    border: "1px solid #cbd5e1",
-                    backgroundColor: "#f8fafc",
-                    color: "#334155",
-                    fontSize: "15px",
-                    letterSpacing: "3px",
-                    textAlign: "center",
-                    boxSizing: "border-box",
-                    outline: "none",
-                    fontWeight: "bold",
-                  }}
-                />
-              </div>
+              <input
+                type="text"
+                name="secure_otp_code"
+                autoComplete="off"
+                maxLength="6"
+                placeholder="예: 123456"
+                value={otpCode}
+                onChange={(e) =>
+                  setOtpCode(e.target.value.replace(/[^0-9]/g, ""))
+                }
+                required
+                autoFocus
+                className="custom-input otp-input"
+              />
 
               <button
                 type="submit"
-                style={{
-                  width: "100%",
-                  padding: "10px",
-                  fontSize: "13px",
-                  fontWeight: "600",
-                  backgroundColor: isAdminMode ? "#851216" : "#0284c7",
-                  color: "#fff",
-                  border: "none",
-                  borderRadius: "6px",
-                  cursor: "pointer",
-                }}
+                className="btn-action btn-primary btn-block"
                 disabled={loading}
               >
                 {loading ? "인증 중..." : "인증하고 로그인"}
@@ -305,17 +195,7 @@ const Login = ({ setUser, isAdminMode = false }) => {
                   setOtpMode(false);
                   setOtpCode("");
                 }}
-                style={{
-                  width: "100%",
-                  padding: "10px",
-                  fontSize: "12px",
-                  fontWeight: "600",
-                  backgroundColor: "transparent",
-                  color: "#64748b",
-                  border: "1px solid #cbd5e1",
-                  borderRadius: "6px",
-                  cursor: "pointer",
-                }}
+                className="btn-action btn-neutral btn-block"
                 disabled={loading}
               >
                 취소하고 뒤로 가기
@@ -324,21 +204,13 @@ const Login = ({ setUser, isAdminMode = false }) => {
           </>
         ) : (
           <>
-            <div style={{ textAlign: "center", marginBottom: "20px" }}>
-              <div style={{ fontSize: "32px", marginBottom: "8px" }}>🛡️</div>
-              <h2
-                style={{
-                  fontSize: "18px",
-                  fontWeight: "700",
-                  color: isAdminMode ? "#851216" : "#0f172a",
-                  margin: "0 0 6px 0",
-                }}
-              >
+            <div className="auth-header">
+              <h2 className="auth-title text-primary">
                 {isAdminMode
                   ? "보안 관제 콘솔 로그인"
                   : "SecureTech 사원 로그인"}
               </h2>
-              <p style={{ fontSize: "11px", color: "#64748b", margin: 0 }}>
+              <p className="auth-subtitle">
                 {isAdminMode
                   ? "인가된 보안 관리자 전용 인증 화면입니다."
                   : "아이디와 비밀번호를 입력해 로그인해 주세요."}
@@ -348,18 +220,10 @@ const Login = ({ setUser, isAdminMode = false }) => {
             <form
               onSubmit={handleLogin}
               autoComplete="off"
-              style={{ display: "flex", flexDirection: "column", gap: "12px" }}
+              className="auth-form"
             >
-              <div>
-                <label
-                  style={{
-                    display: "block",
-                    fontSize: "11px",
-                    fontWeight: "600",
-                    color: "#334155",
-                    marginBottom: "4px",
-                  }}
-                >
+              <div className="form-group">
+                <label className="form-label">
                   {isAdminMode ? "관리자 아이디" : "아이디"}
                 </label>
                 <input
@@ -373,32 +237,12 @@ const Login = ({ setUser, isAdminMode = false }) => {
                   onChange={(e) => setEmpId(e.target.value)}
                   required
                   autoFocus
-                  style={{
-                    width: "100%",
-                    padding: "10px",
-                    borderRadius: "6px",
-                    border: "1px solid #cbd5e1",
-                    backgroundColor: isAdminMode ? "#f1f5f9" : "#ffffff",
-                    color: "#334155",
-                    fontSize: "13px",
-                    boxSizing: "border-box",
-                    outline: "none",
-                  }}
+                  className="custom-input"
                 />
               </div>
 
-              <div>
-                <label
-                  style={{
-                    display: "block",
-                    fontSize: "11px",
-                    fontWeight: "600",
-                    color: "#334155",
-                    marginBottom: "4px",
-                  }}
-                >
-                  비밀번호
-                </label>
+              <div className="form-group">
+                <label className="form-label">비밀번호</label>
                 <input
                   type="password"
                   name="no_autofill_password"
@@ -407,35 +251,13 @@ const Login = ({ setUser, isAdminMode = false }) => {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
-                  style={{
-                    width: "100%",
-                    padding: "10px",
-                    borderRadius: "6px",
-                    border: "1px solid #cbd5e1",
-                    backgroundColor: isAdminMode ? "#f1f5f9" : "#ffffff",
-                    color: "#334155",
-                    fontSize: "13px",
-                    boxSizing: "border-box",
-                    outline: "none",
-                    letterSpacing: isAdminMode ? "2px" : "normal",
-                  }}
+                  className="custom-input"
                 />
               </div>
 
               <button
                 type="submit"
-                style={{
-                  width: "100%",
-                  padding: "12px",
-                  fontSize: "13px",
-                  fontWeight: "600",
-                  backgroundColor: isAdminMode ? "#851216" : "#0284c7",
-                  color: "#fff",
-                  border: "none",
-                  borderRadius: "6px",
-                  cursor: "pointer",
-                  marginTop: "4px",
-                }}
+                className="btn-action btn-primary btn-block"
                 disabled={loading}
               >
                 {loading
@@ -449,45 +271,15 @@ const Login = ({ setUser, isAdminMode = false }) => {
             </form>
 
             {isAdminMode ? (
-              <div
-                style={{
-                  marginTop: "16px",
-                  textAlign: "center",
-                  fontSize: "11px",
-                  color: "#ef4444",
-                  fontWeight: "500",
-                }}
-              >
+              <div className="auth-footer text-danger">
                 ※ 주의: 비인가자의 접근 시도는 실시간 기록 및 차단됩니다.
               </div>
             ) : (
-              <div
-                style={{
-                  marginTop: "16px",
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  fontSize: "11px",
-                }}
-              >
-                <Link
-                  to="/"
-                  style={{
-                    color: "#64748b",
-                    textDecoration: "none",
-                    fontWeight: "500",
-                  }}
-                >
+              <div className="auth-footer auth-links">
+                <Link to="/" className="text-link">
                   ← 홈으로
                 </Link>
-                <Link
-                  to="/signup"
-                  style={{
-                    color: "#0284c7",
-                    textDecoration: "none",
-                    fontWeight: "600",
-                  }}
-                >
+                <Link to="/signup" className="text-link is-primary">
                   신규 사원 계정 신청
                 </Link>
               </div>

@@ -2,6 +2,13 @@ import { useState } from "react";
 import axios from "axios";
 import { useNavigate, Link } from "react-router-dom";
 
+const FieldMessage = ({ success, error }) => (
+  <>
+    {success && <div className="form-message text-success">{success}</div>}
+    {error && <div className="form-message text-danger">{error}</div>}
+  </>
+);
+
 const Signup = () => {
   const [formData, setFormData] = useState({
     member_id: "",
@@ -221,72 +228,21 @@ const Signup = () => {
   };
 
   return (
-    <div
-      style={{
-        display: "flex",
-        justifyContent: "center",
-        alignItems: "center",
-        minHeight: "90vh",
-        padding: "20px",
-      }}
-    >
-      <style>{`
-        .form-row { display: flex; gap: 16px; }
-        .form-col { flex: 1; }
-        .id-input-group { display: flex; gap: 8px; }
-        @media (max-width: 768px) {
-          .form-row { flex-direction: column !important; gap: 18px !important; }
-          .id-input-group { flex-direction: column !important; }
-          .id-input-group button { width: 100% !important; padding: 14px !important; }
-        }
-      `}</style>
-
-      <div
-        style={{
-          width: "100%",
-          maxWidth: "550px",
-          padding: "40px",
-          backgroundColor: "#1e293b",
-          borderRadius: "12px",
-          border: "1px solid #334155",
-          boxShadow: "0 10px 25px rgba(0,0,0,0.5)",
-          boxSizing: "border-box",
-        }}
-      >
-        <div style={{ textAlign: "center", marginBottom: "30px" }}>
-          <div style={{ fontSize: "28px", marginBottom: "8px" }}>🚀</div>
-          <h2
-            style={{
-              fontSize: "22px",
-              fontWeight: "bold",
-              color: "#f8fafc",
-              marginBottom: "6px",
-            }}
-          >
-            SecureTech 가입 신청
-          </h2>
-          <p style={{ fontSize: "13px", color: "#94a3b8" }}>
+    <div className="auth-wrapper">
+      <div className="card auth-card auth-card-wide">
+        <div className="auth-header">
+          <h2 className="auth-title">SecureTech 가입 신청</h2>
+          <p className="auth-subtitle">
             사내 인트라넷 및 보안망 접근을 위한 계정을 신청합니다.
           </p>
         </div>
 
-        <form
-          onSubmit={handleSubmit}
-          style={{ display: "flex", flexDirection: "column", gap: "18px" }}
-        >
-          <div>
-            <label
-              style={{
-                display: "block",
-                fontSize: "13px",
-                fontWeight: "600",
-                color: "#94a3b8",
-                marginBottom: "6px",
-              }}
-            >
-              가입 희망 아이디 <span style={{ color: "#ef4444" }}>*</span>
+        <form onSubmit={handleSubmit} className="auth-form">
+          <div className="form-group">
+            <label className="form-label">
+              가입 희망 아이디 <span className="text-danger">*</span>
             </label>
-            <div className="id-input-group">
+            <div className="input-with-btn">
               <input
                 type="text"
                 name="member_id"
@@ -294,96 +250,38 @@ const Signup = () => {
                 onChange={handleChange}
                 required
                 placeholder="아이디 입력"
-                style={{
-                  flex: 1,
-                  padding: "12px",
-                  borderRadius: "8px",
-                  border: "1px solid #475569",
-                  backgroundColor: "#0f172a",
-                  color: "#fff",
-                  fontSize: "14px",
-                  outline: "none",
-                }}
+                className="custom-input"
               />
               <button
                 type="button"
                 onClick={handleCheckId}
-                style={{
-                  padding: "0 16px",
-                  backgroundColor: "#334155",
-                  color: "#fff",
-                  border: "none",
-                  borderRadius: "8px",
-                  cursor: "pointer",
-                  fontSize: "13px",
-                  fontWeight: "600",
-                  whiteSpace: "nowrap",
-                }}
+                className="btn-action btn-neutral btn-w-md btn-form"
               >
                 중복확인
               </button>
             </div>
-            {successMsgs.member_id && (
-              <div
-                style={{ color: "#22c55e", fontSize: "12px", marginTop: "6px" }}
-              >
-                {successMsgs.member_id}
-              </div>
-            )}
-            {duplicateErrors.member_id && (
-              <div
-                style={{ color: "#ef4444", fontSize: "12px", marginTop: "6px" }}
-              >
-                {duplicateErrors.member_id}
-              </div>
-            )}
+            <FieldMessage success={successMsgs.member_id} error={duplicateErrors.member_id} />
           </div>
 
-          <div>
-            <label
-              style={{
-                display: "block",
-                fontSize: "13px",
-                fontWeight: "600",
-                color: "#94a3b8",
-                marginBottom: "6px",
-              }}
-            >
-              비밀번호 <span style={{ color: "#ef4444" }}>*</span>
-            </label>
-            <input
-              type="password"
-              name="password"
-              value={formData.password}
-              onChange={handleChange}
-              required
-              placeholder="비밀번호 입력"
-              style={{
-                width: "100%",
-                boxSizing: "border-box",
-                padding: "12px",
-                borderRadius: "8px",
-                border: "1px solid #475569",
-                backgroundColor: "#0f172a",
-                color: "#fff",
-                fontSize: "14px",
-                outline: "none",
-              }}
-            />
+          <div className="form-group">
+              <label className="form-label">
+                비밀번호 <span className="text-danger">*</span>
+              </label>
+              <input
+                type="password"
+                name="password"
+                value={formData.password}
+                onChange={handleChange}
+                required
+                placeholder="비밀번호 입력"
+                className="custom-input"
+              />
           </div>
 
           <div className="form-row">
-            <div className="form-col">
-              <label
-                style={{
-                  display: "block",
-                  fontSize: "13px",
-                  fontWeight: "600",
-                  color: "#94a3b8",
-                  marginBottom: "6px",
-                }}
-              >
-                이름 <span style={{ color: "#ef4444" }}>*</span>
+            <div className="form-group">
+              <label className="form-label">
+                이름 <span className="text-danger">*</span>
               </label>
               <input
                 type="text"
@@ -392,30 +290,12 @@ const Signup = () => {
                 onChange={handleChange}
                 required
                 placeholder="이름 입력"
-                style={{
-                  width: "100%",
-                  boxSizing: "border-box",
-                  padding: "12px",
-                  borderRadius: "8px",
-                  border: "1px solid #475569",
-                  backgroundColor: "#0f172a",
-                  color: "#fff",
-                  fontSize: "14px",
-                  outline: "none",
-                }}
+                className="custom-input"
               />
             </div>
-            <div className="form-col">
-              <label
-                style={{
-                  display: "block",
-                  fontSize: "13px",
-                  fontWeight: "600",
-                  color: "#94a3b8",
-                  marginBottom: "6px",
-                }}
-              >
-                이메일 <span style={{ color: "#ef4444" }}>*</span>
+            <div className="form-group">
+              <label className="form-label">
+                이메일 <span className="text-danger">*</span>
               </label>
               <input
                 type="text"
@@ -424,55 +304,16 @@ const Signup = () => {
                 onChange={handleChange}
                 required
                 placeholder="이메일 입력 (@포함)"
-                style={{
-                  width: "100%",
-                  boxSizing: "border-box",
-                  padding: "12px",
-                  borderRadius: "8px",
-                  border: "1px solid #475569",
-                  backgroundColor: "#0f172a",
-                  color: "#fff",
-                  fontSize: "14px",
-                  outline: "none",
-                }}
+                className="custom-input"
               />
-              {successMsgs.email && (
-                <div
-                  style={{
-                    color: "#22c55e",
-                    fontSize: "12px",
-                    marginTop: "6px",
-                  }}
-                >
-                  {successMsgs.email}
-                </div>
-              )}
-              {duplicateErrors.email && (
-                <div
-                  style={{
-                    color: "#ef4444",
-                    fontSize: "12px",
-                    marginTop: "6px",
-                  }}
-                >
-                  {duplicateErrors.email}
-                </div>
-              )}
+              <FieldMessage success={successMsgs.email} error={duplicateErrors.email} />
             </div>
           </div>
 
           <div className="form-row">
-            <div className="form-col">
-              <label
-                style={{
-                  display: "block",
-                  fontSize: "13px",
-                  fontWeight: "600",
-                  color: "#94a3b8",
-                  marginBottom: "6px",
-                }}
-              >
-                연락처 <span style={{ color: "#ef4444" }}>*</span>
+            <div className="form-group">
+              <label className="form-label">
+                연락처 <span className="text-danger">*</span>
               </label>
               <input
                 type="text"
@@ -482,52 +323,13 @@ const Signup = () => {
                 required
                 placeholder="010-0000-0000"
                 maxLength="13"
-                style={{
-                  width: "100%",
-                  boxSizing: "border-box",
-                  padding: "12px",
-                  borderRadius: "8px",
-                  border: "1px solid #475569",
-                  backgroundColor: "#0f172a",
-                  color: "#fff",
-                  fontSize: "14px",
-                  outline: "none",
-                }}
+                className="custom-input"
               />
-              {successMsgs.phone_number && (
-                <div
-                  style={{
-                    color: "#22c55e",
-                    fontSize: "12px",
-                    marginTop: "6px",
-                  }}
-                >
-                  {successMsgs.phone_number}
-                </div>
-              )}
-              {duplicateErrors.phone_number && (
-                <div
-                  style={{
-                    color: "#ef4444",
-                    fontSize: "12px",
-                    marginTop: "6px",
-                  }}
-                >
-                  {duplicateErrors.phone_number}
-                </div>
-              )}
+              <FieldMessage success={successMsgs.phone_number} error={duplicateErrors.phone_number} />
             </div>
-            <div className="form-col">
-              <label
-                style={{
-                  display: "block",
-                  fontSize: "13px",
-                  fontWeight: "600",
-                  color: "#94a3b8",
-                  marginBottom: "6px",
-                }}
-              >
-                주민등록번호 <span style={{ color: "#ef4444" }}>*</span>
+            <div className="form-group">
+              <label className="form-label">
+                주민등록번호 <span className="text-danger">*</span>
               </label>
               <input
                 type="text"
@@ -537,104 +339,30 @@ const Signup = () => {
                 required
                 placeholder="- 없이 13자리 숫자"
                 maxLength="14"
-                style={{
-                  width: "100%",
-                  boxSizing: "border-box",
-                  padding: "12px",
-                  borderRadius: "8px",
-                  border: "1px solid #475569",
-                  backgroundColor: "#0f172a",
-                  color: "#fff",
-                  fontSize: "14px",
-                  outline: "none",
-                }}
+                className="custom-input"
               />
-              {successMsgs.jumin_no && (
-                <div
-                  style={{
-                    color: "#22c55e",
-                    fontSize: "12px",
-                    marginTop: "6px",
-                  }}
-                >
-                  {successMsgs.jumin_no}
-                </div>
-              )}
-              {duplicateErrors.jumin_no && (
-                <div
-                  style={{
-                    color: "#ef4444",
-                    fontSize: "12px",
-                    marginTop: "6px",
-                  }}
-                >
-                  {duplicateErrors.jumin_no}
-                </div>
-              )}
+              <FieldMessage success={successMsgs.jumin_no} error={duplicateErrors.jumin_no} />
             </div>
           </div>
 
-          <div>
-            <label
-              style={{
-                display: "block",
-                fontSize: "13px",
-                fontWeight: "600",
-                color: "#94a3b8",
-                marginBottom: "6px",
-              }}
-            >
-              거주지 주소 <span style={{ color: "#ef4444" }}>*</span>
-            </label>
-            <input
-              type="text"
-              name="address"
-              value={formData.address}
-              onChange={handleChange}
-              required
-              placeholder="실 거주지 주소 입력"
-              style={{
-                width: "100%",
-                boxSizing: "border-box",
-                padding: "12px",
-                borderRadius: "8px",
-                border: "1px solid #475569",
-                backgroundColor: "#0f172a",
-                color: "#fff",
-                fontSize: "14px",
-                outline: "none",
-              }}
-            />
+          <div className="form-group">
+              <label className="form-label">
+                거주지 주소 <span className="text-danger">*</span>
+              </label>
+              <input
+                type="text"
+                name="address"
+                value={formData.address}
+                onChange={handleChange}
+                required
+                placeholder="실 거주지 주소 입력"
+                className="custom-input"
+              />
           </div>
 
-          <div
-            style={{
-              padding: "16px",
-              backgroundColor: "#0f172a",
-              borderRadius: "8px",
-              border: "1px solid #1e293b",
-              marginTop: "10px",
-            }}
-          >
-            <p
-              style={{
-                color: "#38bdf8",
-                fontSize: "13px",
-                fontWeight: "bold",
-                margin: "0 0 8px 0",
-              }}
-            >
-              안내사항
-            </p>
-            <ul
-              style={{
-                margin: 0,
-                paddingLeft: "20px",
-                color: "#94a3b8",
-                fontSize: "12px",
-                lineHeight: "1.5",
-              }}
-            >
+          <div className="notice-box tone-primary">
+            <strong className="notice-title text-primary">안내사항</strong>
+            <ul className="notice-list">
               <li>
                 가입 신청 후 관리자의 승인이 완료되어야 로그인이 가능합니다.
               </li>
@@ -645,30 +373,14 @@ const Signup = () => {
           <button
             type="submit"
             disabled={loading}
-            style={{
-              width: "100%",
-              padding: "14px",
-              fontSize: "15px",
-              fontWeight: "600",
-              backgroundColor: "#0284c7",
-              color: "#fff",
-              border: "none",
-              borderRadius: "8px",
-              cursor: "pointer",
-              marginTop: "10px",
-            }}
+            className="btn-action btn-primary btn-block"
           >
             {loading ? "신청 중..." : "가입 신청하기"}
           </button>
         </form>
 
-        <div
-          style={{ marginTop: "24px", textAlign: "center", fontSize: "13px" }}
-        >
-          <Link
-            to="/user-login"
-            style={{ color: "#38bdf8", textDecoration: "none" }}
-          >
+        <div className="auth-footer">
+          <Link to="/user-login" className="text-link is-primary">
             ← 로그인 화면으로 돌아가기
           </Link>
         </div>

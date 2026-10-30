@@ -1,12 +1,8 @@
 import axios from "axios";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-
-const getSecurityTheme = (score) => {
-  const numScore = Number(score) || 0;
-  if (numScore >= 90) return { color: "#22c55e", label: "안전", bg: "rgba(74, 222, 128, 0.04)", border: "1px solid rgba(74, 222, 128, 0.3)" };
-  if (numScore >= 50) return { color: "#eab308", label: "주의", bg: "rgba(250, 204, 21, 0.04)", border: "1px solid rgba(250, 204, 21, 0.3)" };
-  return { color: "#ef4444", label: "위험", bg: "rgba(248, 113, 113, 0.04)", border: "1px solid rgba(248, 113, 113, 0.3)" };
-};
+import { useCallback, useEffect, useMemo, useState } from "react";
+import PageHeader from "../../components/PageHeader";
+import PaginationBar from "../../components/PaginationBar";
+import { getSecurityTheme } from "../../utils/securityTheme";
 
 const padRows = (arr, length) => {
   const padded = [...arr];
@@ -15,87 +11,6 @@ const padRows = (arr, length) => {
   }
   return padded;
 };
-
-function PaginationBar({ page, totalPages, onPageChange }) {
-  const getPageNumbers = () => {
-    const pages = [];
-    let start = Math.max(1, page - 2);
-    let end = Math.min(totalPages, start + 4);
-    if (end - start < 4) start = Math.max(1, end - 4);
-    for (let i = start; i <= end; i++) pages.push(i);
-    return pages;
-  };
-  return (
-    <div
-      style={{
-        display: "flex",
-        justifyContent: "center",
-        gap: "6px",
-        paddingTop: "14px",
-        flexShrink: 0,
-      }}
-    >
-      <button
-        onClick={() => onPageChange(Math.max(page - 1, 1))}
-        disabled={page === 1}
-        style={{
-          backgroundColor: "var(--bg-main)",
-          border: "1px solid var(--border-color)",
-          borderRadius: "6px",
-          height: "30px",
-          padding: "0 12px",
-          fontSize: "12px",
-          color: "var(--text-main)",
-          cursor: page === 1 ? "not-allowed" : "pointer",
-          fontWeight: "600",
-        }}
-      >
-        이전
-      </button>
-      {getPageNumbers().map((p) => (
-        <button
-          key={p}
-          onClick={() => onPageChange(p)}
-          style={{
-            backgroundColor:
-              page === p ? "var(--color-primary)" : "var(--bg-main)",
-            color: page === p ? "#fff" : "var(--text-main)",
-            border:
-              page === p
-                ? "1px solid var(--color-primary)"
-                : "1px solid var(--border-color)",
-            borderRadius: "6px",
-            minWidth: "30px",
-            height: "30px",
-            padding: "0 6px",
-            fontSize: "12px",
-            cursor: "pointer",
-            fontWeight: page === p ? "bold" : "normal",
-          }}
-        >
-          {p}
-        </button>
-      ))}
-      <button
-        onClick={() => onPageChange(Math.min(page + 1, totalPages))}
-        disabled={page === totalPages}
-        style={{
-          backgroundColor: "var(--bg-main)",
-          border: "1px solid var(--border-color)",
-          borderRadius: "6px",
-          height: "30px",
-          padding: "0 12px",
-          fontSize: "12px",
-          color: "var(--text-main)",
-          cursor: page === totalPages ? "not-allowed" : "pointer",
-          fontWeight: "600",
-        }}
-      >
-        다음
-      </button>
-    </div>
-  );
-}
 
 function IpMacHistoryColumn({ logs }) {
   const [search, setSearch] = useState("");
@@ -131,49 +46,17 @@ function IpMacHistoryColumn({ logs }) {
   );
 
   return (
-    <div
-      style={{
-        backgroundColor: "var(--bg-main)",
-        padding: "16px",
-        borderRadius: "12px",
-        border: "1px solid var(--border-color)",
-        display: "flex",
-        flexDirection: "column",
-        height: "100%",
-      }}
-    >
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          marginBottom: "10px",
-        }}
-      >
-        <h4 style={{ fontSize: "15px", margin: 0, color: "var(--text-title)" }}>
-          💻 최근 접속 현황{" "}
-          <span
-            style={{
-              fontSize: "12px",
-              color: "var(--color-primary)",
-              marginLeft: "6px",
-            }}
-          >
-            {filteredLogs.length}건
-          </span>
+    <div className="info-box sub-panel">
+      <div className="info-box-row">
+        <h4 className="info-box-title">
+          최근 접속 현황 <span className="text-primary">{filteredLogs.length}건</span>
         </h4>
         <button
+          type="button"
+          className="btn-action btn-neutral btn-w-sm"
           onClick={() => {
             setSortAsc(!sortAsc);
             setPage(1);
-          }}
-          style={{
-            fontSize: "11px",
-            border: "1px solid var(--border-color)",
-            background: "var(--bg-card)",
-            color: "var(--text-main)",
-            borderRadius: "4px",
-            padding: "4px 10px",
-            fontWeight: "600",
           }}
         >
           {sortAsc ? "오래된순" : "최신순"}
@@ -181,99 +64,42 @@ function IpMacHistoryColumn({ logs }) {
       </div>
       <input
         type="text"
-        className="custom-input search-input"
+        className="custom-input"
         placeholder="IP, MAC 검색..."
         value={search}
         onChange={(e) => {
           setSearch(e.target.value);
           setPage(1);
         }}
-        style={{
-          width: "100%",
-          padding: "8px 12px",
-          fontSize: "13px",
-          height: "36px",
-          marginBottom: "10px",
-        }}
       />
-      <div
-        style={{
-          border: "1px solid var(--border-color)",
-          borderRadius: "8px",
-          overflow: "hidden",
-          backgroundColor: "var(--bg-card)",
-          flex: 1,
-          display: "flex",
-          flexDirection: "column",
-        }}
-      >
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1.1fr 1.3fr 1.2fr",
-            padding: "8px 6px",
-            backgroundColor: "var(--bg-card-alt)",
-            borderBottom: "1px solid var(--border-color)",
-            fontSize: "12px",
-            fontWeight: "bold",
-            textAlign: "center",
-          }}
-        >
-          <span>IP</span>
-          <span>MAC</span>
-          <span>시간</span>
-        </div>
-        <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
-          {currentItems.map((item, idx) => (
-            <div
-              key={idx}
-              style={{
-                display: "grid",
-                gridTemplateColumns: "1.1fr 1.3fr 1.2fr",
-                alignItems: "center",
-                padding: "6px",
-                borderBottom:
-                  idx < currentItems.length - 1
-                    ? "1px solid var(--border-color)"
-                    : "none",
-                backgroundColor: item.is_mismatch
-                  ? "rgba(248, 113, 113, 0.08)"
-                  : "transparent",
-                fontSize: "12px",
-                textAlign: "center",
-                height: "10%",
-              }}
-            >
-              {item.isEmpty ? (
-                <span>&nbsp;</span>
-              ) : (
-                <>
-                  <span
-                    style={{ color: "var(--color-success)", fontWeight: "600" }}
-                  >
-                    {item.ip}
-                  </span>
-                  <span
-                    style={{
-                      color: item.is_mismatch
-                        ? "var(--color-danger)"
-                        : "var(--text-main)",
-                      fontFamily: "monospace",
-                    }}
-                  >
-                    {item.mac}
-                    {item.is_mismatch && "⚠️"}
-                  </span>
-                  <span
-                    style={{ color: "var(--text-muted)", fontSize: "11px" }}
-                  >
-                    {item.login_time}
-                  </span>
-                </>
-              )}
-            </div>
-          ))}
-        </div>
+      <div className="table-responsive table-fill">
+        <table className="custom-table table-sm">
+          <thead>
+            <tr>
+              <th>IP</th>
+              <th>MAC</th>
+              <th>시간</th>
+            </tr>
+          </thead>
+          <tbody>
+            {currentItems.map((item, idx) => (
+              <tr key={idx} className={item.is_mismatch ? "row-danger" : ""}>
+                {item.isEmpty ? (
+                  <td colSpan="3">&nbsp;</td>
+                ) : (
+                  <>
+                    <td className="text-success fw-bold">{item.ip}</td>
+                    <td className={`cell-mono cell-ellipsis ${item.is_mismatch ? "text-danger" : ""}`}>
+                      {item.mac}
+                      {item.is_mismatch && " !"}
+                    </td>
+                    <td className="text-muted">{item.login_time}</td>
+                  </>
+                )}
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
       <PaginationBar
         page={page}
@@ -322,61 +148,25 @@ function ExternalAccessColumn({ externalLogs }) {
   );
 
   return (
-    <div
-      style={{
-        backgroundColor: "var(--bg-main)",
-        padding: "16px",
-        borderRadius: "12px",
-        border: "1px solid var(--border-color)",
-        display: "flex",
-        flexDirection: "column",
-        height: "100%",
-      }}
-    >
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          marginBottom: "10px",
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-          <h4
-            style={{
-              fontSize: "15px",
-              margin: 0,
-              color: "var(--text-title)",
-              whiteSpace: "nowrap",
-            }}
-          >
-            🌐 활동현황{" "}
-            <span style={{ fontSize: "12px", color: "var(--color-primary)" }}>
-              {filteredLogs.length}
-            </span>
+    <div className="info-box sub-panel">
+      <div className="info-box-row">
+        <div className="card-title-group">
+          <h4 className="info-box-title">
+            활동현황 <span className="text-primary">{filteredLogs.length}건</span>
           </h4>
-          <div style={{ display: "flex", gap: "4px" }}>
+          <div className="btn-group">
             {[
               { k: "all", l: "전체" },
               { k: "allowed", l: "허용" },
               { k: "blocked", l: "차단" },
             ].map((t) => (
               <button
+                type="button"
                 key={t.k}
+                className={`btn-action btn-toggle btn-w-xs ${statusFilter === t.k ? "active" : ""}`}
                 onClick={() => {
                   setStatusFilter(t.k);
                   setPage(1);
-                }}
-                style={{
-                  backgroundColor:
-                    statusFilter === t.k
-                      ? "var(--color-primary)"
-                      : "var(--bg-card)",
-                  color: statusFilter === t.k ? "#fff" : "var(--text-muted)",
-                  border: "1px solid var(--border-color)",
-                  borderRadius: "4px",
-                  padding: "4px 8px",
-                  fontSize: "11px",
-                  fontWeight: statusFilter === t.k ? "bold" : "normal",
                 }}
               >
                 {t.l}
@@ -385,18 +175,11 @@ function ExternalAccessColumn({ externalLogs }) {
           </div>
         </div>
         <button
+          type="button"
+          className="btn-action btn-neutral btn-w-sm"
           onClick={() => {
             setSortAsc(!sortAsc);
             setPage(1);
-          }}
-          style={{
-            fontSize: "11px",
-            border: "1px solid var(--border-color)",
-            background: "var(--bg-card)",
-            color: "var(--text-main)",
-            borderRadius: "4px",
-            padding: "4px 10px",
-            fontWeight: "600",
           }}
         >
           {sortAsc ? "오래된순" : "최신순"}
@@ -404,119 +187,53 @@ function ExternalAccessColumn({ externalLogs }) {
       </div>
       <input
         type="text"
-        className="custom-input search-input"
+        className="custom-input"
         placeholder="도메인 검색..."
         value={search}
         onChange={(e) => {
           setSearch(e.target.value);
           setPage(1);
         }}
-        style={{
-          width: "100%",
-          padding: "8px 12px",
-          fontSize: "13px",
-          height: "36px",
-          marginBottom: "10px",
-        }}
       />
-      <div
-        style={{
-          border: "1px solid var(--border-color)",
-          borderRadius: "8px",
-          overflow: "hidden",
-          backgroundColor: "var(--bg-card)",
-          flex: 1,
-          display: "flex",
-          flexDirection: "column",
-        }}
-      >
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "46px 1fr 1.3fr 1fr",
-            padding: "8px 6px",
-            backgroundColor: "var(--bg-card-alt)",
-            borderBottom: "1px solid var(--border-color)",
-            fontSize: "12px",
-            fontWeight: "bold",
-            textAlign: "center",
-          }}
-        >
-          <span>구분</span>
-          <span>IP</span>
-          <span>도메인</span>
-          <span>시간</span>
-        </div>
-        <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
-          {currentItems.map((item, idx) => (
-            <div
-              key={idx}
-              style={{
-                display: "grid",
-                gridTemplateColumns: "46px 1fr 1.3fr 1fr",
-                alignItems: "center",
-                padding: "6px",
-                borderBottom:
-                  idx < currentItems.length - 1
-                    ? "1px solid var(--border-color)"
-                    : "none",
-                fontSize: "12px",
-                textAlign: "center",
-                height: "10%",
-                backgroundColor: item.is_blocked
-                  ? "rgba(248, 113, 113, 0.06)"
-                  : "transparent",
-              }}
-            >
-              {item.isEmpty ? (
-                <span>&nbsp;</span>
-              ) : (
-                <>
-                  <span>
-                    <span
-                      style={{
-                        padding: "2px 6px",
-                        borderRadius: "4px",
-                        fontSize: "10px",
-                        fontWeight: "bold",
-                        backgroundColor: item.is_blocked
-                          ? "rgba(248, 113, 113, 0.15)"
-                          : "rgba(74, 222, 128, 0.15)",
-                        color: item.is_blocked
-                          ? "var(--color-danger)"
-                          : "var(--color-success)",
-                        border: `1px solid ${item.is_blocked ? "rgba(248, 113, 113, 0.4)" : "rgba(74, 222, 128, 0.4)"}`,
-                      }}
-                    >
-                      {item.is_blocked ? "차단" : "허용"}
-                    </span>
-                  </span>
-                  <span style={{ color: "var(--text-main)" }}>
-                    {item.ip || "-"}
-                  </span>
-                  <span
-                    style={{
-                      color: item.is_blocked
-                        ? "var(--color-danger)"
-                        : "var(--color-primary)",
-                      fontWeight: "600",
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    {item.domain || "-"}
-                  </span>
-                  <span
-                    style={{ color: "var(--text-muted)", fontSize: "11px" }}
-                  >
-                    {item.time || "-"}
-                  </span>
-                </>
-              )}
-            </div>
-          ))}
-        </div>
+      <div className="table-responsive table-fill">
+        <table className="custom-table table-sm">
+          <colgroup>
+            <col style={{ width: "60px" }} />
+            <col style={{ width: "100px" }} />
+            <col />
+            <col style={{ width: "145px" }} />
+          </colgroup>
+          <thead>
+            <tr>
+              <th>구분</th>
+              <th>IP</th>
+              <th>도메인</th>
+              <th>시간</th>
+            </tr>
+          </thead>
+          <tbody>
+            {currentItems.map((item, idx) => (
+              <tr key={idx} className={item.is_blocked ? "row-danger" : ""}>
+                {item.isEmpty ? (
+                  <td colSpan="4">&nbsp;</td>
+                ) : (
+                  <>
+                    <td>
+                      <span className={`tag ${item.is_blocked ? "text-danger" : "text-success"}`}>
+                        {item.is_blocked ? "차단" : "허용"}
+                      </span>
+                    </td>
+                    <td>{item.ip || "-"}</td>
+                    <td className={`cell-ellipsis fw-bold ${item.is_blocked ? "text-danger" : "text-primary"}`}>
+                      {item.domain || "-"}
+                    </td>
+                    <td className="text-muted">{item.time || "-"}</td>
+                  </>
+                )}
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
       <PaginationBar
         page={page}
@@ -540,27 +257,10 @@ const EmployeeAuth = () => {
   const [activeSortField, setActiveSortField] = useState("login_time");
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
-  const dashboardCardRef = useRef(null);
-  const [modalWidth, setModalWidth] = useState(null);
   const baseUrl = (
     import.meta.env.VITE_API_BASE_URL ||
     `http://${window.location.hostname}:8000`
   ).replace(/\/+$/, "");
-
-  useEffect(() => {
-    if (!dashboardCardRef.current) return;
-    const updateWidth = () =>
-      dashboardCardRef.current &&
-      setModalWidth(dashboardCardRef.current.getBoundingClientRect().width);
-    updateWidth();
-    const observer = new ResizeObserver(updateWidth);
-    observer.observe(dashboardCardRef.current);
-    window.addEventListener("resize", updateWidth);
-    return () => {
-      observer.disconnect();
-      window.removeEventListener("resize", updateWidth);
-    };
-  }, []);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -591,8 +291,6 @@ const EmployeeAuth = () => {
   }, [searchTerm]);
 
   const handleEmpClick = async (user) => {
-    if (dashboardCardRef.current)
-      setModalWidth(dashboardCardRef.current.getBoundingClientRect().width);
     const targetKey = user.emp_id || user.emp_no;
     try {
       const res = await axios.get(
@@ -709,215 +407,81 @@ const EmployeeAuth = () => {
 
   return (
     <div className="page-container admin-page">
-      <div
-        className="page-header"
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: "16px",
-          flexShrink: 0,
-        }}
-      >
-        <div>
-          <h2 className="page-title">👥 사원 인증 현황 관리</h2>
-          <p className="page-subtitle">
-            사번을 클릭하여 사원별 상세 보안 및 접속 관제 데이터를 확인하세요.
-          </p>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-          <span
-            style={{
-              fontSize: "13px",
-              color: "var(--text-muted)",
-              fontWeight: "500",
-            }}
-          >
-            최종 갱신: {lastUpdated || "-"}
-          </span>
-          <button
-            onClick={fetchData}
-            className="btn-action btn-action-edit"
-            disabled={loading}
-            style={{
-              height: "36px",
-              padding: "0 16px",
-              fontSize: "13px",
-              fontWeight: "bold",
-            }}
-          >
-            🔄 동기화
-          </button>
-        </div>
-      </div>
-      <div
-        className="card dashboard-card"
-        ref={dashboardCardRef}
-        style={{
-          flex: 1,
-          display: "flex",
-          flexDirection: "column",
-          padding: "20px",
-          margin: 0,
-          minHeight: 0,
-        }}
-      >
-        <div
-          className="card-header"
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            marginBottom: "16px",
-            flexShrink: 0,
-          }}
-        >
-          <span
-            className="card-count-badge"
-            style={{
-              padding: "6px 16px",
-              borderRadius: "8px",
-              fontSize: "13px",
-            }}
-          >
-            현재 접속 인증 사원 <strong>{onlineUsers.length}</strong>명
-          </span>
+      <PageHeader
+        title="사원 인증 현황 관리"
+        subtitle="사번을 클릭하여 사원별 상세 보안 및 접속 관제 데이터를 확인하세요."
+        lastUpdated={lastUpdated}
+        onRefresh={fetchData}
+        refreshing={loading}
+      />
+      <div className="card dashboard-card card-fill">
+        <div className="card-toolbar">
           <input
             type="text"
             className="custom-input search-input"
-            style={{
-              width: "240px",
-              padding: "8px 12px",
-              fontSize: "13px",
-              height: "36px",
-            }}
             placeholder="사번, 이름, ID 검색..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
+          <span className="count-badge badge-primary">
+            현재 접속 인증 사원 {onlineUsers.length}명
+          </span>
         </div>
-        <div
-          className="table-responsive"
-          style={{
-            flex: 1,
-            overflow: "hidden",
-            border: "1px solid var(--border-color)",
-            borderRadius: "6px",
-            display: "flex",
-            flexDirection: "column",
-          }}
-        >
-          <table
-            className="custom-table"
-            style={{
-              width: "100%",
-              tableLayout: "fixed",
-              borderCollapse: "collapse",
-              margin: 0,
-              height: "100%",
-            }}
-          >
-            <thead style={{ backgroundColor: "var(--bg-main)", zIndex: 1 }}>
-              <tr
-                style={{
-                  borderBottom: "1px solid var(--border-color)",
-                  height: "10%",
-                }}
-              >
+        <div className="table-responsive table-fill">
+          <table className="custom-table">
+            <thead>
+              <tr>
                 <th
+                  className="th-sortable"
                   onClick={() => {
                     setActiveSortField("emp_no");
                     setSortOrder((p) => (p === "asc" ? "desc" : "asc"));
                   }}
-                  style={{ cursor: "pointer", padding: "10px" }}
                 >
                   사번 {sortOrder === "asc" ? "▲" : "▼"}
                 </th>
-                <th style={{ padding: "10px" }}>사원명</th>
-                <th style={{ padding: "10px" }}>ID</th>
-                <th style={{ padding: "10px" }}>인증현황</th>
-                <th style={{ padding: "10px" }}>조치</th>
+                <th>사원명</th>
+                <th>ID</th>
+                <th>인증현황</th>
+                <th>조치</th>
                 <th
+                  className="th-sortable"
                   onClick={() => {
                     setActiveSortField("login_time");
                     setLoginTimeSortOrder((p) =>
                       p === "desc" ? "asc" : "desc",
                     );
                   }}
-                  style={{ cursor: "pointer", padding: "10px" }}
                 >
                   로그인 시간 {loginTimeSortOrder === "desc" ? "▼" : "▲"}
                 </th>
               </tr>
             </thead>
-            <tbody style={{ flex: 1 }}>
+            <tbody>
               {currentUsers.map((user, idx) => (
-                <tr
-                  key={user.emp_id || `empty-${idx}`}
-                  style={{
-                    borderBottom: "1px solid var(--border-color)",
-                    height: "9%",
-                  }}
-                >
+                <tr key={user.emp_id || `empty-${idx}`}>
                   {user.isEmpty ? (
                     <td colSpan="6">&nbsp;</td>
                   ) : (
                     <>
-                      <td
-                        style={{
-                          textAlign: "center",
-                          fontWeight: "600",
-                          color: "var(--color-primary)",
-                          cursor: "pointer",
-                          textDecoration: "underline",
-                          fontSize: "14px",
-                        }}
-                        onClick={() => handleEmpClick(user)}
-                      >
+                      <td className="cell-link" onClick={() => handleEmpClick(user)}>
                         {user.emp_no || user.emp_code || "-"}
                       </td>
-                      <td
-                        style={{
-                          textAlign: "center",
-                          fontWeight: "600",
-                          fontSize: "14px",
-                          color: "var(--text-title)",
-                        }}
-                      >
-                        {user.emp_name}
+                      <td className="cell-strong">{user.emp_name}</td>
+                      <td className="text-muted">{user.emp_id}</td>
+                      <td>
+                        <span className="status-badge badge-primary">인증 완료</span>
                       </td>
-                      <td
-                        style={{
-                          textAlign: "center",
-                          color: "var(--text-muted)",
-                        }}
-                      >
-                        {user.emp_id}
-                      </td>
-                      <td style={{ textAlign: "center" }}>
-                        <span className="badge badge-blue">인증 완료</span>
-                      </td>
-                      <td style={{ textAlign: "center" }}>
+                      <td>
                         <button
-                          className="btn-action btn-action-reject"
+                          type="button"
+                          className="btn-action btn-danger btn-w-sm"
                           onClick={() => handleBlockUser(user)}
-                          style={{
-                            height: "30px",
-                            padding: "0 12px",
-                            border: "1px solid var(--color-danger)",
-                          }}
                         >
                           차단
                         </button>
                       </td>
-                      <td
-                        style={{
-                          textAlign: "center",
-                          color: "var(--text-muted)",
-                        }}
-                      >
-                        {user.login_time || "-"}
-                      </td>
+                      <td className="cell-time">{user.login_time || "-"}</td>
                     </>
                   )}
                 </tr>
@@ -933,360 +497,83 @@ const EmployeeAuth = () => {
       </div>
 
       {isModalOpen && selectedSecurity && (
-        <div
-          onClick={() => setIsModalOpen(false)}
-          style={{
-            position: "fixed",
-            inset: 0,
-            backgroundColor: "rgba(0,0,0,0.5)",
-            backdropFilter: "blur(4px)",
-            display: "flex",
-            justifyContent: "center",
-            alignItems: "center",
-            zIndex: 1000,
-            padding: "20px",
-          }}
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              backgroundColor: "var(--bg-main)",
-              padding: "24px",
-              borderRadius: "16px",
-              width: modalWidth ? `${modalWidth}px` : "100%",
-              maxWidth: "97vw",
-              height: "85vh",
-              display: "flex",
-              flexDirection: "column",
-              border: "1px solid var(--border-color)",
-              boxShadow: "0 25px 45px -12px rgba(0,0,0,0.4)",
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                marginBottom: "20px",
-                borderBottom: "1px solid var(--border-color)",
-                paddingBottom: "14px",
-                flexShrink: 0,
-              }}
-            >
-              <div
-                style={{ display: "flex", alignItems: "center", gap: "12px" }}
-              >
-                <h3
-                  style={{
-                    margin: 0,
-                    color: "var(--color-primary)",
-                    fontSize: "20px",
-                  }}
-                >
-                  🛡️ [보안 관제] 상세 현황
-                </h3>
+        <div className="dialog-overlay" onClick={() => setIsModalOpen(false)}>
+          <div className="dialog-box dialog-lg" onClick={(e) => e.stopPropagation()}>
+            <div className="dialog-header">
+              <h3 className="dialog-title">보안 관제 상세 현황</h3>
+              <div className="btn-group">
+                <span className="tag tag-primary">ID: {selectedSecurity.employee_id}</span>
                 <button
+                  type="button"
+                  className="btn-action btn-primary btn-w-md btn-header"
                   onClick={handleRefreshDetail}
                   disabled={detailLoading}
-                  style={{
-                    height: "30px",
-                    padding: "0 14px",
-                    fontSize: "12px",
-                    borderRadius: "20px",
-                    cursor: detailLoading ? "not-allowed" : "pointer",
-                    backgroundColor: "var(--bg-card)",
-                    color: "var(--text-main)",
-                    border: "1px solid var(--border-color)",
-                    fontWeight: "600",
-                  }}
                 >
-                  🔄 {detailLoading ? "갱신..." : "새로고침"}
+                  {detailLoading ? "갱신 중" : "새로고침"}
                 </button>
-              </div>
-              <div
-                style={{ display: "flex", alignItems: "center", gap: "10px" }}
-              >
-                <span
-                  style={{
-                    fontSize: "14px",
-                    backgroundColor: "var(--bg-card)",
-                    height: "36px",
-                    display: "flex",
-                    alignItems: "center",
-                    padding: "0 16px",
-                    borderRadius: "20px",
-                    border: "1px solid var(--border-color)",
-                    fontWeight: "600",
-                    color: "var(--text-title)",
-                  }}
-                >
-                  ID: {selectedSecurity.employee_id}
-                </span>
                 <button
-                  className="btn-primary"
+                  type="button"
+                  className="btn-action btn-neutral btn-w-md btn-header"
                   onClick={() => setIsModalOpen(false)}
-                  style={{
-                    height: "36px",
-                    padding: "0 24px",
-                    borderRadius: "20px",
-                    fontWeight: "bold",
-                  }}
                 >
                   닫기
                 </button>
               </div>
             </div>
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "1fr 1.5fr 1.5fr",
-                gap: "20px",
-                flex: 1,
-                minHeight: 0,
-              }}
-            >
-              <div
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  height: "100%",
-                  gap: "10px",
-                }}
-              >
-                <div
-                  style={{
-                    backgroundColor: "var(--bg-card)",
-                    padding: "12px 14px",
-                    borderRadius: "10px",
-                    border: "1px solid var(--border-color)",
-                  }}
-                >
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      fontSize: "14px",
-                      marginBottom: "8px",
-                      fontWeight: "bold",
-                    }}
-                  >
-                    <span>단말 보안 건전성</span>
-                    <span style={{ color: theme.color }}>
+            <div className="dialog-grid-3">
+              <div className="info-stack">
+                <div className={`info-box tone-${theme.tone}`}>
+                  <div className="info-box-row">
+                    <span className="info-box-title">단말 보안 건전성</span>
+                    <span className={`fw-bold text-${theme.tone}`}>
                       {selectedSecurity?.security_score}점 ({theme.label})
                     </span>
                   </div>
-                  <div
-                    style={{
-                      width: "100%",
-                      height: "8px",
-                      backgroundColor: "var(--border-color)",
-                      borderRadius: "4px",
-                      overflow: "hidden",
-                      marginBottom: "8px",
-                    }}
-                  >
+                  <div className="progress">
                     <div
-                      style={{
-                        width: `${selectedSecurity?.security_score}%`,
-                        height: "100%",
-                        backgroundColor: theme.color,
-                      }}
+                      className="progress-fill"
+                      style={{ width: `${selectedSecurity?.security_score}%` }}
                     />
                   </div>
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      fontSize: "11px",
-                      color: "var(--text-muted)",
-                    }}
-                  >
+                  <div className="info-box-row info-box-note">
                     <span>정상: {selectedSecurity?.normal_access_count}건</span>
                     <span>변조 탐지: {selectedSecurity?.mismatch_count}건</span>
                   </div>
                 </div>
-                <div
-                  style={{
-                    backgroundColor: "var(--bg-card)",
-                    padding: "10px 14px",
-                    borderRadius: "10px",
-                    border: "1px solid var(--border-color)",
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                  }}
-                >
+                <div className="info-box info-box-row">
                   <div>
-                    <span
-                      style={{ color: "var(--text-muted)", fontSize: "12px" }}
-                    >
-                      사번
-                    </span>
-                    <strong
-                      style={{
-                        display: "block",
-                        fontSize: "15px",
-                        marginTop: "2px",
-                      }}
-                    >
-                      {selectedSecurity.emp_code}
-                    </strong>
+                    <span className="info-box-label">사번</span>
+                    <strong className="info-box-value">{selectedSecurity.emp_code}</strong>
                   </div>
-                  <span
-                    style={{
-                      fontSize: "11px",
-                      color: "var(--text-muted)",
-                      backgroundColor: "var(--bg-main)",
-                      padding: "2px 6px",
-                      borderRadius: "4px",
-                      border: "1px solid var(--border-color)",
-                    }}
-                  >
-                    입사일: {selectedSecurity.hire_date || "-"}
-                  </span>
+                  <span className="tag">입사일: {selectedSecurity.hire_date || "-"}</span>
                 </div>
-                <div
-                  style={{
-                    backgroundColor: "var(--bg-card)",
-                    padding: "10px 14px",
-                    borderRadius: "10px",
-                    border: "1px solid var(--border-color)",
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                  }}
-                >
+                <div className="info-box info-box-row">
                   <div>
-                    <span
-                      style={{ color: "var(--text-muted)", fontSize: "12px" }}
-                    >
-                      이름 / 권한
-                    </span>
-                    <strong
-                      style={{
-                        display: "block",
-                        fontSize: "15px",
-                        marginTop: "2px",
-                        color: "var(--text-title)",
-                      }}
-                    >
-                      {selectedSecurity.name}
-                    </strong>
+                    <span className="info-box-label">이름 / 권한</span>
+                    <strong className="info-box-value">{selectedSecurity.name}</strong>
                   </div>
-                  <span
-                    style={{
-                      fontSize: "11px",
-                      fontWeight: "bold",
-                      padding: "2px 8px",
-                      borderRadius: "4px",
-                      backgroundColor: "var(--bg-main)",
-                      color: "var(--color-primary)",
-                      border: "1px solid var(--border-color)",
-                    }}
-                  >
+                  <span className="tag tag-primary">
                     {selectedSecurity.is_manager ? "관리자" : "일반사원"}
                   </span>
                 </div>
-                <div
-                  style={{
-                    backgroundColor: "var(--bg-card)",
-                    padding: "10px 14px",
-                    borderRadius: "10px",
-                    border: "1px solid var(--border-color)",
-                  }}
-                >
-                  <span
-                    style={{
-                      color: "var(--text-muted)",
-                      fontSize: "12px",
-                      marginBottom: "4px",
-                      display: "block",
-                    }}
-                  >
-                    실시간 접속 IP / MAC
-                  </span>
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                    }}
-                  >
-                    <strong
-                      style={{
-                        color: "var(--color-success)",
-                        fontSize: "14px",
-                      }}
-                    >
+                <div className="info-box">
+                  <span className="info-box-label">실시간 접속 IP / MAC</span>
+                  <div className="info-box-row">
+                    <strong className="info-box-value text-success">
                       {selectedSecurity.current_ip}
                     </strong>
-                    <span
-                      style={{
-                        fontFamily: "monospace",
-                        fontSize: "11px",
-                        backgroundColor: "var(--bg-main)",
-                        color: "var(--text-muted)",
-                        padding: "2px 6px",
-                        borderRadius: "4px",
-                        border: "1px solid var(--border-color)",
-                      }}
-                    >
-                      {selectedSecurity.current_mac || "-"}
-                    </span>
+                    <span className="tag tag-mono">{selectedSecurity.current_mac || "-"}</span>
                   </div>
                 </div>
-                <div
-                  style={{
-                    backgroundColor: "var(--bg-card)",
-                    padding: "10px 14px",
-                    borderRadius: "10px",
-                    border: "1px solid var(--border-color)",
-                  }}
-                >
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      marginBottom: "6px",
-                    }}
-                  >
-                    <span
-                      style={{ color: "var(--text-muted)", fontSize: "12px" }}
-                    >
-                      유해 사이트 차단 누적
-                    </span>
-                    <strong
-                      style={{ color: "var(--color-danger)", fontSize: "14px" }}
-                    >
-                      {selectedSecurity.violation_count}건
-                    </strong>
+                <div className="info-box tone-primary">
+                  <div className="info-box-row">
+                    <span className="info-box-label">유해 사이트 차단 누적</span>
+                    <strong className="text-danger">{selectedSecurity.violation_count}건</strong>
                   </div>
-                  <div
-                    style={{
-                      width: "100%",
-                      height: "6px",
-                      backgroundColor: "var(--color-danger)",
-                      borderRadius: "3px",
-                      overflow: "hidden",
-                      marginBottom: "6px",
-                    }}
-                  >
-                    <div
-                      style={{
-                        width: `${safeRatio}%`,
-                        height: "100%",
-                        backgroundColor: "var(--color-primary)",
-                      }}
-                    />
+                  <div className="progress is-danger-track">
+                    <div className="progress-fill" style={{ width: `${safeRatio}%` }} />
                   </div>
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      fontSize: "11px",
-                      color: "var(--text-muted)",
-                    }}
-                  >
+                  <div className="info-box-row info-box-note">
                     <span>준수율: {safeRatio}%</span>
                     <span>
                       총 접속:{" "}
@@ -1296,47 +583,10 @@ const EmployeeAuth = () => {
                     </span>
                   </div>
                 </div>
-                <div
-                  style={{
-                    backgroundColor: theme.bg,
-                    padding: "16px",
-                    borderRadius: "10px",
-                    border: theme.border,
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: "8px",
-                    flex: 1,
-                    minHeight: 0,
-                  }}
-                >
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "6px",
-                    }}
-                  >
-                    <span style={{ fontSize: "16px" }}>🤖</span>
-                    <span
-                      style={{
-                        color: "var(--text-title)",
-                        fontSize: "14px",
-                        fontWeight: "bold",
-                      }}
-                    >
-                      AI 보안 어드바이저
-                    </span>
-                  </div>
+                <div className={`info-box tone-box tone-${theme.tone}`}>
+                  <span className="info-box-title">AI 보안 어드바이저</span>
                   <p
-                    style={{
-                      fontSize: "13px",
-                      color: "var(--text-main)",
-                      lineHeight: "1.6",
-                      margin: 0,
-                      flex: 1,
-                      overflowY: "auto",
-                      whiteSpace: "pre-wrap",
-                    }}
+                    className="tone-box-text"
                     dangerouslySetInnerHTML={{
                       __html: selectedSecurity.security_advisor
                         ? selectedSecurity.security_advisor.replace(

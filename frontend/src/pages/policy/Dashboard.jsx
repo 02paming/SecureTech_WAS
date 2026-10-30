@@ -1,6 +1,7 @@
 import axios from "axios";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import PageHeader from "../../components/PageHeader";
 import {
   Area,
   CartesianGrid,
@@ -176,206 +177,76 @@ const Dashboard = () => {
 
   return (
     <div className="page-container admin-page">
-      <style>{`.dashboard-chart-wrapper * { outline: none !important; }`}</style>
-      <div
-        className="page-header"
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: "16px",
-        }}
-      >
-        <div>
-          <h2 className="page-title">📊 통합 보안 관제 대시보드</h2>
-          <p className="page-subtitle">
-            실시간 네트워크 세션 흐름 및 주요 위협 지표 모니터링
-          </p>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-          <span
-            style={{
-              fontSize: "12px",
-              color: "var(--text-muted)",
-              margin: "0 6px",
-            }}
-          >
-            최종 갱신: {lastUpdated || "-"}
-          </span>
-          <button
-            onClick={fetchData}
-            disabled={loading}
-            className="btn-action btn-action-edit"
-            style={{
-              margin: 0,
-              padding: "0 16px",
-              fontSize: "13px",
-              height: "36px",
-              fontWeight: "bold",
-            }}
-          >
-            {loading ? "🔄 갱신 중..." : "🔄 데이터 동기화"}
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        title="통합 보안 관제 대시보드"
+        subtitle="실시간 네트워크 세션 흐름 및 주요 위협 지표 모니터링"
+        lastUpdated={lastUpdated}
+        onRefresh={fetchData}
+        refreshing={loading}
+      />
 
-      <div style={{ display: "flex", gap: "24px", flex: 1, minHeight: 0 }}>
-        <div
-          className="card dashboard-card"
-          style={{
-            flex: 2.2,
-            display: "flex",
-            flexDirection: "column",
-            padding: "20px",
-            margin: 0,
-            minHeight: 0,
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              marginBottom: "16px",
-            }}
-          >
-            <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-              <h3
-                className="card-title"
-                style={{ fontSize: "17px", margin: 0 }}
-              >
-                🌐 실시간 트래픽 흐름
-              </h3>
+      <div className="panel-row">
+        <div className="card dashboard-card card-fill card-fill-wide">
+          <div className="card-header">
+            <div className="card-title-group">
+              <h3 className="card-title">실시간 트래픽 흐름</h3>
               {panOffset > 0 && (
                 <button
+                  type="button"
                   onClick={() => setPanOffset(0)}
-                  style={{
-                    background: "rgba(56, 189, 248, 0.15)",
-                    color: "#38bdf8",
-                    border: "1px solid rgba(56, 189, 248, 0.4)",
-                    padding: "4px 10px",
-                    borderRadius: "4px",
-                    fontSize: "11px",
-                    fontWeight: "bold",
-                    cursor: "pointer",
-                  }}
+                  className="btn-action btn-outline btn-w-auto btn-header"
                 >
-                  ⏭️ 실시간 위치로
+                  실시간 위치로
                 </button>
               )}
             </div>
-            <div
-              style={{
-                display: "flex",
-                gap: "16px",
-                fontSize: "12px",
-                fontWeight: "bold",
-                alignItems: "center",
-              }}
-            >
-              <button
-                onClick={() => setShowConfigModal(true)}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "6px",
-                  background: "var(--bg-card)",
-                  color: "var(--text-main)",
-                  border: "1px solid var(--border-color)",
-                  padding: "0 12px",
-                  borderRadius: "6px",
-                  fontSize: "12px",
-                  fontWeight: "bold",
-                  cursor: "pointer",
-                  height: "30px",
-                  marginRight: "8px",
-                }}
-              >
-                ⚙️ 인증 설정
-              </button>
+            <div className="toolbar-group">
+              <label className={`check-label text-primary ${showNormal ? "" : "is-off"}`}>
+                <input
+                  type="checkbox"
+                  checked={showNormal}
+                  onChange={(e) => setShowNormal(e.target.checked)}
+                />
+                정상 통과
+              </label>
+              <label className={`check-label text-danger ${showThreat ? "" : "is-off"}`}>
+                <input
+                  type="checkbox"
+                  checked={showThreat}
+                  onChange={(e) => setShowThreat(e.target.checked)}
+                />
+                위협 차단
+              </label>
+              <label className={`check-label text-warning ${showAi ? "" : "is-off"}`}>
+                <input
+                  type="checkbox"
+                  checked={showAi}
+                  onChange={(e) => setShowAi(e.target.checked)}
+                />
+                AI 의심
+              </label>
               <select
                 value={timeInterval}
                 onChange={handleIntervalChange}
-                style={{
-                  background: "var(--bg-card)",
-                  color: "var(--text-main)",
-                  border: "1px solid var(--border-color)",
-                  padding: "0 10px",
-                  borderRadius: "6px",
-                  fontSize: "12px",
-                  fontWeight: "bold",
-                  cursor: "pointer",
-                  height: "30px",
-                  outline: "none",
-                }}
+                className="custom-input select-input"
               >
                 <option value={60}>1시간 간격 집계</option>
                 <option value={30}>30분 간격 집계</option>
                 <option value={10}>10분 간격 집계</option>
                 <option value={1}>1분 간격 집계</option>
               </select>
-              <label
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "6px",
-                  color: "#38bdf8",
-                  cursor: "pointer",
-                  opacity: showNormal ? 1 : 0.45,
-                }}
+              <button
+                type="button"
+                onClick={() => setShowConfigModal(true)}
+                className="btn-action btn-neutral btn-w-md btn-header"
               >
-                <input
-                  type="checkbox"
-                  checked={showNormal}
-                  onChange={(e) => setShowNormal(e.target.checked)}
-                  style={{ accentColor: "#38bdf8", cursor: "pointer" }}
-                />{" "}
-                정상 통과
-              </label>
-              <label
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "6px",
-                  color: "#f87171",
-                  cursor: "pointer",
-                  opacity: showThreat ? 1 : 0.45,
-                }}
-              >
-                <input
-                  type="checkbox"
-                  checked={showThreat}
-                  onChange={(e) => setShowThreat(e.target.checked)}
-                  style={{ accentColor: "#f87171", cursor: "pointer" }}
-                />{" "}
-                위협 차단
-              </label>
-              <label
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "6px",
-                  color: "#f59e0b",
-                  cursor: "pointer",
-                  opacity: showAi ? 1 : 0.45,
-                }}
-              >
-                <input
-                  type="checkbox"
-                  checked={showAi}
-                  onChange={(e) => setShowAi(e.target.checked)}
-                  style={{ accentColor: "#f59e0b", cursor: "pointer" }}
-                />{" "}
-                AI 의심
-              </label>
+                인증 설정
+              </button>
             </div>
           </div>
 
-          <div
-            className="dashboard-chart-wrapper"
-            ref={chartWrapperRef}
-            style={{ flex: 1, minHeight: 0 }}
-          >
+
+          <div className="chart-area" ref={chartWrapperRef}>
             {visibleData.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
                 <ComposedChart
@@ -392,10 +263,10 @@ const Dashboard = () => {
                     >
                       <stop
                         offset="5%"
-                        stopColor="#38bdf8"
+                        stopColor="var(--chart-normal)"
                         stopOpacity={0.25}
                       />
-                      <stop offset="95%" stopColor="#38bdf8" stopOpacity={0} />
+                      <stop offset="95%" stopColor="var(--chart-normal)" stopOpacity={0} />
                     </linearGradient>
                     <linearGradient
                       id="colorThreat"
@@ -406,18 +277,18 @@ const Dashboard = () => {
                     >
                       <stop
                         offset="5%"
-                        stopColor="#f87171"
+                        stopColor="var(--chart-threat)"
                         stopOpacity={0.25}
                       />
-                      <stop offset="95%" stopColor="#f87171" stopOpacity={0} />
+                      <stop offset="95%" stopColor="var(--chart-threat)" stopOpacity={0} />
                     </linearGradient>
                     <linearGradient id="colorAi" x1="0" y1="0" x2="0" y2="1">
                       <stop
                         offset="5%"
-                        stopColor="#f59e0b"
+                        stopColor="var(--chart-ai)"
                         stopOpacity={0.25}
                       />
-                      <stop offset="95%" stopColor="#f59e0b" stopOpacity={0} />
+                      <stop offset="95%" stopColor="var(--chart-ai)" stopOpacity={0} />
                     </linearGradient>
                   </defs>
                   <CartesianGrid
@@ -463,7 +334,7 @@ const Dashboard = () => {
                     <Area
                       type="monotone"
                       dataKey="정상접속"
-                      stroke="#38bdf8"
+                      stroke="var(--chart-normal)"
                       strokeWidth={3}
                       fillOpacity={1}
                       fill="url(#colorNormal)"
@@ -474,7 +345,7 @@ const Dashboard = () => {
                     <Area
                       type="monotone"
                       dataKey="AI의심"
-                      stroke="#f59e0b"
+                      stroke="var(--chart-ai)"
                       strokeWidth={3}
                       fillOpacity={1}
                       fill="url(#colorAi)"
@@ -485,7 +356,7 @@ const Dashboard = () => {
                     <Area
                       type="monotone"
                       dataKey="위협차단"
-                      stroke="#f87171"
+                      stroke="var(--chart-threat)"
                       strokeWidth={3}
                       fillOpacity={1}
                       fill="url(#colorThreat)"
@@ -495,110 +366,38 @@ const Dashboard = () => {
                 </ComposedChart>
               </ResponsiveContainer>
             ) : (
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "center",
-                  alignItems: "center",
-                  height: "100%",
-                  color: "var(--text-muted)",
-                }}
-              >
-                데이터가 없습니다.
-              </div>
+              <div className="empty-state">데이터가 없습니다.</div>
             )}
           </div>
-          <div style={{ marginTop: "12px", padding: "0 10px" }}>
-            <input
-              type="range"
-              min="0"
-              max={Math.max(0, chartData.length - 26)}
-              value={panOffset}
-              onChange={(e) => setPanOffset(Number(e.target.value))}
-              style={{
-                width: "100%",
-                accentColor: "var(--color-primary)",
-                cursor: "pointer",
-              }}
-            />
-          </div>
+          <input
+            type="range"
+            className="chart-slider"
+            min="0"
+            max={Math.max(0, chartData.length - 26)}
+            value={panOffset}
+            onChange={(e) => setPanOffset(Number(e.target.value))}
+          />
         </div>
 
-        <div
-          style={{
-            flex: 1,
-            display: "flex",
-            flexDirection: "column",
-            gap: "24px",
-            minHeight: 0,
-          }}
-        >
-          {/* 💡 정식 위협 차단 도메인 타이틀 정리 */}
-          <div
-            className="card dashboard-card"
-            style={{
-              flex: 1,
-              display: "flex",
-              flexDirection: "column",
-              padding: "20px",
-              margin: 0,
-              minHeight: 0,
-            }}
-          >
-            <div
-              style={{
-                marginBottom: "10px",
-                flexShrink: 0,
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-              }}
-            >
+        <div className="panel-col">
+          <div className="card dashboard-card card-fill">
+            <div className="card-header">
               <div>
-                <h3
-                  className="card-title"
-                  style={{ fontSize: "17px", margin: 0, color: "#f87171" }}
-                >
-                  🎯 정식 위협 차단 현황
-                </h3>
-                <p
-                  style={{
-                    fontSize: "11px",
-                    color: "var(--text-muted)",
-                    margin: "4px 0 0",
-                  }}
-                >
-                  차단 트래픽 누적 발생 기준 (Top 5)
-                </p>
+                <h3 className="card-title title-danger">정식 위협 차단 현황</h3>
+                <p className="card-subtitle">차단 트래픽 누적 발생 기준 (Top 5)</p>
               </div>
               <button
+                type="button"
                 onClick={() => navigate("/policies")}
-                style={{
-                  fontSize: "11px",
-                  backgroundColor: "var(--bg-main)",
-                  color: "var(--text-main)",
-                  border: "1px solid var(--border-color)",
-                  padding: "4px 8px",
-                  borderRadius: "4px",
-                  cursor: "pointer",
-                  fontWeight: "bold",
-                }}
+                className="btn-action btn-neutral btn-w-sm"
               >
-                관리 ➔
+                관리
               </button>
             </div>
-            <div
-              style={{
-                flex: 1,
-                minHeight: 0,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
+            <div className="chart-area">
               {topDomains.length > 0 ? (
                 <ResponsiveContainer width="100%" height="100%">
-                  <PieChart style={{ outline: "none" }}>
+                  <PieChart>
                     <Pie
                       data={topDomains}
                       cx="50%"
@@ -629,52 +428,17 @@ const Dashboard = () => {
                       verticalAlign="bottom"
                       height={100}
                       content={() => (
-                        <ul
-                          style={{
-                            listStyle: "none",
-                            padding: 0,
-                            margin: 0,
-                            fontSize: "12px",
-                            display: "grid",
-                            gap: "6px",
-                          }}
-                        >
+                        <ul className="legend-list">
                           {topDomains.map((item, i) => (
-                            <li
-                              key={`leg-${i}`}
-                              style={{
-                                display: "flex",
-                                justifyContent: "space-between",
-                                color: "var(--text-main)",
-                              }}
-                            >
-                              <span
-                                style={{
-                                  display: "flex",
-                                  alignItems: "center",
-                                  gap: "6px",
-                                  overflow: "hidden",
-                                  textOverflow: "ellipsis",
-                                  whiteSpace: "nowrap",
-                                }}
-                              >
+                            <li key={`leg-${i}`} className="legend-item">
+                              <span className="legend-name">
                                 <span
-                                  style={{
-                                    width: "10px",
-                                    height: "10px",
-                                    background: COLORS[i % COLORS.length],
-                                    borderRadius: "50%",
-                                    flexShrink: 0,
-                                  }}
+                                  className="legend-dot"
+                                  style={{ background: COLORS[i % COLORS.length] }}
                                 />
                                 {item.name}
                               </span>
-                              <strong
-                                style={{
-                                  color: COLORS[i % COLORS.length],
-                                  marginLeft: "10px",
-                                }}
-                              >
+                              <strong style={{ color: COLORS[i % COLORS.length] }}>
                                 {item.value}건
                               </strong>
                             </li>
@@ -685,139 +449,43 @@ const Dashboard = () => {
                   </PieChart>
                 </ResponsiveContainer>
               ) : (
-                <div style={{ color: "var(--text-muted)", fontSize: "13px" }}>
-                  누적된 차단 내역이 없습니다.
-                </div>
+                <div className="empty-state">누적된 차단 내역이 없습니다.</div>
               )}
             </div>
           </div>
-
-          {/* 💡 AI 탐지 기반 대기열 타이틀/렌더링 정리 */}
-          <div
-            className="card dashboard-card"
-            style={{
-              flex: 1,
-              display: "flex",
-              flexDirection: "column",
-              padding: "20px",
-              margin: 0,
-              minHeight: 0,
-            }}
-          >
-            <div
-              style={{
-                marginBottom: "12px",
-                flexShrink: 0,
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-              }}
-            >
+          <div className="card dashboard-card card-fill">
+            <div className="card-header">
               <div>
-                <h3
-                  className="card-title"
-                  style={{ fontSize: "16px", margin: 0, color: "#f59e0b" }}
-                >
-                  ⚠️ AI 탐지 기반 대기열 (위험/의심)
-                </h3>
-                <p
-                  style={{
-                    fontSize: "11px",
-                    color: "var(--text-muted)",
-                    margin: "4px 0 0",
-                  }}
-                >
-                  엔진이 자동 수집한 판별 대기 도메인
-                </p>
+                <h3 className="card-title text-warning">AI 탐지 기반 대기열 (위험/의심)</h3>
+                <p className="card-subtitle">엔진이 자동 수집한 판별 대기 도메인</p>
               </div>
               <button
+                type="button"
                 onClick={() => navigate("/ai-policies")}
-                style={{
-                  fontSize: "11px",
-                  backgroundColor: "var(--bg-main)",
-                  color: "var(--text-main)",
-                  border: "1px solid var(--border-color)",
-                  padding: "4px 8px",
-                  borderRadius: "4px",
-                  cursor: "pointer",
-                  fontWeight: "bold",
-                }}
+                className="btn-action btn-neutral btn-w-sm"
               >
-                관리 ➔
+                관리
               </button>
             </div>
-            <div
-              style={{
-                flex: 1,
-                overflowY: "auto",
-                display: "flex",
-                flexDirection: "column",
-                gap: "8px",
-              }}
-            >
+            <div className="list-stack">
               {topAiSuspicious.length > 0 ? (
                 topAiSuspicious.map((item, idx) => (
                   <div
                     key={`ai-${item.domain}-${idx}`}
                     onClick={() => navigate("/ai-policies")}
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                      padding: "10px 12px",
-                      backgroundColor: "var(--bg-main)",
-                      borderRadius: "8px",
-                      border: "1px solid var(--border-color)",
-                      cursor: "pointer",
-                      transition: "border-color 0.2s",
-                    }}
-                    onMouseEnter={(e) =>
-                      (e.currentTarget.style.borderColor =
-                        item.color || "#f59e0b")
-                    }
-                    onMouseLeave={(e) =>
-                      (e.currentTarget.style.borderColor =
-                        "var(--border-color)")
-                    }
+                    className="list-row is-clickable"
                   >
+                    <span className="list-row-title">{item.domain}</span>
                     <span
-                      style={{
-                        fontSize: "13px",
-                        fontWeight: "bold",
-                        color: "var(--text-main)",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      {item.domain}
-                    </span>
-                    <span
-                      style={{
-                        fontSize: "12px",
-                        fontWeight: "bold",
-                        color: item.color || "#f59e0b",
-                        backgroundColor:
-                          item.bgColor || "rgba(245, 158, 11, 0.1)",
-                        padding: "2px 6px",
-                        borderRadius: "4px",
-                      }}
+                      className="status-badge badge-warning"
+                      style={item.color ? { color: item.color, backgroundColor: item.bgColor } : undefined}
                     >
                       {item.status_text}
                     </span>
                   </div>
                 ))
               ) : (
-                <div
-                  style={{
-                    textAlign: "center",
-                    color: "var(--text-muted)",
-                    fontSize: "13px",
-                    marginTop: "20px",
-                  }}
-                >
-                  현재 탐지된 의심 도메인이 없습니다.
-                </div>
+                <div className="empty-state">현재 탐지된 의심 도메인이 없습니다.</div>
               )}
             </div>
           </div>
@@ -825,65 +493,13 @@ const Dashboard = () => {
       </div>
 
       {showConfigModal && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(0,0,0,0.6)",
-            display: "flex",
-            justifyContent: "center",
-            alignItems: "center",
-            zIndex: 1000,
-            backdropFilter: "blur(4px)",
-          }}
-        >
-          <div
-            style={{
-              background: "var(--bg-card)",
-              padding: "30px",
-              borderRadius: "12px",
-              width: "400px",
-              border: "1px solid var(--border-color)",
-              boxShadow: "0 25px 50px -12px rgba(0,0,0,0.5)",
-            }}
-          >
-            <h3
-              style={{
-                margin: "0 0 20px",
-                fontSize: "18px",
-                color: "var(--text-title)",
-              }}
-            >
-              ⚙️ 사내망 접근 인증 정책 설정
-            </h3>
-            <div
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                gap: "16px",
-                marginBottom: "24px",
-              }}
-            >
-              <div>
-                <label
-                  style={{
-                    fontSize: "13px",
-                    fontWeight: "bold",
-                    color: "var(--text-muted)",
-                    marginBottom: "6px",
-                    display: "block",
-                  }}
-                >
-                  🟢 정규 출근 시간{" "}
-                  <span
-                    style={{
-                      fontWeight: "normal",
-                      fontSize: "11px",
-                      color: "var(--color-primary)",
-                    }}
-                  >
-                    (최초 1회 인증)
-                  </span>
+        <div className="dialog-overlay">
+          <div className="dialog-box">
+            <h3 className="dialog-title">사내망 접근 인증 정책 설정</h3>
+            <div className="auth-form">
+              <div className="form-group">
+                <label className="form-label">
+                  정규 출근 시간<span className="form-hint">(최초 1회 인증)</span>
                 </label>
                 <input
                   type="time"
@@ -895,29 +511,11 @@ const Dashboard = () => {
                       work_start_time: e.target.value,
                     })
                   }
-                  style={{ padding: "10px", width: "100%", height: "36px" }}
                 />
               </div>
-              <div>
-                <label
-                  style={{
-                    fontSize: "13px",
-                    fontWeight: "bold",
-                    color: "var(--text-muted)",
-                    marginBottom: "6px",
-                    display: "block",
-                  }}
-                >
-                  🔴 정규 퇴근 시간{" "}
-                  <span
-                    style={{
-                      fontWeight: "normal",
-                      fontSize: "11px",
-                      color: "var(--color-danger)",
-                    }}
-                  >
-                    (유휴 상태 감지 활성화)
-                  </span>
+              <div className="form-group">
+                <label className="form-label">
+                  정규 퇴근 시간<span className="form-hint">(유휴 상태 감지 활성화)</span>
                 </label>
                 <input
                   type="time"
@@ -929,21 +527,10 @@ const Dashboard = () => {
                       work_end_time: e.target.value,
                     })
                   }
-                  style={{ padding: "10px", width: "100%", height: "36px" }}
                 />
               </div>
-              <div>
-                <label
-                  style={{
-                    fontSize: "13px",
-                    fontWeight: "bold",
-                    color: "var(--text-muted)",
-                    marginBottom: "6px",
-                    display: "block",
-                  }}
-                >
-                  ⏳ 유휴 대기 허용 시간 (분)
-                </label>
+              <div className="form-group">
+                <label className="form-label">유휴 대기 허용 시간 (분)</label>
                 <input
                   type="number"
                   min="1"
@@ -951,28 +538,21 @@ const Dashboard = () => {
                   className="custom-input"
                   value={idleMinutes}
                   onChange={(e) => setIdleMinutes(e.target.value)}
-                  style={{ padding: "10px", width: "100%", height: "36px" }}
                 />
               </div>
             </div>
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "flex-end",
-                gap: "10px",
-              }}
-            >
+            <div className="dialog-actions">
               <button
+                type="button"
                 onClick={() => setShowConfigModal(false)}
-                className="btn-action btn-action-reject"
-                style={{ height: "36px", padding: "0 16px" }}
+                className="btn-action btn-neutral btn-w-md btn-header"
               >
                 취소
               </button>
               <button
+                type="button"
                 onClick={handleSaveConfig}
-                className="btn-primary"
-                style={{ height: "36px", padding: "0 16px" }}
+                className="btn-action btn-primary btn-w-md btn-header"
               >
                 설정 저장
               </button>

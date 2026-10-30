@@ -30,18 +30,18 @@ def check_virustotal(domain):
             if threats >= 5:
                 return {
                     "score": 90.0,
-                    "details": f"🔴 위협 탐지 (글로벌 벤더 {threats}곳 악성)",
+                    "details": f"위협 탐지 (글로벌 벤더 {threats}곳 악성)",
                 }
             if threats >= 2:
                 return {
                     "score": 60.0,
-                    "details": f"🟡 의심 (글로벌 벤더 {threats}곳 주의)",
+                    "details": f"의심 (글로벌 벤더 {threats}곳 주의)",
                 }
             return {"score": 0.0, "details": "CTI 정상"}
     except (requests.RequestException, ValueError, KeyError) as e:
         logger.warning(f"VT API 실패: {e}")
     if any(k in clean for k in ["evil", "phishing", "malware", "botnet"]):
-        return {"score": 85.0, "details": "🔴 (Fallback) 악성 룰셋 탐지"}
+        return {"score": 85.0, "details": "(Fallback) 악성 룰셋 탐지"}
     return {"score": 0.0, "details": "조회 실패 (기본 패스)"}
 
 
@@ -95,14 +95,14 @@ def send_discord_alert(ip, mac, time_str):
 
 def generate_advisor_message(score, mismatch_cnt, bl_cnt, avg_ai_score=0.0):
     if score >= 90 and mismatch_cnt == bl_cnt == 0:
-        return "✅ 단말 상태 매우 건전함."
+        return "단말 상태 매우 건전함."
     msg = [
-        "🚨 **[위험]** 건전성 심각 저하."
+        "**[위험]** 건전성 심각 저하."
         if score < 50
         else (
-            "⚠️ **[주의]** 정책 위반 다수."
+            "**[주의]** 정책 위반 다수."
             if score < 80
-            else "ℹ️ **[관찰]** 비인가 접근 탐지."
+            else "**[관찰]** 비인가 접근 탐지."
         )
     ]
     issues = [
@@ -113,7 +113,7 @@ def generate_advisor_message(score, mismatch_cnt, bl_cnt, avg_ai_score=0.0):
     if issues:
         msg.append("탐지 위협: " + ", ".join(issues))
     if avg_ai_score >= 60:
-        msg.append(f"🔍 **[CTI]** 평균 위협지수 {avg_ai_score:.1f}점 (정밀 검사 요망)")
+        msg.append(f"**[CTI]** 평균 위협지수 {avg_ai_score:.1f}점 (정밀 검사 요망)")
     elif avg_ai_score >= 30:
-        msg.append(f"🔍 **[CTI]** 평균 위협지수 {avg_ai_score:.1f}점 (주의)")
+        msg.append(f"**[CTI]** 평균 위협지수 {avg_ai_score:.1f}점 (주의)")
     return "\n".join(msg)

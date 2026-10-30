@@ -126,7 +126,7 @@ def get_threat_logs(request):
             combined_logs.append(
                 {
                     "violator": violator_text,
-                    "blocked_domain": f"🚫 {domain_val}",
+                    "blocked_domain": f"{domain_val}",
                     "time": time_str,
                     "raw_time": access_time,
                 }
@@ -406,7 +406,7 @@ def simulate_network_access(request):
                 {
                     "status": "ALLOWED",
                     "domain": url,
-                    "message": "✅ 허용(화이트리스트) 도메인 - 보안 검사 스킵됨",
+                    "message": "허용(화이트리스트) 도메인 - 보안 검사 스킵됨",
                 }
             )
 

@@ -63,7 +63,6 @@ const CaptiveAuth = () => {
     <div className="auth-wrapper">
       <div className="card auth-card captive-card">
         <div className="auth-header">
-          <div className="auth-icon">🛡️</div>
           <h2 className="auth-title">사내 네트워크 접근 인증 (NAC)</h2>
           <p className="auth-subtitle">
             외부 인터넷 연결을 위해 <strong>사원 인증</strong>이 필요합니다.
@@ -80,33 +79,17 @@ const CaptiveAuth = () => {
               <strong>{userName}</strong> 사원님의 단말이 외부 인터넷 접속 승인
               목록에 등록되었습니다.
             </p>
-            <div
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                gap: "8px",
-                marginTop: "16px",
-              }}
-            >
+            <div className="auth-form">
               <button
                 type="button"
                 onClick={() =>
                   (window.location.href = "https://www.google.com")
                 }
-                className="btn-success-action"
+                className="btn-action btn-success btn-block"
               >
                 인터넷 이용 시작하기
               </button>
-              <Link
-                to="/"
-                className="btn-action"
-                style={{
-                  textAlign: "center",
-                  padding: "10px",
-                  textDecoration: "none",
-                  backgroundColor: "#f1f5f9",
-                }}
-              >
+              <Link to="/" className="btn-action btn-neutral btn-block">
                 사내 포털 메인으로 이동
               </Link>
             </div>
@@ -141,7 +124,7 @@ const CaptiveAuth = () => {
             <button
               type="submit"
               disabled={loading}
-              className="btn-primary auth-submit-btn"
+              className="btn-action btn-primary btn-block"
             >
               {loading
                 ? "인증 확인 중..."

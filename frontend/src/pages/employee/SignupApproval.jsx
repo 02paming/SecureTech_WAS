@@ -1,5 +1,7 @@
 import axios from "axios";
 import { useCallback, useEffect, useState } from "react";
+import PageHeader from "../../components/PageHeader";
+import PaginationBar from "../../components/PaginationBar";
 
 const padRows = (arr, length) => {
   const padded = [...arr];
@@ -9,110 +11,12 @@ const padRows = (arr, length) => {
   return padded;
 };
 
-function PaginationBar({ page, totalPages, onPageChange }) {
-  const getPageNumbers = () => {
-    const pages = [];
-    let start = Math.max(1, page - 2);
-    let end = Math.min(totalPages, start + 4);
-    if (end - start < 4) start = Math.max(1, end - 4);
-    for (let i = start; i <= end; i++) pages.push(i);
-    return pages;
-  };
-  return (
-    <div
-      style={{
-        display: "flex",
-        justifyContent: "center",
-        gap: "6px",
-        paddingTop: "14px",
-        flexShrink: 0,
-      }}
-    >
-      <button
-        onClick={() => onPageChange(Math.max(page - 1, 1))}
-        disabled={page === 1}
-        style={{
-          backgroundColor: "var(--bg-main)",
-          border: "1px solid var(--border-color)",
-          borderRadius: "6px",
-          height: "30px",
-          padding: "0 12px",
-          fontSize: "12px",
-          color: "var(--text-main)",
-          cursor: page === 1 ? "not-allowed" : "pointer",
-          fontWeight: "600",
-        }}
-      >
-        이전
-      </button>
-      {getPageNumbers().map((p) => (
-        <button
-          key={p}
-          onClick={() => onPageChange(p)}
-          style={{
-            backgroundColor:
-              page === p ? "var(--color-primary)" : "var(--bg-main)",
-            color: page === p ? "#fff" : "var(--text-main)",
-            border:
-              page === p
-                ? "1px solid var(--color-primary)"
-                : "1px solid var(--border-color)",
-            borderRadius: "6px",
-            minWidth: "30px",
-            height: "30px",
-            padding: "0 6px",
-            fontSize: "12px",
-            cursor: "pointer",
-            fontWeight: page === p ? "bold" : "normal",
-          }}
-        >
-          {p}
-        </button>
-      ))}
-      <button
-        onClick={() => onPageChange(Math.min(page + 1, totalPages))}
-        disabled={page === totalPages}
-        style={{
-          backgroundColor: "var(--bg-main)",
-          border: "1px solid var(--border-color)",
-          borderRadius: "6px",
-          height: "30px",
-          padding: "0 12px",
-          fontSize: "12px",
-          color: "var(--text-main)",
-          cursor: page === totalPages ? "not-allowed" : "pointer",
-          fontWeight: "600",
-        }}
-      >
-        다음
-      </button>
-    </div>
-  );
-}
-
 const ResizableTh = ({ colKey, label, colWidths, handleMouseDown }) => (
-  <th
-    style={{
-      width: colWidths[colKey],
-      padding: "12px",
-      borderRight: "1px solid var(--border-color)",
-      whiteSpace: "nowrap",
-      textAlign: "center",
-      position: "relative",
-    }}
-  >
+  <th className="th-resizable" style={{ width: colWidths[colKey] }}>
     {label}
     <div
+      className="col-resizer"
       onMouseDown={(e) => handleMouseDown(e, colKey)}
-      style={{
-        position: "absolute",
-        right: 0,
-        top: 0,
-        bottom: 0,
-        width: "8px",
-        cursor: "col-resize",
-        zIndex: 1,
-      }}
     />
   </th>
 );
@@ -121,6 +25,7 @@ const SignupApproval = () => {
   const [pendingList, setPendingList] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [loading, setLoading] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
   const [colWidths, setColWidths] = useState({
@@ -151,6 +56,7 @@ const SignupApproval = () => {
     try {
       const res = await axios.get(`${baseUrl}/api/approvals/pending/`);
       setPendingList(Array.isArray(res.data) ? res.data : res.data?.data || []);
+      setLastUpdated(new Date().toLocaleTimeString("ko-KR", { hour12: false }));
     } catch (err) {}
   }, [baseUrl]);
   useEffect(() => {
@@ -222,84 +128,29 @@ const SignupApproval = () => {
 
   return (
     <div className="page-container admin-page">
-      <div
-        className="page-header"
-        style={{ marginBottom: "16px", flexShrink: 0 }}
-      >
-        <h2 className="page-title">📝 신규 회원 가입 승인 관리</h2>
-        <p className="page-subtitle">
-          가입 대기자를 검토하고 정규 사원으로 승인합니다.
-        </p>
-      </div>
-      <div
-        className="card"
-        style={{
-          flex: 1,
-          display: "flex",
-          flexDirection: "column",
-          padding: "20px",
-          minHeight: 0,
-          margin: 0,
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            marginBottom: "16px",
-            flexShrink: 0,
-          }}
-        >
+      <PageHeader
+        title="신규 회원 가입 승인 관리"
+        subtitle="가입 대기자를 검토하고 정규 사원으로 승인합니다."
+        lastUpdated={lastUpdated}
+        onRefresh={fetchPending}
+      />
+      <div className="card dashboard-card card-fill">
+        <div className="card-toolbar">
           <input
             type="text"
             className="custom-input search-input"
-            style={{
-              width: "240px",
-              padding: "8px 12px",
-              fontSize: "13px",
-              height: "36px",
-            }}
             placeholder="아이디, 이름, 연락처 검색..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
-          <div style={{ fontSize: "13px", fontWeight: "bold" }}>
-            대기 신청:{" "}
-            <strong style={{ color: "var(--color-danger)", fontSize: "15px" }}>
-              {filteredList.length}
-            </strong>{" "}
-            건
-          </div>
+          <span className="count-badge badge-danger">
+            대기 신청 {filteredList.length}건
+          </span>
         </div>
-        <div
-          className="table-responsive"
-          style={{
-            flex: 1,
-            overflow: "hidden",
-            border: "1px solid var(--border-color)",
-            borderRadius: "6px",
-            display: "flex",
-            flexDirection: "column",
-          }}
-        >
-          <table
-            className="custom-table"
-            style={{
-              width: "100%",
-              tableLayout: "fixed",
-              borderCollapse: "collapse",
-              margin: 0,
-              height: "100%",
-            }}
-          >
-            <thead style={{ backgroundColor: "var(--bg-main)", zIndex: 1 }}>
-              <tr
-                style={{
-                  borderBottom: "1px solid var(--border-color)",
-                  height: "10%",
-                }}
-              >
+        <div className="table-responsive table-fill">
+          <table className="custom-table">
+            <thead>
+              <tr>
                 <ResizableTh
                   colKey="date"
                   label="신청 일자"
@@ -344,89 +195,34 @@ const SignupApproval = () => {
                 />
               </tr>
             </thead>
-            <tbody style={{ flex: 1 }}>
+            <tbody>
               {currentItems.map((m, idx) => (
-                <tr
-                  key={m.member_id || `empty-${idx}`}
-                  style={{
-                    borderBottom: "1px solid var(--border-color)",
-                    height: "9%",
-                  }}
-                >
+                <tr key={m.member_id || `empty-${idx}`}>
                   {m.isEmpty ? (
                     <td colSpan="7">&nbsp;</td>
                   ) : (
                     <>
-                      <td style={{ textAlign: "center", fontSize: "13px" }}>
-                        {m.created_at || "최근"}
-                      </td>
-                      <td
-                        style={{
-                          textAlign: "center",
-                          fontWeight: "bold",
-                          fontSize: "14px",
-                        }}
-                      >
-                        {m.member_id}
-                      </td>
-                      <td
-                        style={{
-                          textAlign: "center",
-                          fontWeight: "bold",
-                          color: "var(--text-title)",
-                          fontSize: "14px",
-                        }}
-                      >
-                        {m.name}
-                      </td>
-                      <td
-                        style={{
-                          textAlign: "center",
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          color: "var(--color-primary)",
-                        }}
-                      >
-                        {m.email}
-                      </td>
-                      <td style={{ textAlign: "center" }}>
-                        {formatPhone(m.phone_number)}
-                      </td>
-                      <td style={{ textAlign: "center", fontSize: "13px" }}>
-                        {m.birth_date || "-"}
-                      </td>
-                      <td style={{ textAlign: "center" }}>
-                        <div
-                          style={{
-                            display: "flex",
-                            justifyContent: "center",
-                            gap: "6px",
-                          }}
-                        >
+                      <td className="cell-time">{m.created_at || "최근"}</td>
+                      <td className="cell-strong">{m.member_id}</td>
+                      <td className="cell-strong">{m.name}</td>
+                      <td className="cell-ellipsis text-primary">{m.email}</td>
+                      <td>{formatPhone(m.phone_number)}</td>
+                      <td className="cell-time">{m.birth_date || "-"}</td>
+                      <td>
+                        <div className="action-btn-group">
                           <button
-                            className="btn-primary"
+                            type="button"
+                            className="btn-action btn-success btn-w-sm"
                             onClick={() => handleApprove(m.member_id, m.name)}
                             disabled={loading}
-                            style={{
-                              height: "30px",
-                              padding: "0 16px",
-                              fontSize: "12px",
-                              fontWeight: "bold",
-                            }}
                           >
                             승인
                           </button>
                           <button
-                            className="btn-action btn-action-reject"
+                            type="button"
+                            className="btn-action btn-danger btn-w-sm"
                             onClick={() => handleReject(m.member_id, m.name)}
                             disabled={loading}
-                            style={{
-                              height: "30px",
-                              padding: "0 16px",
-                              fontSize: "12px",
-                              fontWeight: "bold",
-                              border: "1px solid var(--color-danger)",
-                            }}
                           >
                             반려
                           </button>

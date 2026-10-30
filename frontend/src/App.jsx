@@ -85,19 +85,6 @@ const NavigationBar = memo(function NavigationBar({
 
   return (
     <div className="navbar">
-      <style>{`
-        .mobile-header-bar { display: none; }
-        .mobile-menu-overlay { display: none; }
-        @media (max-width: 768px) {
-          .desktop-header-bar { display: none !important; }
-          .mobile-header-bar { display: flex !important; flex-wrap: nowrap !important; flex-direction: row !important; justify-content: space-between !important; align-items: center !important; width: 100% !important; height: 64px !important; padding: 0 20px !important; box-sizing: border-box !important; }
-          .m-logo { display: inline-flex !important; align-items: center !important; gap: 6px !important; text-decoration: none !important; color: #38bdf8 !important; font-weight: 700 !important; font-size: 20px !important; white-space: nowrap !important; margin: 0 !important; padding: 0 !important; flex: 0 0 auto !important; }
-          .m-btn { display: inline-flex !important; align-items: center !important; gap: 4px !important; background: transparent !important; border: none !important; color: #94a3b8 !important; font-size: 15px !important; font-weight: 600 !important; padding: 0 !important; margin: 0 !important; cursor: pointer !important; white-space: nowrap !important; flex: 0 0 auto !important; }
-          .mobile-menu-overlay { display: flex; flex-direction: column; position: absolute; top: 64px; left: 0; width: 100%; background-color: var(--bg-header); padding: 20px; z-index: 1000; box-shadow: 0 4px 6px rgba(0,0,0,0.1); height: calc(100vh - 64px); overflow-y: auto; gap: 10px; box-sizing: border-box; }
-          .mobile-nav-link { color: #f8fafc; text-decoration: none; font-size: 16px; padding: 15px; border-bottom: 1px solid #334155; }
-        }
-      `}</style>
-
       <div className="mobile-header-bar">
         <Link to="/" className="m-logo">
           SecureTech
@@ -206,7 +193,7 @@ const NavigationBar = memo(function NavigationBar({
         </nav>
 
         <div className="nav-right">
-          <div style={{ position: "relative" }}>
+          <div className="settings-wrap">
             <button
               type="button"
               className="btn-action btn-neutral btn-w-md btn-header"
@@ -234,7 +221,7 @@ const NavigationBar = memo(function NavigationBar({
                     </button>
                   </div>
                 </div>
-                <div className="settings-section" style={{ marginTop: "12px" }}>
+                <div className="settings-section">
                   <span className="settings-label">해상도 너비</span>
                   <div className="settings-btn-group">
                     <button
@@ -274,14 +261,12 @@ const NavigationBar = memo(function NavigationBar({
                 <Link
                   to="/user-login"
                   className="btn-action btn-neutral btn-w-md btn-header"
-                  style={{ textDecoration: "none" }}
                 >
                   로그인
                 </Link>
                 <Link
                   to="/signup"
                   className="btn-action btn-primary btn-w-md btn-header"
-                  style={{ textDecoration: "none" }}
                 >
                   가입 신청
                 </Link>
@@ -293,20 +278,8 @@ const NavigationBar = memo(function NavigationBar({
 
       {isMobileMenuOpen && (
         <div className="mobile-menu-overlay">
-          <div
-            style={{
-              padding: "0 10px 15px",
-              borderBottom: "1px solid #334155",
-              marginBottom: "10px",
-            }}
-          >
-            <span
-              style={{
-                color: user ? "#38bdf8" : "#94a3b8",
-                fontSize: user ? "18px" : "14px",
-                fontWeight: user ? "bold" : "normal",
-              }}
-            >
+          <div className="mobile-user">
+            <span className={user ? "mobile-user-name" : "mobile-user-guest"}>
               {user ? `${user.name} 님` : "로그인이 필요합니다."}
             </span>
           </div>
@@ -483,17 +456,7 @@ function App() {
         <main className="main-content">
           <Suspense
             fallback={
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "center",
-                  alignItems: "center",
-                  height: "100%",
-                  color: "#94a3b8",
-                }}
-              >
-                페이지를 불러오는 중입니다...
-              </div>
+              <div className="empty-state">페이지를 불러오는 중입니다...</div>
             }
           >
             <Routes>
