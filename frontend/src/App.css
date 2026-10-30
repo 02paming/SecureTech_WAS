@@ -154,16 +154,16 @@ body {
     gap: 12px;
   }
 
-  .page-heading {
+  .page-header .page-heading {
     flex-basis: 100%;
   }
 
-  .header-actions {
+  .page-header .header-actions {
     flex-wrap: wrap;
     margin-left: 0;
   }
 
-  .header-time {
+  .page-header .header-time {
     min-width: 0;
   }
 
