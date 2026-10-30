@@ -104,7 +104,7 @@
 
 | 항목 | 규칙 | 구현 |
 |---|---|---|
-| 줄 높이 | 44px, 창 안의 소형 표는 36px | `custom-table`, `table-sm` |
+| 줄 높이 | 최소 44px, 창 안의 소형 표는 최소 36px. 남는 공간은 줄마다 고르게 나눔 | `custom-table`, `table-sm`, `table-fill` |
 | 줄 수 | 페이지당 10줄. 데이터가 적으면 빈 줄로 채움 | `padRows` |
 | 페이지 번호 | 표 아래 가운데 고정 | `components/PaginationBar.jsx` |
 | 정렬 | 기본 가운데, 주요 값은 왼쪽 | `th-main`, `cell-main`, `cell-left` |

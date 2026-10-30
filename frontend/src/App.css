@@ -599,6 +599,16 @@ a.btn-action {
   position: sticky;
   top: 0;
   z-index: 1;
+  height: 44px;
+}
+
+/* 표를 카드 높이에 맞추면 브라우저가 남는 공간을 줄마다 고르게 나눔 (최소 높이는 유지) */
+.table-fill .custom-table {
+  height: 100%;
+}
+
+.table-fill .custom-table tbody tr:last-child td {
+  border-bottom: none;
 }
 
 .inline-form {
