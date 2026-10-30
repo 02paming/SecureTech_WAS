@@ -364,6 +364,50 @@ const NavigationBar = memo(function NavigationBar({
               마이페이지
             </Link>
           )}
+          <div className="mobile-actions">
+            <div className="settings-btn-group">
+              <button
+                type="button"
+                className={`settings-btn ${!isDarkMode ? "active" : ""}`}
+                onClick={() => toggleTheme(false)}
+              >
+                라이트
+              </button>
+              <button
+                type="button"
+                className={`settings-btn ${isDarkMode ? "active" : ""}`}
+                onClick={() => toggleTheme(true)}
+              >
+                다크
+              </button>
+            </div>
+            {user ? (
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="btn-action btn-danger btn-form"
+              >
+                로그아웃
+              </button>
+            ) : (
+              <>
+                <Link
+                  to="/user-login"
+                  className="btn-action btn-neutral btn-form"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                >
+                  로그인
+                </Link>
+                <Link
+                  to="/signup"
+                  className="btn-action btn-primary btn-form"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                >
+                  가입 신청
+                </Link>
+              </>
+            )}
+          </div>
         </div>
       )}
     </div>
