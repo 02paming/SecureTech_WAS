@@ -100,20 +100,20 @@ const NavigationBar = memo(function NavigationBar({
 
       <div className="mobile-header-bar">
         <Link to="/" className="m-logo">
-          <span style={{ fontSize: "20px" }}>🛡️</span> SecureTech
+          SecureTech
         </Link>
         <button
           className="m-btn"
           onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
         >
-          {isMobileMenuOpen ? "✖ 닫기" : "⚙️ 설정"}
+          {isMobileMenuOpen ? "닫기" : "메뉴"}
         </button>
       </div>
 
       <div className="desktop-header-bar">
         <div className="nav-left-group">
           <Link to="/" className="nav-logo">
-            🛡️ SecureTech
+            SecureTech
           </Link>
         </div>
 
@@ -213,7 +213,7 @@ const NavigationBar = memo(function NavigationBar({
               onClick={() => setIsSettingsOpen(!isSettingsOpen)}
               title="화면 설정"
             >
-              ⚙️ 설정
+              설정
             </button>
             {isSettingsOpen && (
               <div className="settings-dropdown">
@@ -224,13 +224,13 @@ const NavigationBar = memo(function NavigationBar({
                       className={`settings-btn ${!isDarkMode ? "active" : ""}`}
                       onClick={() => toggleTheme(false)}
                     >
-                      🌞 라이트
+                      라이트
                     </button>
                     <button
                       className={`settings-btn ${isDarkMode ? "active" : ""}`}
                       onClick={() => toggleTheme(true)}
                     >
-                      🌙 다크
+                      다크
                     </button>
                   </div>
                 </div>
@@ -259,7 +259,7 @@ const NavigationBar = memo(function NavigationBar({
             {user ? (
               <>
                 <span className="user-greeting">
-                  👤 <strong>{user.name}</strong> 님
+                  <strong>{user.name}</strong> 님
                 </span>
                 <button
                   type="button"
@@ -307,7 +307,7 @@ const NavigationBar = memo(function NavigationBar({
                 fontWeight: user ? "bold" : "normal",
               }}
             >
-              {user ? `👤 ${user.name} 님` : "로그인이 필요합니다."}
+              {user ? `${user.name} 님` : "로그인이 필요합니다."}
             </span>
           </div>
           <Link

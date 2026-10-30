@@ -49,6 +49,11 @@ body.dark-mode {
   box-sizing: border-box;
 }
 
+/* 스크롤바 유무로 화면이 좌우로 밀리지 않도록 항상 자리를 확보 */
+html {
+  overflow-y: scroll;
+}
+
 body {
   margin: 0;
   font-family: "Noto Sans KR", sans-serif;
@@ -84,6 +89,17 @@ body {
 @media (min-width: 769px) {
   .main-content {
     padding: 24px 0;
+  }
+
+  /* 부제 길이와 관계없이 본문 시작 위치를 고정 */
+  .page-header {
+    height: 56px;
+  }
+
+  .page-subtitle {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .admin-page {
@@ -127,6 +143,15 @@ body {
     overflow-x: auto !important;
     white-space: nowrap !important;
     -webkit-overflow-scrolling: touch !important;
+  }
+
+  .page-header {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .panel-row {
+    flex-direction: column;
   }
 }
 
@@ -256,6 +281,11 @@ body {
   flex-shrink: 0;
 }
 
+.page-heading {
+  flex: 1;
+  min-width: 0;
+}
+
 .page-title {
   font-size: 20px;
   font-weight: 700;
@@ -273,7 +303,9 @@ body {
 .header-actions {
   display: flex;
   align-items: center;
+  flex-shrink: 0;
   gap: 16px;
+  margin-left: 24px;
 }
 
 .card {
@@ -339,8 +371,14 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
   transition: 0.2s;
   white-space: nowrap;
+}
+
+.btn-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
 }
 
 .btn-header {
@@ -454,12 +492,46 @@ body {
   border-bottom: 1px solid var(--border-color);
 }
 
+/* 데이터 줄과 빈 줄의 높이를 같게 하여 표 높이를 고정 */
 .custom-table td {
-  padding: 12px 14px;
+  height: 44px;
+  padding: 8px 14px;
   border-bottom: 1px solid var(--border-color);
   font-size: 13px;
   color: var(--text-main);
   vertical-align: middle;
+}
+
+.col-no {
+  width: 60px;
+}
+
+.col-action {
+  width: 160px;
+}
+
+.custom-table .th-main {
+  padding-left: 24px;
+  text-align: left;
+}
+
+.cell-no {
+  color: var(--text-muted);
+}
+
+.custom-table .cell-main {
+  padding-left: 24px;
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-title);
+}
+
+.custom-table .cell-main.is-protected {
+  color: var(--color-primary);
 }
 
 .status-badge {
@@ -474,10 +546,113 @@ body {
 }
 
 /* PATTERN LIBRARY (Page Helpers) */
+/* 시간 글자 수가 달라도 새로고침 버튼이 움직이지 않도록 폭을 고정 */
 .header-time {
+  min-width: 150px;
   font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
   color: var(--text-muted);
   white-space: nowrap;
+}
+
+.panel-row {
+  display: flex;
+  flex: 1;
+  gap: 24px;
+  min-height: 0;
+}
+
+.card-fill {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  margin: 0;
+}
+
+.table-fill {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.table-fill .custom-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.inline-form {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.inline-form .btn-action {
+  height: var(--height-input);
+}
+
+.pagination-bar {
+  display: flex;
+  flex-shrink: 0;
+  justify-content: center;
+  gap: 6px;
+  padding-top: 12px;
+}
+
+.title-success {
+  color: var(--color-success);
+}
+
+.title-danger {
+  color: var(--color-danger);
+}
+
+/* PATTERN LIBRARY (Dialog) */
+.dialog-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background-color: rgba(0, 0, 0, 0.6);
+}
+
+.dialog-box {
+  width: 400px;
+  padding: 30px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-card);
+  background-color: var(--bg-card);
+}
+
+.dialog-title {
+  margin: 0 0 12px 0;
+  font-size: 18px;
+  letter-spacing: -0.5px;
+  color: var(--text-title);
+}
+
+.dialog-desc {
+  margin: 0 0 20px 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.dialog-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 10px;
 }
 
 .cell-time {
