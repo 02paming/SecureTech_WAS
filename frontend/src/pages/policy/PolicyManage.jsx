@@ -153,12 +153,12 @@ const PolicyManage = () => {
                           <div className="action-btn-group">
                             {p.is_protected ? (
                               <>
-                                <span className="status-badge badge-primary btn-w-sm">보호</span>
+                                <span className="status-badge badge-outline btn-w-sm">보호</span>
                                 <button type="button" onClick={() => handleAuthRequest("force_delete", p.domain)} className="btn-action btn-danger btn-w-sm">해제</button>
                               </>
                             ) : (
                               <>
-                                <button type="button" onClick={() => handleAuthRequest("upgrade", p.domain)} className="btn-action btn-outline btn-w-sm">보호</button>
+                                <button type="button" onClick={() => handleAuthRequest("upgrade", p.domain)} className="btn-action btn-primary btn-w-sm">보호</button>
                                 <button type="button" onClick={() => handleDeleteWhitePolicy(p.domain)} className="btn-action btn-danger btn-w-sm">해제</button>
                               </>
                             )}

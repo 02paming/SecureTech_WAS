@@ -634,6 +634,7 @@ a.btn-action {
 
 .inline-form {
   display: flex;
+  justify-content: space-between;
   gap: 12px;
   margin-bottom: 16px;
 }
@@ -750,6 +751,12 @@ a.btn-action {
 .badge-warning {
   color: var(--color-warning);
   background-color: rgba(245, 158, 11, 0.12);
+}
+
+.badge-outline {
+  color: var(--color-primary);
+  background-color: transparent;
+  border: 1px solid var(--color-primary);
 }
 
 .badge-gray {
@@ -1041,6 +1048,7 @@ body.dark-mode .auth-admin {
 }
 
 .cell-mono {
+  font-size: 12px;
   font-family: var(--font-mono);
 }
 

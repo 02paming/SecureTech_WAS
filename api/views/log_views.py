@@ -573,6 +573,18 @@ def get_integrated_logs(request):
     try:
         general_logs, ai_data = [], []
 
+        white_labels = {"USER": "수동 허용", "AI": "AI 안전", "의심": "화이트 의심"}
+        black_labels = {"USER": "수동 차단", "AI": "AI 위험", "의심": "블랙 의심"}
+        policy_map = {}
+        for domain, source in WhitelistAddr.objects.filter(
+            deleted_at__isnull=True
+        ).values_list("whitelist_domain", "source"):
+            policy_map[domain] = white_labels.get(source, source)
+        for domain, source in BlacklistAddr.objects.filter(
+            deleted_at__isnull=True
+        ).values_list("blacklist_domain", "source"):
+            policy_map[domain] = black_labels.get(source, source)
+
         # 💡 [수정] 통합된 단일 WebAccessLog를 순회하여 처리
         for w in WebAccessLog.objects.select_related(
             "online_list_log__employee"
@@ -596,7 +608,11 @@ def get_integrated_logs(request):
                     if emp
                     else "내부 단말",
                     "ip": ip_str,
+                    "mac": getattr(w.online_list_log, "online_mac_addr", None) or "-"
+                    if getattr(w, "online_list_log", None)
+                    else "-",
                     "domain": getattr(w, "target_url", "-"),
+                    "policy": policy_map.get(getattr(w, "target_url", ""), "미등록"),
                     "ai_score": getattr(w, "ai_score", 0.0) or 0,
                     "time": w.access_time.strftime("%Y-%m-%d %H:%M:%S")
                     if w.access_time

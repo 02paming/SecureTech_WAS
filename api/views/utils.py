@@ -70,6 +70,14 @@ def save_online_session(emp, sfx, now):
                 )
 
 
+def resolve_domain_ip(domain):
+    # DNS 조회가 안 되는 도메인 하나 때문에 전체 동기화가 실패하지 않도록 한다
+    try:
+        return socket.gethostbyname(domain) if domain else "0.0.0.0"
+    except OSError:
+        return "0.0.0.0"
+
+
 def sync_pcap_json_files(sync_type="all"):
     with file_lock:
         try:
@@ -84,9 +92,7 @@ def sync_pcap_json_files(sync_type="all"):
                     [
                         {
                             "blacklist_domain": domain,
-                            "no_access_ip": socket.gethostbyname(domain)
-                            if domain
-                            else "0.0.0.0",
+                            "no_access_ip": resolve_domain_ip(domain),
                         }
                         for domain in set(blacklists)
                     ],

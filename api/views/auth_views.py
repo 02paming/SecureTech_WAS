@@ -9,7 +9,7 @@ from rest_framework import status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
-from ..models import Employees, OnlineList, ProspectiveMembers
+from ..models import Employees, ProspectiveMembers
 from .utils import (
     BLOCKED_EMP_IDS,
     RESTRICTED_IDS,
@@ -156,16 +156,9 @@ def login(request):
                 }
             )
 
-        # [분기 2] 일반 사원일 경우 OTP 없이 즉시 로그인 완료 및 세션 생성
+        # [분기 2] 일반 사원은 OTP 없이 즉시 로그인 완료
+        # 웹 로그인은 네트워크 인증이 아니므로 online_list를 건드리지 않는다 (캡티브 포털에서만 기록)
         else:
-            try:
-                save_online_session(
-                    employee, extract_ip_suffix(client_ip), timezone.now()
-                )
-                threading.Thread(target=sync_pcap_json_files).start()
-            except Exception as e:
-                logger.error("일반 사원 로그인 세션 로깅 실패: %s", e)
-
             return Response(
                 {
                     "status": "success",
@@ -214,12 +207,7 @@ def verify_otp(request):
     totp = pyotp.TOTP(current_secret)
     if totp.verify(otp_code):
         client_ip = get_client_ip(request)
-        try:
-            save_online_session(employee, extract_ip_suffix(client_ip), timezone.now())
-            threading.Thread(target=sync_pcap_json_files).start()
-        except Exception as e:
-            logger.error("OTP 로그인 세션 로깅 실패: %s", e)
-
+        # 웹 로그인은 네트워크 인증이 아니므로 online_list를 건드리지 않는다 (캡티브 포털에서만 기록)
         return Response(
             {
                 "status": "success",
@@ -291,22 +279,8 @@ def captive_login(request):
 
 @api_view(["POST"])
 def logout_user(request):
-    try:
-        emp_id = request.data.get("employee_id")
-        if emp_id:
-            OnlineList.objects.filter(employee__employee_id=emp_id).delete()
-        else:
-            OnlineList.objects.filter(
-                online_ip=extract_ip_suffix(get_client_ip(request))
-            ).delete()
-
-        threading.Thread(target=sync_pcap_json_files).start()
-        return Response({"status": "success", "message": "로그아웃 처리되었습니다."})
-    except Exception:
-        return Response(
-            {"status": "error", "message": "오류 발생"},
-            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        )
+    # 웹 로그아웃은 캡티브 포털 인증(online_list)에 영향을 주지 않는다
+    return Response({"status": "success", "message": "로그아웃 처리되었습니다."})
 
 
 @api_view(["GET", "PUT"])

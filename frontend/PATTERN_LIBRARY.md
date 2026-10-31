@@ -59,12 +59,12 @@
 
 | 색 | 클래스 | 사용 문구 |
 |---|---|---|
-| Primary | `btn-primary` | 새로고침, 저장, 등록, 적용, 시작 |
+| Primary | `btn-primary` | 새로고침, 저장, 등록, 적용, 시작, 보호 |
 | Success | `btn-success` | 허용, 승인, 허용 이관 |
 | Danger | `btn-danger` | 차단, 반려, 해제, 퇴사, 삭제, 로그아웃 |
 | Warning | `btn-warning` | 예비 (현재 미사용) |
 | Neutral | `btn-neutral` | 취소, 닫기, 수정, 초기화, CSV 다운로드, 관리 |
-| Outline | `btn-outline` | 보호, 실시간 위치로 |
+| Outline | `btn-outline` | 실시간 위치로 |
 | Toggle | `btn-toggle` + `active` | 켜고 끄는 필터, 탭형 선택 |
 
 ## 4. 뱃지와 태그
@@ -75,7 +75,7 @@
 | 건수 뱃지 | 모서리 6px | `count-badge` + 색 | 총 3건, 대기 신청 0건 |
 | 태그 | 모서리 4px, 테두리 | `tag` / `tag-primary` / `tag-mono` | ID, 권한, MAC 주소, 안내 문구 |
 
-뱃지 색은 `badge-primary`, `badge-success`, `badge-warning`, `badge-danger`, `badge-gray` 5가지입니다.
+뱃지 색은 `badge-primary`, `badge-success`, `badge-warning`, `badge-danger`, `badge-gray` 5가지입니다. 이미 적용된 상태를 버튼과 구분할 때는 테두리형 `badge-outline`을 씁니다 (예: 보호 중).
 
 ## 5. 입력
 

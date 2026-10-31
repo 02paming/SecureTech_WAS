@@ -2,7 +2,7 @@ import axios from "axios";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import PageHeader from "../../components/PageHeader";
 import PaginationBar from "../../components/PaginationBar";
-import { getSecurityTheme } from "../../utils/securityTheme";
+import SecurityDetailDialog from "../../components/SecurityDetailDialog";
 
 const padRows = (arr, length) => {
   const padded = [...arr];
@@ -72,6 +72,19 @@ const LogAnalysis = () => {
     }
   };
 
+  const handleRefreshDetail = async () => {
+    if (!selectedSecurity) return;
+    setDetailLoading(true);
+    try {
+      const res = await axios.get(`${baseUrl}/api/dashboard/employee-security/${selectedSecurity.employee_id}/`);
+      if (res.data?.status === "success") setSelectedSecurity(res.data.data);
+    } catch (err) {
+      alert("상세 보안 정보를 새로 불러올 수 없습니다.");
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
   const aiSuspiciousDomains = useMemo(() => aiLogs.filter((d) => d.type === "AI 블랙").map((d) => d.domain), [aiLogs]);
 
   const baseFilteredData = useMemo(() => {
@@ -102,11 +115,11 @@ const LogAnalysis = () => {
   const totalPages = Math.ceil(currentData.length / itemsPerPage) || 1;
 
   const exportToCSV = useCallback(() => {
-    const headers = ["발생 시간", "이름(아이디)", "출발지 IP", "목적지 도메인", "AI 위협 점수", "처리 결과"];
+    const headers = ["발생 시간", "이름(아이디)", "출발지 IP", "MAC 주소", "목적지 도메인", "현재 정책", "AI 위협 점수", "처리 결과"];
     const csvRows = [headers.join(",")];
     currentData.forEach((r) => {
       const resultText = r.type === "차단" ? "차단" : aiSuspiciousDomains.includes(r.domain) ? "AI의심" : "정상허용";
-      csvRows.push(`"${r.time}","${r.violator}","${r.ip || "-"}","${r.domain}","${r.ai_score || 0}","${resultText}"`);
+      csvRows.push(`"${r.time}","${r.violator}","${r.ip || "-"}","${r.mac || "-"}","${r.domain}","${r.policy || "-"}","${r.ai_score || 0}","${resultText}"`);
     });
     const bom = "\uFEFF";
     const blob = new Blob([bom + csvRows.join("\n")], { type: "text/csv;charset=utf-8;" });
@@ -119,8 +132,6 @@ const LogAnalysis = () => {
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
   }, [currentData, aiSuspiciousDomains]);
-
-  const theme = getSecurityTheme(selectedSecurity?.security_score);
 
   return (
     <div className="page-container admin-page">
@@ -178,19 +189,23 @@ const LogAnalysis = () => {
           <div className="table-responsive table-fill">
             <table className="custom-table">
               <colgroup>
-                <col style={{ width: "15%" }} />
-                <col style={{ width: "15%" }} />
-                <col style={{ width: "15%" }} />
-                <col style={{ width: "25%" }} />
-                <col style={{ width: "15%" }} />
-                <col style={{ width: "15%" }} />
+                <col style={{ width: "14%" }} />
+                <col style={{ width: "14%" }} />
+                <col style={{ width: "10%" }} />
+                <col style={{ width: "14%" }} />
+                <col style={{ width: "20%" }} />
+                <col style={{ width: "9%" }} />
+                <col style={{ width: "8%" }} />
+                <col style={{ width: "11%" }} />
               </colgroup>
               <thead>
                 <tr>
                   <th>발생 시간</th>
                   <th>이름(아이디)</th>
                   <th>출발지 IP</th>
-                  <th className="th-main">목적지 도메인</th>
+                  <th>MAC 주소</th>
+                  <th>목적지 도메인</th>
+                  <th>현재 정책</th>
                   <th>AI 위협 점수</th>
                   <th>처리 결과</th>
                 </tr>
@@ -199,7 +214,7 @@ const LogAnalysis = () => {
                 {paginatedData.map((log, idx) => (
                   <tr key={log.isEmpty ? `empty-${idx}` : `${log.domain}-${log.time || idx}`}>
                     {log.isEmpty ? (
-                      <td colSpan="6">&nbsp;</td>
+                      <td colSpan="8">&nbsp;</td>
                     ) : (
                       <>
                         <td className="cell-time">{log.time}</td>
@@ -210,9 +225,11 @@ const LogAnalysis = () => {
                           {log.violator}
                         </td>
                         <td className="cell-mono">{log.ip || "-"}</td>
+                        <td className="cell-mono">{log.mac || "-"}</td>
                         <td className={`cell-main ${log.type === "정상" ? (aiSuspiciousDomains.includes(log.domain) ? "text-warning" : "") : "text-danger"}`}>
                           {log.domain}
                         </td>
+                        <td>{log.policy || "-"}</td>
                         <td className={`fw-bold ${log.ai_score >= 50 ? "text-danger" : log.ai_score >= 31 ? "text-warning" : "text-muted"}`}>
                           {log.ai_score >= 0 && log.ai_score !== null && log.ai_score !== undefined ? `${log.ai_score}점` : "-"}
                         </td>
@@ -237,76 +254,12 @@ const LogAnalysis = () => {
       </div>
 
       {isModalOpen && selectedSecurity && (
-        <div className="dialog-overlay" onClick={() => setIsModalOpen(false)}>
-          <div className="dialog-box dialog-lg" onClick={(e) => e.stopPropagation()}>
-            <div className="dialog-header">
-              <h3 className="dialog-title">단말 보안 관제 상세</h3>
-              <div className="btn-group">
-                <span className="tag tag-primary">ID: {selectedSecurity.employee_id}</span>
-                <button type="button" className="btn-action btn-neutral btn-w-md btn-header" onClick={() => setIsModalOpen(false)}>닫기</button>
-              </div>
-            </div>
-
-            <div className="dialog-grid-2">
-              <div className="info-stack">
-                <div className={`info-box tone-${theme.tone}`}>
-                  <div className="info-box-row">
-                    <span className="info-box-title">단말 보안 건전성</span>
-                    <span className={`fw-bold text-${theme.tone}`}>{selectedSecurity?.security_score}점 ({theme.label})</span>
-                  </div>
-                  <div className="progress">
-                    <div className="progress-fill" style={{ width: `${selectedSecurity?.security_score}%` }} />
-                  </div>
-                  <div className="info-box-row info-box-note">
-                    <span>정상: {selectedSecurity?.normal_access_count}건</span>
-                    <span>차단 누적: {selectedSecurity?.violation_count}건</span>
-                  </div>
-                </div>
-
-                <div className="info-box info-box-row">
-                  <div>
-                    <span className="info-box-label">사원명 / 권한</span>
-                    <strong className="info-box-value">{selectedSecurity.name}</strong>
-                  </div>
-                  <span className="tag tag-primary">{selectedSecurity.is_manager ? "관리자" : "일반사원"}</span>
-                </div>
-                <div className="info-box info-box-row">
-                  <div>
-                    <span className="info-box-label">접속 IP</span>
-                    <strong className="info-box-value text-success">{selectedSecurity.current_ip}</strong>
-                  </div>
-                  <span className="tag tag-mono">MAC: {selectedSecurity.current_mac || "-"}</span>
-                </div>
-
-                <div className={`info-box tone-box tone-${theme.tone}`}>
-                  <span className="info-box-title">AI 보안 어드바이저 분석</span>
-                  <p
-                    className="tone-box-text"
-                    dangerouslySetInnerHTML={{ __html: selectedSecurity.security_advisor ? selectedSecurity.security_advisor.replace(/\*\*(.*?)\*\*/g, "<b>$1</b>") : "분석 중..." }}
-                  />
-                </div>
-              </div>
-
-              <div className="info-box sub-panel">
-                <h4 className="info-box-title">최근 주요 접근 로그</h4>
-                <div className="list-stack">
-                  {selectedSecurity.external_access_logs?.slice(0, 20).map((log, i) => (
-                    <div key={`modal-log-${i}`} className={`list-row ${log.is_blocked ? "is-danger tone-danger" : ""}`}>
-                      <div>
-                        <span className={`list-row-title ${log.is_blocked ? "text-danger" : ""}`}>{log.domain}</span>
-                        <span className="list-row-sub">{log.time}</span>
-                      </div>
-                      <span className={log.is_blocked ? "status-badge badge-danger" : "status-badge badge-success"}>{log.status}</span>
-                    </div>
-                  ))}
-                  {(!selectedSecurity.external_access_logs || selectedSecurity.external_access_logs.length === 0) && (
-                    <div className="empty-state">로그 기록이 없습니다.</div>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+        <SecurityDetailDialog
+          security={selectedSecurity}
+          onClose={() => setIsModalOpen(false)}
+          onRefresh={handleRefreshDetail}
+          refreshing={detailLoading}
+        />
       )}
     </div>
   );
