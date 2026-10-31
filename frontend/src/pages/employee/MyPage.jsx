@@ -219,13 +219,19 @@ const MyPage = () => {
           <div className="card-body-scroll">
             <div className="info-row">
               <span className="info-label">외부 인터넷</span>
-              <span className="status-badge badge-success">캡티브 포털 인증됨</span>
+              {userData.network_authenticated ? (
+                <span className="status-badge badge-success">캡티브 포털 인증됨</span>
+              ) : (
+                <span className="status-badge badge-gray">미인증</span>
+              )}
             </div>
             <div className="info-row">
-              <span className="info-label">최근 로그인</span>
-              <span className="info-value">
-                {new Date().toLocaleString("ko-KR")}
-              </span>
+              <span className="info-label">접속 IP</span>
+              <span className="info-value">{userData.network_ip || "-"}</span>
+            </div>
+            <div className="info-row">
+              <span className="info-label">인증 시각</span>
+              <span className="info-value">{userData.network_auth_time || "-"}</span>
             </div>
           </div>
         </div>

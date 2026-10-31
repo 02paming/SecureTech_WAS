@@ -78,7 +78,7 @@ const NavigationBar = memo(function NavigationBar({
       sessionStorage.removeItem("adminPortalMode");
       setUser(null);
       alert("로그아웃되었습니다.");
-      navigate(isInternalAdminNetwork ? "/admin-login" : "/", {
+      navigate(isAdminPortal ? "/admin-login" : "/", {
         replace: true,
       });
     }
@@ -86,7 +86,7 @@ const NavigationBar = memo(function NavigationBar({
 
   const showAdminMenu = Boolean(
     DEV_MODE ||
-    (user && checkIsManager(user) && (isInternalAdminNetwork || isAdminPortal)),
+    (user && checkIsManager(user) && isAdminPortal),
   );
 
   return (
@@ -463,17 +463,10 @@ function App() {
       if (saved) {
         try {
           const parsedUser = JSON.parse(saved);
-          if (isInternalAdminNetwork) {
-            if (checkIsManager(parsedUser) && adminMode) {
-              setUser(parsedUser);
-              setIsAdminPortal(true);
-              return;
-            }
-          } else {
-            setUser(parsedUser);
-            setIsAdminPortal(Boolean(adminMode && checkIsManager(parsedUser)));
-            return;
-          }
+          // 로그인은 어느 망에서든 유지하고, 관리자 화면은 관리자 포털 로그인에만 허용
+          setUser(parsedUser);
+          setIsAdminPortal(Boolean(adminMode && checkIsManager(parsedUser)));
+          return;
         } catch {}
       }
       sessionStorage.removeItem("user");
@@ -487,7 +480,7 @@ function App() {
       setAuthLoaded(true);
     }, 0);
     return () => clearTimeout(timer);
-  }, [isInternalAdminNetwork]);
+  }, []);
 
   useEffect(() => {
     document.body.classList.toggle("dark-mode", isDarkMode);

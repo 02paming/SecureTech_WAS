@@ -9,7 +9,7 @@ from rest_framework import status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
-from ..models import Employees, ProspectiveMembers
+from ..models import Employees, OnlineList, ProspectiveMembers
 from .utils import (
     BLOCKED_EMP_IDS,
     RESTRICTED_IDS,
@@ -359,10 +359,16 @@ def get_my_info(request):
             else timezone.now().strftime("%Y%m")
         )
         birth_date, masked_jumin = format_jumin_and_birth(getattr(emp, "jumin_no", ""))
+        session = OnlineList.objects.filter(employee=emp).first()
         return Response(
             {
                 "status": "success",
                 "data": {
+                    "network_authenticated": bool(session),
+                    "network_ip": f"192.168.2.{session.online_ip}" if session else None,
+                    "network_auth_time": session.login_time.strftime("%Y-%m-%d %H:%M:%S")
+                    if session and session.login_time
+                    else None,
                     "emp_code": f"ST{current_ym}{emp.employee_number:02d}"
                     if getattr(emp, "employee_number", None)
                     else "-",

@@ -83,7 +83,9 @@ function IpMacHistoryColumn({ logs }) {
             {currentItems.map((item, idx) => (
               <tr key={idx} className={item.is_mismatch ? "row-danger" : ""}>
                 {item.isEmpty ? (
-                  <td colSpan="3">&nbsp;</td>
+                  <td colSpan="3" className="text-muted">
+                    {idx === 0 && filteredLogs.length === 0 ? "접속 기록이 없습니다." : "\u00a0"}
+                  </td>
                 ) : (
                   <>
                     <td className="text-success fw-bold">{item.ip}</td>
@@ -213,7 +215,9 @@ function ExternalAccessColumn({ externalLogs }) {
             {currentItems.map((item, idx) => (
               <tr key={idx} className={item.is_blocked ? "row-danger" : ""}>
                 {item.isEmpty ? (
-                  <td colSpan="4">&nbsp;</td>
+                  <td colSpan="4" className="text-muted">
+                    {idx === 0 && filteredLogs.length === 0 ? "활동 기록이 없습니다." : "\u00a0"}
+                  </td>
                 ) : (
                   <>
                     <td>
