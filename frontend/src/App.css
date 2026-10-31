@@ -1687,6 +1687,29 @@ textarea.custom-input {
   margin-bottom: 0;
 }
 
+/* PAGE: 마이페이지 (내용 높이만큼만 차지하는 좁은 화면) */
+.layout-standard .page-container.page-narrow,
+.layout-wide .page-container.page-narrow {
+  max-width: 1040px;
+}
+
+.mypage-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  align-items: start;
+  gap: 24px;
+}
+
+.mypage-grid .card {
+  margin: 0;
+}
+
+@media (max-width: 768px) {
+  .mypage-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* PAGE: 보안 테스트실 */
 .card-side {
   flex-shrink: 0;

@@ -329,21 +329,35 @@ def my_profile(request):
             status=status.HTTP_401_UNAUTHORIZED,
         )
 
-    emp.name, emp.email = (
-        request.data.get("name", emp.name),
-        request.data.get("email", emp.email),
-    )
-    emp.phone_number, emp.address = (
-        request.data.get("phone_number", emp.phone_number),
-        request.data.get("address", emp.address),
-    )
-    if (
-        request.data.get("new_password")
-        and len(str(request.data.get("new_password")).strip()) >= 4
-    ):
-        emp.password = make_password(str(request.data.get("new_password")).strip())
+    # 이름·주민번호 등 필수 개인정보는 본인이 바꿀 수 없다 (이메일·연락처·주소·비밀번호만 허용)
+    email = str(request.data.get("email", emp.email)).strip()
+    phone_number = re.sub(r"[^0-9]", "", str(request.data.get("phone_number", emp.phone_number)))
+    address = str(request.data.get("address", emp.address)).strip()
+    new_password = str(request.data.get("new_password") or "").strip()
+
+    error = None
+    if "@" not in email:
+        error = "올바른 이메일 형식이 아닙니다."
+    elif len(phone_number) not in (10, 11):
+        error = "연락처는 숫자 10~11자리로 입력해주세요."
+    elif not address:
+        error = "주소를 입력해주세요."
+    elif new_password and len(new_password) < 4:
+        error = "새 비밀번호는 4자 이상이어야 합니다."
+    elif Employees.objects.filter(email=email).exclude(pk=emp.pk).exists():
+        error = "이미 사용 중인 이메일입니다."
+    elif Employees.objects.filter(phone_number=phone_number).exclude(pk=emp.pk).exists():
+        error = "이미 사용 중인 연락처입니다."
+    if error:
+        return Response(
+            {"status": "error", "message": error}, status=status.HTTP_400_BAD_REQUEST
+        )
+
+    emp.email, emp.phone_number, emp.address = email, phone_number, address
+    if new_password:
+        emp.password = make_password(new_password)
     emp.save()
-    return Response({"status": "success", "message": "수정 성공"})
+    return Response({"status": "success", "message": "정보가 수정되었습니다."})
 
 
 @api_view(["POST", "GET"])
@@ -380,6 +394,9 @@ def get_my_info(request):
                     "phone_number": emp.phone_number,
                     "jumin_no": masked_jumin,
                     "birth_date": birth_date,
+                    "hire_date": emp.hire_date.strftime("%Y-%m-%d")
+                    if getattr(emp, "hire_date", None)
+                    else "-",
                     "is_manager": emp.is_manager,
                 },
             }
