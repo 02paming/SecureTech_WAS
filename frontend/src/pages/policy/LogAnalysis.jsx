@@ -12,7 +12,6 @@ const padRows = (arr, length) => {
 
 const LogAnalysis = () => {
   const [logs, setLogs] = useState([]);
-  const [aiLogs, setAiLogs] = useState([]);
   const [loadingAction, setLoadingAction] = useState(false);
   const [lastUpdated, setLastUpdated] = useState("");
 
@@ -34,7 +33,6 @@ const LogAnalysis = () => {
     try {
       const res = await axios.get(`${baseUrl}/api/dashboard/integrated-logs/`);
       setLogs(res.data.general_logs || []);
-      setAiLogs(res.data.ai_data || []);
       setLastUpdated(new Date().toLocaleTimeString("ko-KR", { hour12: false }));
     } catch (err) {
       console.error("로그 데이터 갱신 오류:", err);
@@ -85,7 +83,7 @@ const LogAnalysis = () => {
     }
   };
 
-  const aiSuspiciousDomains = useMemo(() => aiLogs.filter((d) => d.type === "AI 블랙").map((d) => d.domain), [aiLogs]);
+  const aiSuspiciousDomains = useMemo(() => [...new Set(logs.filter((l) => l.policy?.includes("의심")).map((l) => l.domain))], [logs]);
 
   const baseFilteredData = useMemo(() => {
     let filtered = logs;

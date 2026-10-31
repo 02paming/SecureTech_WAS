@@ -1,5 +1,6 @@
 import axios from "axios";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import AdminAuthDialog from "../../components/AdminAuthDialog";
 import PageHeader from "../../components/PageHeader";
 import PaginationBar from "../../components/PaginationBar";
 
@@ -7,15 +8,6 @@ const padRows = (arr, length) => {
   const padded = [...arr];
   while (padded.length < length) padded.push({ isEmpty: true });
   return padded;
-};
-
-const getStoredUser = () => {
-  try {
-    const u = sessionStorage.getItem("user") || localStorage.getItem("user");
-    return u ? JSON.parse(u) : null;
-  } catch {
-    return null;
-  }
 };
 
 const AiPolicyManage = () => {
@@ -34,7 +26,6 @@ const AiPolicyManage = () => {
   const itemsPerPage = 10;
 
   const [authModal, setAuthModal] = useState({ isOpen: false, domains: [], action: "" });
-  const [adminPassword, setAdminPassword] = useState("");
 
   const baseUrl = useMemo(() => (import.meta.env.VITE_API_BASE_URL || `http://${window.location.hostname}:8000`).replace(/\/+$/, ""), []);
 
@@ -62,24 +53,18 @@ const AiPolicyManage = () => {
   };
   const closeAuthModal = () => {
     setAuthModal({ isOpen: false, domains: [], action: "" });
-    setAdminPassword("");
   };
 
-  const confirmPromote = async () => {
-    if (!adminPassword) return alert("비밀번호를 입력해주세요.");
-    const user = getStoredUser();
-    const empId = user?.employee_id || user?.emp_id;
-    if (!empId) return alert("로그인 정보가 만료되었습니다. 다시 로그인 해주세요.");
-
+  const confirmPromote = async (credentials) => {
     try {
       const res = await axios.post(`${baseUrl}/api/policies/promote/`, {
-        domains: authModal.domains, action: authModal.action, employee_id: empId, password: adminPassword,
+        domains: authModal.domains, action: authModal.action, ...credentials,
       });
       alert(res.data.message);
       closeAuthModal();
       fetchAiPolicies();
     } catch (err) {
-      alert(err.response?.data?.error || "처리 실패 (비밀번호 확인)");
+      alert(err.response?.data?.error || "인증 실패");
     }
   };
 
@@ -122,24 +107,22 @@ const AiPolicyManage = () => {
     return <button type="button" onClick={() => openAuthModal([domain], "release")} className="btn-action btn-danger btn-w-sm">해제</button>;
   };
 
-  const isRelease = authModal.action === "release";
+  const AUTH_TITLES = {
+    to_user_white: "AI 정책 허용 이관 인증",
+    to_user_black: "AI 정책 차단 이관 인증",
+    release: "AI 정책 해제 인증",
+  };
 
   return (
     <div className="page-container admin-page">
       {authModal.isOpen && (
-        <div className="dialog-overlay">
-          <div className="dialog-box">
-            <h3 className="dialog-title">관리자 권한 확인</h3>
-            <p className="dialog-desc">선택한 <strong>{authModal.domains.length}건</strong>의 도메인을 {isRelease ? "AI 정책에서 해제하시려면" : "정식 수동 정책으로 이관하시려면"} 관리자 비밀번호를 입력해주세요.</p>
-            <div className="dialog-form">
-              <input type="password" className="custom-input" placeholder="비밀번호 입력" value={adminPassword} onChange={(e) => setAdminPassword(e.target.value)} onKeyDown={(e) => e.key === "Enter" && confirmPromote()} autoFocus />
-              <div className="dialog-actions">
-                <button type="button" onClick={closeAuthModal} className="btn-action btn-neutral btn-w-md btn-header">취소</button>
-                <button type="button" onClick={confirmPromote} className={`btn-action btn-w-lg btn-header ${isRelease ? "btn-danger" : "btn-primary"}`}>{isRelease ? "승인 및 해제" : "승인 및 이관"}</button>
-              </div>
-            </div>
-          </div>
-        </div>
+        <AdminAuthDialog
+          title={AUTH_TITLES[authModal.action]}
+          target={authModal.domains.length === 1 ? authModal.domains[0] : `선택한 ${authModal.domains.length}건의`}
+          danger={authModal.action !== "to_user_white"}
+          onSubmit={confirmPromote}
+          onCancel={closeAuthModal}
+        />
       )}
 
       <PageHeader

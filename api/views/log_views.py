@@ -237,20 +237,14 @@ def get_traffic_stats(request):
         base_qs = WebAccessLog.objects.filter(
             access_time__gte=start_t, access_time__lte=end_t
         )
-        n_qs = (
-            base_qs.filter(access_flag="정상")
-            .annotate(time_bucket=t_func)
-            .values("time_bucket")
-            .annotate(c=Count("web_access_log_id"))
-        )
-        b_qs = (
-            base_qs.filter(access_flag="차단")
-            .annotate(time_bucket=t_func)
-            .values("time_bucket")
-            .annotate(c=Count("web_access_log_id"))
-        )
-
-        # 💡 [핵심 수정 1] 차트: AI 의심 트래픽 = 화이트/블랙 양쪽의 "의심" 도메인 트래픽 합산
+        # 💡 차트 기준: 등록된 도메인의 접속 수를 정책 종류별로 집계
+        #    정상 통과 = 허용(수동) + AI 안전 / 위협 차단 = 차단(수동) + AI 위험 / AI 의심 = 화이트 의심 + 블랙 의심
+        allowed_domains = WhitelistAddr.objects.filter(
+            deleted_at__isnull=True, source__in=["USER", "AI"]
+        ).values_list("whitelist_domain", flat=True)
+        blocked_domains = BlacklistAddr.objects.filter(
+            deleted_at__isnull=True, source__in=["USER", "AI"]
+        ).values_list("blacklist_domain", flat=True)
         suspicious_domains = list(
             WhitelistAddr.objects.filter(
                 deleted_at__isnull=True, source="의심"
@@ -259,6 +253,19 @@ def get_traffic_stats(request):
             BlacklistAddr.objects.filter(
                 deleted_at__isnull=True, source="의심"
             ).values_list("blacklist_domain", flat=True)
+        )
+
+        n_qs = (
+            base_qs.filter(target_url__in=list(allowed_domains))
+            .annotate(time_bucket=t_func)
+            .values("time_bucket")
+            .annotate(c=Count("web_access_log_id"))
+        )
+        b_qs = (
+            base_qs.filter(target_url__in=list(blocked_domains))
+            .annotate(time_bucket=t_func)
+            .values("time_bucket")
+            .annotate(c=Count("web_access_log_id"))
         )
 
         ai_qs = (
@@ -319,7 +326,7 @@ def get_traffic_stats(request):
         ai_suspicious_list = []
         for b in BlacklistAddr.objects.filter(
             deleted_at__isnull=True, source__in=["AI", "의심"]
-        ).order_by("-blacklist_id")[:5]:
+        ).order_by("-blacklist_id"):
             if b.source == "의심":
                 st, col, bg = "블랙 의심", "#f59e0b", "rgba(245, 158, 11, 0.1)"
             else:
@@ -335,7 +342,7 @@ def get_traffic_stats(request):
 
         for w in WhitelistAddr.objects.filter(
             deleted_at__isnull=True, source="의심"
-        ).order_by("-whitelist_id")[:5]:
+        ).order_by("-whitelist_id"):
             ai_suspicious_list.append(
                 {
                     "domain": w.whitelist_domain,
@@ -345,14 +352,12 @@ def get_traffic_stats(request):
                 }
             )
 
-        top_ai_suspicious = ai_suspicious_list[:5]
-
         return Response(
             {
                 "status": "success",
                 "data": chart_data,
                 "top_domains": top_domains,
-                "top_ai_suspicious": top_ai_suspicious,
+                "top_ai_suspicious": ai_suspicious_list,
             }
         )
     except Exception as e:

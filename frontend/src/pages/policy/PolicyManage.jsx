@@ -1,5 +1,6 @@
 import axios from "axios";
 import { useCallback, useEffect, useState } from "react";
+import AdminAuthDialog from "../../components/AdminAuthDialog";
 import PageHeader from "../../components/PageHeader";
 import PaginationBar from "../../components/PaginationBar";
 
@@ -21,8 +22,6 @@ const PolicyManage = () => {
   const itemsPerPage = 10;
 
   const [authModal, setAuthModal] = useState({ isOpen: false, action: null, domain: "" });
-  const [adminId, setAdminId] = useState("admin");
-  const [adminPw, setAdminPw] = useState("");
 
   const baseUrl = (import.meta.env.VITE_API_BASE_URL || `http://${window.location.hostname}:8000`).replace(/\/+$/, "");
 
@@ -92,14 +91,12 @@ const PolicyManage = () => {
 
   const handleAuthRequest = (action, domain) => {
     setAuthModal({ isOpen: true, action, domain });
-    setAdminPw("");
   };
 
-  const handleAuthSubmit = async (e) => {
-    e.preventDefault();
+  const handleAuthSubmit = async (credentials) => {
     try {
       const endpoint = authModal.action === "upgrade" ? "/api/policies/whitelist/upgrade/" : "/api/policies/whitelist/force-delete/";
-      await axios.post(`${baseUrl}${endpoint}`, { domain: authModal.domain, employee_id: adminId, password: adminPw });
+      await axios.post(`${baseUrl}${endpoint}`, { domain: authModal.domain, ...credentials });
       setAuthModal({ isOpen: false, action: null, domain: "" });
       fetchPolicies();
       alert(authModal.action === "upgrade" ? "시스템 기본 보호 도메인으로 격상되었습니다." : "보호가 해제되었습니다.");
@@ -219,24 +216,13 @@ const PolicyManage = () => {
       </div>
 
       {authModal.isOpen && (
-        <div className="dialog-overlay">
-          <div className="dialog-box">
-            <h3 className="dialog-title">
-              {authModal.action === "upgrade" ? "시스템 보호 도메인 등록" : "시스템 보호 해제 인증"}
-            </h3>
-            <p className="dialog-desc">
-              <strong>{authModal.domain}</strong> 도메인 제어를 위해 통제실 PC(192.168.3.23)에서 관리자 인증을 진행해주세요.
-            </p>
-            <form onSubmit={handleAuthSubmit} className="dialog-form">
-              <input type="text" className="custom-input" value={adminId} onChange={(e) => setAdminId(e.target.value)} placeholder="관리자 ID" required />
-              <input type="password" className="custom-input" value={adminPw} onChange={(e) => setAdminPw(e.target.value)} placeholder="관리자 비밀번호" required autoFocus />
-              <div className="dialog-actions">
-                <button type="button" onClick={() => setAuthModal({ isOpen: false, action: null, domain: "" })} className="btn-action btn-neutral btn-w-md btn-header">취소</button>
-                <button type="submit" className={`btn-action btn-w-lg btn-header ${authModal.action === "upgrade" ? "btn-primary" : "btn-danger"}`}>인증 및 적용</button>
-              </div>
-            </form>
-          </div>
-        </div>
+        <AdminAuthDialog
+          title={authModal.action === "upgrade" ? "시스템 보호 도메인 등록" : "시스템 보호 해제 인증"}
+          target={authModal.domain}
+          danger={authModal.action !== "upgrade"}
+          onSubmit={handleAuthSubmit}
+          onCancel={() => setAuthModal({ isOpen: false, action: null, domain: "" })}
+        />
       )}
     </div>
   );

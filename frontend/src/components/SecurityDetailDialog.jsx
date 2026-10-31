@@ -252,8 +252,8 @@ function SecurityDetailDialog({ security, onClose, onRefresh, refreshing }) {
       : 100;
 
   return (
-    <div className="dialog-overlay" onClick={() => onClose()}>
-      <div className="dialog-box dialog-lg" onClick={(e) => e.stopPropagation()}>
+    <div className="dialog-overlay">
+      <div className="dialog-box dialog-lg">
         <div className="dialog-header">
           <h3 className="dialog-title">보안 관제 상세 현황</h3>
           <div className="btn-group">
