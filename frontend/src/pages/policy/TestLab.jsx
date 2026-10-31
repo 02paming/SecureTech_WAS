@@ -1,9 +1,41 @@
-import axios from "axios";
 import { useEffect, useRef, useState } from "react";
 import PageHeader from "../../components/PageHeader";
 
-const WHITE_LABELS = { AI: "AI 안전", 의심: "화이트 의심" };
-const BLACK_LABELS = { AI: "AI 위험", 의심: "블랙 의심" };
+// 이 화면은 DB와 연결하지 않는다. 판정은 아래 속성과 화면에 등록한 테스트 주소로만 이루어진다
+const ADMIN_SERVER = "192.168.3.23";
+const STORAGE_KEY = "testLabAddresses";
+
+const TEST_KINDS = {
+  manual_allow: { label: "수동 허용", result: "통과", tone: "success", blocked: false, message: "허용 목록에 등록된 주소입니다." },
+  ai_safe: { label: "AI 안전", result: "통과", tone: "success", blocked: false, message: "AI가 안전으로 판별한 주소입니다." },
+  white_suspect: { label: "화이트 의심", result: "통과 (경고)", tone: "warning", blocked: false, message: "허용 목록의 의심 주소입니다. 통과시키고 AI 의심으로 집계합니다." },
+  black_suspect: { label: "블랙 의심", result: "통과 (경고)", tone: "warning", blocked: false, message: "차단 후보인 의심 주소입니다. 관리자 판단 전까지 통과시키고 AI 의심으로 집계합니다." },
+  manual_block: { label: "수동 차단", result: "차단", tone: "danger", blocked: true, message: "차단 목록에 등록된 주소입니다." },
+  ai_danger: { label: "AI 위험", result: "차단", tone: "danger", blocked: true, message: "AI가 위험으로 판별한 주소입니다." },
+  cti_threat: { label: "CTI 위협", result: "차단", tone: "danger", blocked: true, message: "미등록 주소이며 위협 점수가 50점 이상이라 자동 차단합니다." },
+  cti_clean: { label: "CTI 정상", result: "통과", tone: "gray", blocked: false, message: "미등록 주소이며 위협 점수가 낮아 통과합니다." },
+};
+
+const DEFAULT_ADDRESSES = [
+  { address: "test-manual-allow.local", kind: "manual_allow" },
+  { address: "test-ai-safe.local", kind: "ai_safe" },
+  { address: "test-white-suspect.local", kind: "white_suspect" },
+  { address: "test-black-suspect.local", kind: "black_suspect" },
+  { address: "test-manual-block.local", kind: "manual_block" },
+  { address: "test-ai-danger.local", kind: "ai_danger" },
+  { address: "test-cti-threat.local", kind: "cti_threat" },
+  { address: "test-cti-clean.local", kind: "cti_clean" },
+];
+
+const loadAddresses = () => {
+  try {
+    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
+    if (Array.isArray(saved)) return saved.filter((a) => TEST_KINDS[a.kind]);
+  } catch {
+    // 저장값이 손상되면 기본 목록을 사용
+  }
+  return DEFAULT_ADDRESSES;
+};
 
 const cleanDomain = (url) => {
   if (!url) return "";
@@ -24,37 +56,32 @@ export default function TestLab() {
   const [showModal, setShowModal] = useState(false);
 
   const [virtualLogs, setVirtualLogs] = useState([]);
-  const [domainOptions, setDomainOptions] = useState([]);
+  const [testAddresses, setTestAddresses] = useState(loadAddresses);
+  const [newAddress, setNewAddress] = useState("");
+  const [newKind, setNewKind] = useState("manual_allow");
   const logsEndRef = useRef(null);
-
-  const baseUrl = (
-    import.meta.env.VITE_API_BASE_URL ||
-    `http://${window.location.hostname}:8000`
-  ).replace(/\/+$/, "");
 
   useEffect(() => {
     logsEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [virtualLogs]);
 
-  // 등록된 정책 도메인을 종류별로 골라 시험할 수 있게 불러옴
   useEffect(() => {
-    Promise.all([
-      axios.get(`${baseUrl}/api/policies/whitelist/`),
-      axios.get(`${baseUrl}/api/policies/blocklist/`),
-      axios.get(`${baseUrl}/api/policies/ai/`),
-    ])
-      .then(([white, black, ai]) => {
-        setDomainOptions([
-          ...white.data.map((d) => ({ domain: d.domain, label: "수동 허용" })),
-          ...black.data.map((d) => ({ domain: d.blacklist_domain, label: "수동 차단" })),
-          ...(ai.data.ai_data || []).map((d) => ({
-            domain: d.domain,
-            label: (d.source === "white" ? WHITE_LABELS : BLACK_LABELS)[d.ai_status] || d.ai_status,
-          })),
-        ]);
-      })
-      .catch(() => {});
-  }, [baseUrl]);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(testAddresses));
+  }, [testAddresses]);
+
+  const handleAddAddress = (e) => {
+    e.preventDefault();
+    const address = cleanDomain(newAddress);
+    if (!address) return;
+    setTestAddresses((prev) => [
+      { address, kind: newKind },
+      ...prev.filter((a) => a.address !== address),
+    ]);
+    setNewAddress("");
+  };
+
+  const handleRemoveAddress = (address) =>
+    setTestAddresses((prev) => prev.filter((a) => a.address !== address));
 
   const addLog = (message, type = "info") => {
     const time = new Date().toLocaleTimeString("ko-KR", { hour12: false });
@@ -84,10 +111,10 @@ export default function TestLab() {
     setTimeout(() => setShowModal(true), 600);
   };
 
-  const executeSimulation = async (ip, domain, hasAuth) => {
+  const executeSimulation = (ip, domain, hasAuth) => {
     const isInternalIp =
       ip.startsWith("192.168.2.") || ip.startsWith("192.168.3.");
-    const isAccessingAdminServer = domain === "192.168.3.23";
+    const isAccessingAdminServer = domain === ADMIN_SERVER;
 
     if (!isInternalIp) {
       if (isAccessingAdminServer) {
@@ -113,12 +140,6 @@ export default function TestLab() {
         `MAC 주소 불일치 감지. 방화벽 스위치 포트(L2) 물리적 차단`,
         "warning",
       );
-      axios
-        .post(`${baseUrl}/api/test/mac-spoofing/`, {
-          mock_ip: ip,
-          is_test: true,
-        })
-        .catch(() => { });
       showSimulationResult(
         "blocked",
         "MAC 스푸핑 탐지 (격리)",
@@ -145,40 +166,24 @@ export default function TestLab() {
       return;
     }
 
-    try {
-      const res = await axios.post(`${baseUrl}/api/test/simulate-access/`, {
-        source_ip: ip,
-        target_url: domain,
-        is_test: true,
-      });
-      const policy = res.data?.policy || "-";
-      const isSuspicious = policy.includes("의심");
-      if (res.data?.status === "BLOCKED") {
-        addLog(`[정책] ${policy}: [${domain}] 차단 완료`, "danger");
-        showSimulationResult(
-          "blocked",
-          isSuspicious ? "AI 의심 차단" : "차단 정책 위반",
-          res.data?.message || "블랙리스트에 등록된 도메인입니다.",
-          policy,
-        );
-      } else {
-        addLog(
-          `[정책] ${policy}: [${domain}] 트래픽 통과`,
-          isSuspicious ? "warning" : "success",
-        );
-        showSimulationResult(
-          "success",
-          isSuspicious ? "AI 의심 통과" : "정상 접근 승인",
-          res.data?.message || "모든 보안 검사를 통과하여 통신이 허용되었습니다.",
-          policy,
-        );
-      }
-    } catch {
-      addLog(`서버 응답 오류`, "danger");
+    // 목록에 없는 주소는 미등록 주소로 보고 위협이 낮은 경우(CTI 정상)로 판정
+    const registered = testAddresses.find((a) => a.address === domain);
+    const kind = TEST_KINDS[registered?.kind || "cti_clean"];
+    const isSuspicious = kind.tone === "warning";
+
+    if (kind.blocked) {
+      addLog(`[정책] ${kind.label}: [${domain}] 차단 완료`, "danger");
+      showSimulationResult("blocked", "차단 정책 위반", kind.message, kind.label);
+    } else {
+      addLog(
+        `[정책] ${kind.label}: [${domain}] 트래픽 통과`,
+        isSuspicious ? "warning" : "success",
+      );
       showSimulationResult(
-        "blocked",
-        "통신 실패",
-        "관제 서버와 통신할 수 없습니다.",
+        "success",
+        isSuspicious ? "AI 의심 통과" : "정상 접근 승인",
+        kind.message,
+        kind.label,
       );
     }
   };
@@ -198,28 +203,13 @@ export default function TestLab() {
     }, 1500);
   };
 
-  const handleCaptiveLogin = async (e) => {
+  // 실제 계정을 확인하지 않는 가상 인증
+  const handleCaptiveLogin = (e) => {
     e.preventDefault();
-    addLog(`사용자(${empIdInput}) 캡티브 포털 인증 시도 중...`, "info");
-    try {
-      const res = await axios.post(`${baseUrl}/api/auth/captive-login/`, {
-        employee_id: empIdInput.trim(),
-        password: empPwInput,
-        is_test: true,
-      });
-      if (res.data.status === "success") {
-        setIsAlreadyAuthenticated(true);
-        addLog(`인증 성공. 패킷 재전송...`, "success");
-        setSimState("animating");
-        setTimeout(
-          () => executeSimulation(activeIp, cleanDomain(simUrl), true),
-          1500,
-        );
-      }
-    } catch (err) {
-      addLog(`인증 실패: 아이디 또는 비밀번호 오류`, "danger");
-      alert("인증에 실패했습니다.");
-    }
+    setIsAlreadyAuthenticated(true);
+    addLog(`사용자(${empIdInput}) 가상 인증 성공. 패킷 재전송...`, "success");
+    setSimState("animating");
+    setTimeout(() => executeSimulation(activeIp, cleanDomain(simUrl), true), 1500);
   };
 
   const resetTest = () => {
@@ -242,7 +232,7 @@ export default function TestLab() {
         subtitle="네트워크 대역별 접근 통제 검증"
       >
         <span className="tag text-warning">
-          ※ 본 테스트는 운영 DB에 기록되지 않는 시뮬레이션입니다.
+          ※ DB와 연결되지 않은 가상 시뮬레이션입니다.
         </span>
       </PageHeader>
 
@@ -270,30 +260,73 @@ export default function TestLab() {
             </li>
           </ol>
 
-          <h4 className="info-box-title text-primary">정책별 결과</h4>
-          <div className="policy-legend">
-            <div className="policy-legend-row">
-              <div className="action-btn-group">
-                <span className="status-badge badge-success">수동 허용</span>
-                <span className="status-badge badge-success">AI 안전</span>
+          <div className="info-box-row test-address-head">
+            <h4 className="info-box-title text-primary">테스트 주소</h4>
+            <button
+              type="button"
+              className="btn-action btn-neutral btn-w-sm"
+              onClick={() => setTestAddresses(DEFAULT_ADDRESSES)}
+            >
+              기본값
+            </button>
+          </div>
+          <form onSubmit={handleAddAddress} className="test-address-form">
+            <input
+              type="text"
+              className="custom-input"
+              placeholder="임의의 IP 또는 도메인"
+              value={newAddress}
+              onChange={(e) => setNewAddress(e.target.value)}
+              required
+            />
+            <div className="toolbar-group">
+              <select
+                className="custom-input"
+                value={newKind}
+                onChange={(e) => setNewKind(e.target.value)}
+              >
+                {Object.entries(TEST_KINDS).map(([key, kind]) => (
+                  <option key={key} value={key}>
+                    {kind.label} ({kind.result})
+                  </option>
+                ))}
+              </select>
+              <button
+                type="submit"
+                className="btn-action btn-primary btn-w-sm btn-form"
+              >
+                등록
+              </button>
+            </div>
+          </form>
+          <div className="list-stack">
+            {testAddresses.length === 0 && (
+              <div className="empty-state">등록된 테스트 주소가 없습니다.</div>
+            )}
+            {testAddresses.map(({ address, kind }) => (
+              <div
+                key={address}
+                className="test-address-row"
+                title={`${address} (${TEST_KINDS[kind].result})`}
+                onClick={() => setSimUrl(address)}
+              >
+                <span className={`status-badge badge-${TEST_KINDS[kind].tone}`}>
+                  {TEST_KINDS[kind].label}
+                </span>
+                <span className="test-address-name">{address}</span>
+                <button
+                  type="button"
+                  className="test-address-remove"
+                  aria-label={`${address} 삭제`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleRemoveAddress(address);
+                  }}
+                >
+                  ×
+                </button>
               </div>
-              <span className="policy-result">통과</span>
-            </div>
-            <div className="policy-legend-row">
-              <span className="status-badge badge-warning">화이트 의심</span>
-              <span className="policy-result">통과 (경고)</span>
-            </div>
-            <div className="policy-legend-row">
-              <div className="action-btn-group">
-                <span className="status-badge badge-danger">수동 차단</span>
-                <span className="status-badge badge-danger">AI 위험</span>
-              </div>
-              <span className="policy-result">차단</span>
-            </div>
-            <div className="policy-legend-row">
-              <span className="status-badge badge-warning">블랙 의심</span>
-              <span className="policy-result">차단 (경고)</span>
-            </div>
+            ))}
           </div>
         </div>
 
@@ -339,16 +372,8 @@ export default function TestLab() {
                 className="custom-input"
                 value={simUrl}
                 onChange={(e) => setSimUrl(e.target.value)}
-                placeholder="예: google.com 또는 등록된 도메인 선택"
-                list="testlab-domains"
+                placeholder="왼쪽 테스트 주소를 누르거나 직접 입력"
               />
-              <datalist id="testlab-domains">
-                {domainOptions.map((o) => (
-                  <option key={`${o.label}-${o.domain}`} value={o.domain}>
-                    {o.label}
-                  </option>
-                ))}
-              </datalist>
               <button
                 type="submit"
                 className="btn-action btn-primary btn-w-lg btn-form"
@@ -410,13 +435,13 @@ export default function TestLab() {
             {simState === "captive" && (
               <div className="info-box sim-captive">
                 <h3 className="dialog-title text-primary">
-                  내부망 캡티브 포털 인증
+                  가상 캡티브 포털 인증
                 </h3>
                 <form onSubmit={handleCaptiveLogin} className="dialog-form">
                   <input
                     type="text"
                     className="custom-input"
-                    placeholder="사번 / 아이디"
+                    placeholder="임의의 아이디"
                     value={empIdInput}
                     onChange={(e) => setEmpIdInput(e.target.value)}
                     required
@@ -424,7 +449,7 @@ export default function TestLab() {
                   <input
                     type="password"
                     className="custom-input"
-                    placeholder="비밀번호"
+                    placeholder="임의의 비밀번호"
                     value={empPwInput}
                     onChange={(e) => setEmpPwInput(e.target.value)}
                     required

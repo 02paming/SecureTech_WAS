@@ -84,7 +84,10 @@ def sync_pcap_json_files(sync_type="all"):
             # 💡 [수정] 통합 BlacklistAddr만 조회
             blacklists = [
                 p.blacklist_domain
-                for p in BlacklistAddr.objects.filter(deleted_at__isnull=True)
+                # 블랙 의심은 관리자 판단 전까지 차단하지 않으므로 엔진 목록에서 제외
+                for p in BlacklistAddr.objects.filter(deleted_at__isnull=True).exclude(
+                    source="의심"
+                )
             ]
 
             with open("blacklist_addr.json", "w", encoding="utf-8") as f:

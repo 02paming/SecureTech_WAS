@@ -419,6 +419,24 @@ def simulate_network_access(request):
         black_rule = BlacklistAddr.objects.filter(
             blacklist_domain__iexact=target, deleted_at__isnull=True
         ).first()
+        # 블랙 의심은 관리자 판단 전까지 통과시키고 AI 의심 트래픽으로 집계한다
+        if black_rule and black_rule.source == "의심":
+            if not is_test:
+                WebAccessLog.objects.create(
+                    online_list_log=o_log,
+                    target_url=target,
+                    access_flag="정상",
+                    access_time=now_t,
+                )
+            return Response(
+                {
+                    "status": "ALLOWED",
+                    "domain": url,
+                    "policy": BLACK_POLICY_LABELS["의심"],
+                    "message": "블랙 의심 도메인 - 관리자 판단 전까지 통과",
+                }
+            )
+
         if black_rule:
             if not is_test:
                 WebAccessLog.objects.create(

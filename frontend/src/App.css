@@ -1725,8 +1725,10 @@ textarea.custom-input {
 
 /* PAGE: 보안 테스트실 */
 .card-side {
+  display: flex;
   flex-shrink: 0;
-  width: 290px;
+  flex-direction: column;
+  width: 340px;
   margin: 0;
   overflow-y: auto;
 }
@@ -1739,24 +1741,70 @@ textarea.custom-input {
   margin: 8px 0 0;
 }
 
-.policy-legend {
+.test-address-head {
+  margin-top: 4px;
+}
+
+.test-address-form {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  margin-top: 8px;
-}
-
-.policy-legend-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 6px;
-}
-
-.policy-result {
   flex-shrink: 0;
+  gap: 8px;
+  margin: 8px 0;
+}
+
+.card-side .list-stack {
+  gap: 4px;
+}
+
+.test-address-row {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background-color: var(--bg-main);
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+.test-address-row:hover {
+  border-color: var(--color-primary);
+}
+
+.test-address-row .status-badge {
+  flex-shrink: 0;
+  width: 72px;
+}
+
+.test-address-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
   font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-main);
+}
+
+.test-address-remove {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  font-size: 14px;
+  line-height: 1;
   color: var(--text-muted);
+  background: transparent;
+  cursor: pointer;
+}
+
+.test-address-remove:hover {
+  color: var(--color-danger);
 }
 
 .card-flush {
@@ -1899,7 +1947,7 @@ textarea.custom-input {
 }
 
 .anim-packet.is-arrived {
-  left: calc(100% - 78px);
+  left: calc(100% - 118px);
 }
 
 .moving {
@@ -1915,7 +1963,7 @@ textarea.custom-input {
     left: 60px;
   }
   100% {
-    left: calc(100% - 78px);
+    left: calc(100% - 118px);
   }
 }
 
