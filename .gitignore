@@ -77,3 +77,4 @@ dkms.conf
 venv/
 .venv/
 node_modules/
+cache_data/
