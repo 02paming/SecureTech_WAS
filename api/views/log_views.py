@@ -394,12 +394,10 @@ def simulate_network_access(request):
             .split("/")[0]
         )
 
-        if (
-            target in DEFAULT_STATIC_WHITELIST
-            or WhitelistAddr.objects.filter(
-                whitelist_domain__iexact=target, deleted_at__isnull=True
-            ).exists()
-        ):
+        white_rule = WhitelistAddr.objects.filter(
+            whitelist_domain__iexact=target, deleted_at__isnull=True
+        ).first()
+        if target in DEFAULT_STATIC_WHITELIST or white_rule:
             if not is_test:
                 WebAccessLog.objects.create(
                     online_list_log=o_log,
@@ -411,13 +409,17 @@ def simulate_network_access(request):
                 {
                     "status": "ALLOWED",
                     "domain": url,
+                    "policy": WHITE_POLICY_LABELS.get(white_rule.source, white_rule.source)
+                    if white_rule
+                    else "시스템 기본 허용",
                     "message": "허용(화이트리스트) 도메인 - 보안 검사 스킵됨",
                 }
             )
 
-        if BlacklistAddr.objects.filter(
+        black_rule = BlacklistAddr.objects.filter(
             blacklist_domain__iexact=target, deleted_at__isnull=True
-        ).exists():
+        ).first()
+        if black_rule:
             if not is_test:
                 WebAccessLog.objects.create(
                     online_list_log=o_log,
@@ -430,6 +432,7 @@ def simulate_network_access(request):
                 {
                     "status": "BLOCKED",
                     "domain": url,
+                    "policy": BLACK_POLICY_LABELS.get(black_rule.source, black_rule.source),
                     "message": f"블랙리스트 도메인 차단됨 ({target})",
                 }
             )
@@ -459,6 +462,8 @@ def simulate_network_access(request):
                 {
                     "status": "BLOCKED",
                     "domain": url,
+                    "policy": "미등록 (CTI 자동 차단)",
+                    "ai_score": cti["score"],
                     "message": f"{cti['details']} - 자동 차단",
                 }
             )
@@ -471,7 +476,13 @@ def simulate_network_access(request):
                 access_time=now_t,
             )
         return Response(
-            {"status": "ALLOWED", "domain": url, "message": "정상 승인 완료"}
+            {
+                "status": "ALLOWED",
+                "domain": url,
+                "policy": "미등록 (CTI 통과)",
+                "ai_score": cti["score"],
+                "message": cti["details"],
+            }
         )
     except Exception as e:
         return Response({"status": "ERROR", "message": str(e)}, status=500)
@@ -573,22 +584,24 @@ def manage_eqp_run_time(request):
         return Response({"status": "error", "message": str(e)}, status=500)
 
 
+WHITE_POLICY_LABELS = {"USER": "수동 허용", "AI": "AI 안전", "의심": "화이트 의심"}
+BLACK_POLICY_LABELS = {"USER": "수동 차단", "AI": "AI 위험", "의심": "블랙 의심"}
+
+
 @api_view(["GET"])
 def get_integrated_logs(request):
     try:
         general_logs, ai_data = [], []
 
-        white_labels = {"USER": "수동 허용", "AI": "AI 안전", "의심": "화이트 의심"}
-        black_labels = {"USER": "수동 차단", "AI": "AI 위험", "의심": "블랙 의심"}
         policy_map = {}
         for domain, source in WhitelistAddr.objects.filter(
             deleted_at__isnull=True
         ).values_list("whitelist_domain", "source"):
-            policy_map[domain] = white_labels.get(source, source)
+            policy_map[domain] = WHITE_POLICY_LABELS.get(source, source)
         for domain, source in BlacklistAddr.objects.filter(
             deleted_at__isnull=True
         ).values_list("blacklist_domain", "source"):
-            policy_map[domain] = black_labels.get(source, source)
+            policy_map[domain] = BLACK_POLICY_LABELS.get(source, source)
 
         # 💡 [수정] 통합된 단일 WebAccessLog를 순회하여 처리
         for w in WebAccessLog.objects.select_related(

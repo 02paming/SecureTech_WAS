@@ -140,6 +140,7 @@ const MyPage = () => {
               <p className="card-subtitle">변경이 필요하면 관리자에게 요청하세요.</p>
             </div>
           </div>
+          <div className="info-rows">
           <div className="info-row">
             <span className="info-label">권한 등급</span>
             <div className="info-value">{renderRoleBadge()}</div>
@@ -172,140 +173,44 @@ const MyPage = () => {
             <span className="info-label">주민등록번호</span>
             <span className="info-value">{userData.jumin_no || "-"}</span>
           </div>
+          </div>
         </div>
 
         <div className="panel-col">
           <div className="card">
             <div className="card-header has-divider">
               <h3 className="card-title">연락처 정보</h3>
-              {!isEditing && (
-                <button
-                  type="button"
-                  onClick={handleEditStart}
-                  className="btn-action btn-neutral btn-w-md btn-header"
-                >
-                  정보 수정
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={handleEditStart}
+                className="btn-action btn-neutral btn-w-md btn-header"
+              >
+                정보 수정
+              </button>
             </div>
-            {!isEditing ? (
-              <>
-                <div className="info-row">
-                  <span className="info-label">이메일</span>
-                  <span className="info-value">{userData.email || "미입력"}</span>
-                </div>
-                <div className="info-row">
-                  <span className="info-label">연락처</span>
-                  <span className="info-value">
-                    {formatPhone(userData.phone_number)}
-                  </span>
-                </div>
-                <div className="info-row">
-                  <span className="info-label">거주지 주소</span>
-                  <span className="info-value">{userData.address || "미입력"}</span>
-                </div>
-              </>
-            ) : (
-              <form onSubmit={handleSave} className="auth-form">
-                <div className="form-group">
-                  <label className="form-label">이메일</label>
-                  <input
-                    type="email"
-                    name="email"
-                    className="custom-input"
-                    value={editForm.email}
-                    onChange={handleFormChange}
-                    required
-                  />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">연락처</label>
-                  <input
-                    type="text"
-                    name="phone_number"
-                    className="custom-input"
-                    value={editForm.phone_number}
-                    onChange={handleFormChange}
-                    maxLength={13}
-                    required
-                  />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">거주지 주소</label>
-                  <input
-                    type="text"
-                    name="address"
-                    className="custom-input"
-                    value={editForm.address}
-                    onChange={handleFormChange}
-                    required
-                  />
-                </div>
-                <div className="form-row">
-                  <div className="form-group">
-                    <label className="form-label">
-                      새 비밀번호<span className="form-hint">(변경 시에만)</span>
-                    </label>
-                    <input
-                      type="password"
-                      name="newPassword"
-                      autoComplete="new-password"
-                      className="custom-input"
-                      value={editForm.newPassword}
-                      onChange={handleFormChange}
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">새 비밀번호 확인</label>
-                    <input
-                      type="password"
-                      name="newPasswordConfirm"
-                      autoComplete="new-password"
-                      className="custom-input"
-                      value={editForm.newPasswordConfirm}
-                      onChange={handleFormChange}
-                    />
-                  </div>
-                </div>
-                <div className="form-group">
-                  <label className="form-label">
-                    현재 비밀번호 <span className="text-danger">*</span>
-                  </label>
-                  <input
-                    type="password"
-                    name="currentPassword"
-                    autoComplete="current-password"
-                    className="custom-input"
-                    placeholder="저장하려면 현재 비밀번호를 입력하세요."
-                    value={editForm.currentPassword}
-                    onChange={handleFormChange}
-                    required
-                  />
-                </div>
-                <div className="dialog-actions">
-                  <button
-                    type="button"
-                    className="btn-action btn-neutral btn-w-md btn-header"
-                    onClick={() => setIsEditing(false)}
-                  >
-                    취소
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={saving}
-                    className="btn-action btn-primary btn-w-md btn-header"
-                  >
-                    저장
-                  </button>
-                </div>
-              </form>
-            )}
+            <div className="info-rows">
+              <div className="info-row">
+                <span className="info-label">이메일</span>
+                <span className="info-value">{userData.email || "미입력"}</span>
+              </div>
+              <div className="info-row">
+                <span className="info-label">연락처</span>
+                <span className="info-value">
+                  {formatPhone(userData.phone_number)}
+                </span>
+              </div>
+              <div className="info-row">
+                <span className="info-label">거주지 주소</span>
+                <span className="info-value">{userData.address || "미입력"}</span>
+              </div>
+            </div>
           </div>
 
           <div className="card">
             <div className="card-header has-divider">
               <h3 className="card-title">단말 네트워크 상태</h3>
             </div>
+            <div className="info-rows">
             <div className="info-row">
               <span className="info-label">외부 인터넷</span>
               {userData.network_authenticated ? (
@@ -322,9 +227,111 @@ const MyPage = () => {
               <span className="info-label">인증 시각</span>
               <span className="info-value">{userData.network_auth_time || "-"}</span>
             </div>
+            </div>
           </div>
         </div>
       </div>
+
+      {isEditing && (
+        <div className="dialog-overlay">
+          <div className="dialog-box dialog-md">
+            <h3 className="dialog-title">연락처 정보 수정</h3>
+            <form onSubmit={handleSave} className="auth-form">
+              <div className="form-group">
+                <label className="form-label">이메일</label>
+                <input
+                  type="email"
+                  name="email"
+                  className="custom-input"
+                  value={editForm.email}
+                  onChange={handleFormChange}
+                  required
+                />
+              </div>
+              <div className="form-group">
+                <label className="form-label">연락처</label>
+                <input
+                  type="text"
+                  name="phone_number"
+                  className="custom-input"
+                  value={editForm.phone_number}
+                  onChange={handleFormChange}
+                  maxLength={13}
+                  required
+                />
+              </div>
+              <div className="form-group">
+                <label className="form-label">거주지 주소</label>
+                <input
+                  type="text"
+                  name="address"
+                  className="custom-input"
+                  value={editForm.address}
+                  onChange={handleFormChange}
+                  required
+                />
+              </div>
+              <div className="form-row">
+                <div className="form-group">
+                  <label className="form-label">
+                    새 비밀번호<span className="form-hint">(변경 시에만)</span>
+                  </label>
+                  <input
+                    type="password"
+                    name="newPassword"
+                    autoComplete="new-password"
+                    className="custom-input"
+                    value={editForm.newPassword}
+                    onChange={handleFormChange}
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">새 비밀번호 확인</label>
+                  <input
+                    type="password"
+                    name="newPasswordConfirm"
+                    autoComplete="new-password"
+                    className="custom-input"
+                    value={editForm.newPasswordConfirm}
+                    onChange={handleFormChange}
+                  />
+                </div>
+              </div>
+              <div className="form-group">
+                <label className="form-label">
+                  현재 비밀번호 <span className="text-danger">*</span>
+                </label>
+                <input
+                  type="password"
+                  name="currentPassword"
+                  autoComplete="current-password"
+                  className="custom-input"
+                  placeholder="저장하려면 현재 비밀번호를 입력하세요."
+                  value={editForm.currentPassword}
+                  onChange={handleFormChange}
+                  required
+                />
+              </div>
+              <div className="dialog-actions">
+                <button
+                  type="button"
+                  className="btn-action btn-neutral btn-w-md btn-header"
+                  onClick={() => setIsEditing(false)}
+                >
+                  취소
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="btn-action btn-primary btn-w-md btn-header"
+                >
+                  저장
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

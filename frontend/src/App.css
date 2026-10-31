@@ -1693,15 +1693,28 @@ textarea.custom-input {
   max-width: 1040px;
 }
 
+/* 왼쪽 카드와 오른쪽 묶음의 위아래 끝을 맞추고, 남는 높이는 줄마다 나눔 */
 .mypage-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  align-items: start;
   gap: 24px;
 }
 
 .mypage-grid .card {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
   margin: 0;
+}
+
+.info-rows {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+}
+
+.info-rows .info-row {
+  flex: 1;
 }
 
 @media (max-width: 768px) {
@@ -1724,6 +1737,26 @@ textarea.custom-input {
 
 .card-side .notice-box {
   margin: 8px 0 0;
+}
+
+.policy-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.policy-legend-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px;
+}
+
+.policy-result {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--text-muted);
 }
 
 .card-flush {

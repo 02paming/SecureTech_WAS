@@ -2,6 +2,9 @@ import axios from "axios";
 import { useEffect, useRef, useState } from "react";
 import PageHeader from "../../components/PageHeader";
 
+const WHITE_LABELS = { AI: "AI 안전", 의심: "화이트 의심" };
+const BLACK_LABELS = { AI: "AI 위험", 의심: "블랙 의심" };
+
 const cleanDomain = (url) => {
   if (!url) return "";
   return url.trim().toLowerCase().replace(/^(?:https?:\/\/)?(?:www\.)?/i, "").split("/")[0].split(":")[0];
@@ -21,6 +24,7 @@ export default function TestLab() {
   const [showModal, setShowModal] = useState(false);
 
   const [virtualLogs, setVirtualLogs] = useState([]);
+  const [domainOptions, setDomainOptions] = useState([]);
   const logsEndRef = useRef(null);
 
   const baseUrl = (
@@ -31,6 +35,26 @@ export default function TestLab() {
   useEffect(() => {
     logsEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [virtualLogs]);
+
+  // 등록된 정책 도메인을 종류별로 골라 시험할 수 있게 불러옴
+  useEffect(() => {
+    Promise.all([
+      axios.get(`${baseUrl}/api/policies/whitelist/`),
+      axios.get(`${baseUrl}/api/policies/blocklist/`),
+      axios.get(`${baseUrl}/api/policies/ai/`),
+    ])
+      .then(([white, black, ai]) => {
+        setDomainOptions([
+          ...white.data.map((d) => ({ domain: d.domain, label: "수동 허용" })),
+          ...black.data.map((d) => ({ domain: d.blacklist_domain, label: "수동 차단" })),
+          ...(ai.data.ai_data || []).map((d) => ({
+            domain: d.domain,
+            label: (d.source === "white" ? WHITE_LABELS : BLACK_LABELS)[d.ai_status] || d.ai_status,
+          })),
+        ]);
+      })
+      .catch(() => {});
+  }, [baseUrl]);
 
   const addLog = (message, type = "info") => {
     const time = new Date().toLocaleTimeString("ko-KR", { hour12: false });
@@ -47,7 +71,7 @@ export default function TestLab() {
     addLog(`IP가 ${target} (으)로 재설정되었습니다. (세션 초기화)`, "info");
   };
 
-  const showSimulationResult = (status, title, message) => {
+  const showSimulationResult = (status, title, message, policy = "-") => {
     setSimState(status === "success" ? "success" : "blocked");
     setReportData({
       ip: activeIp,
@@ -55,6 +79,7 @@ export default function TestLab() {
       status,
       title,
       message,
+      policy,
     });
     setTimeout(() => setShowModal(true), 600);
   };
@@ -126,19 +151,26 @@ export default function TestLab() {
         target_url: domain,
         is_test: true,
       });
+      const policy = res.data?.policy || "-";
+      const isSuspicious = policy.includes("의심");
       if (res.data?.status === "BLOCKED") {
-        addLog(`방화벽 룰킷 적용: [${domain}] 차단 완료`, "danger");
+        addLog(`[정책] ${policy}: [${domain}] 차단 완료`, "danger");
         showSimulationResult(
           "blocked",
-          "차단 정책 위반",
+          isSuspicious ? "AI 의심 차단" : "차단 정책 위반",
           res.data?.message || "블랙리스트에 등록된 도메인입니다.",
+          policy,
         );
       } else {
-        addLog(`접근 허용: [${domain}] 트래픽 통과`, "success");
+        addLog(
+          `[정책] ${policy}: [${domain}] 트래픽 통과`,
+          isSuspicious ? "warning" : "success",
+        );
         showSimulationResult(
           "success",
-          "정상 접근 승인",
-          "모든 보안 검사를 통과하여 통신이 허용되었습니다.",
+          isSuspicious ? "AI 의심 통과" : "정상 접근 승인",
+          res.data?.message || "모든 보안 검사를 통과하여 통신이 허용되었습니다.",
+          policy,
         );
       }
     } catch {
@@ -216,32 +248,52 @@ export default function TestLab() {
 
       <div className="panel-row">
         <div className="card card-side">
-          <h4 className="info-box-title text-primary">제로 트러스트 보안 규칙</h4>
-          <ul className="notice-list">
+          <h4 className="info-box-title text-primary">판정 순서</h4>
+          <ol className="notice-list">
             <li>
-              <strong className="text-primary">192.168.3.x 보안망:</strong>{" "}
-              접속 시 캡티브 유도
+              <strong>망 구분:</strong> 사외망은 관제 대상이 아니며 관제 서버 접근은 차단
             </li>
             <li>
-              <strong className="text-danger">192.168.2.x 사원망:</strong>{" "}
-              접속 시 캡티브 유도
+              <strong>MAC 검사:</strong> 사내망에서 MAC이 변조되면 물리 격리
             </li>
             <li>
-              <strong className="text-success">내부망(인증후):</strong>{" "}
-              위협/블랙리스트 차단
+              <strong>망분리:</strong> 사원망(192.168.2.x)의 관제 서버 접근 차단
             </li>
             <li>
-              <strong className="text-warning">사외망:</strong>{" "}
-              관제서버 접근 절대 차단
+              <strong>캡티브 인증:</strong> 미인증 단말은 인증 요구. 웹 로그인과 별개
             </li>
-          </ul>
+            <li>
+              <strong>등록 정책:</strong> 허용·차단 목록과 AI 판별 결과 적용
+            </li>
+            <li>
+              <strong>CTI 조회:</strong> 미등록 도메인은 위협 점수 50점 이상이면 자동 차단
+            </li>
+          </ol>
 
-          <h4 className="info-box-title text-warning">MAC 스푸핑 탐지</h4>
-          <div className="notice-box tone-warning">
-            <p className="notice-text">
-              <b>[MAC 변조]</b> 체크 시 L2 계층 변조로 판단하여 물리적으로
-              차단(격리)합니다.
-            </p>
+          <h4 className="info-box-title text-primary">정책별 결과</h4>
+          <div className="policy-legend">
+            <div className="policy-legend-row">
+              <div className="action-btn-group">
+                <span className="status-badge badge-success">수동 허용</span>
+                <span className="status-badge badge-success">AI 안전</span>
+              </div>
+              <span className="policy-result">통과</span>
+            </div>
+            <div className="policy-legend-row">
+              <span className="status-badge badge-warning">화이트 의심</span>
+              <span className="policy-result">통과 (경고)</span>
+            </div>
+            <div className="policy-legend-row">
+              <div className="action-btn-group">
+                <span className="status-badge badge-danger">수동 차단</span>
+                <span className="status-badge badge-danger">AI 위험</span>
+              </div>
+              <span className="policy-result">차단</span>
+            </div>
+            <div className="policy-legend-row">
+              <span className="status-badge badge-warning">블랙 의심</span>
+              <span className="policy-result">차단 (경고)</span>
+            </div>
           </div>
         </div>
 
@@ -287,8 +339,16 @@ export default function TestLab() {
                 className="custom-input"
                 value={simUrl}
                 onChange={(e) => setSimUrl(e.target.value)}
-                placeholder="예: google.com"
+                placeholder="예: google.com 또는 등록된 도메인 선택"
+                list="testlab-domains"
               />
+              <datalist id="testlab-domains">
+                {domainOptions.map((o) => (
+                  <option key={`${o.label}-${o.domain}`} value={o.domain}>
+                    {o.label}
+                  </option>
+                ))}
+              </datalist>
               <button
                 type="submit"
                 className="btn-action btn-primary btn-w-lg btn-form"
@@ -427,16 +487,20 @@ export default function TestLab() {
           <div className="dialog-box">
             <h3 className="dialog-title">분석 리포트</h3>
             <span
-              className={`status-badge ${reportData.status === "success" ? "badge-success" : "badge-danger"}`}
+              className={`status-badge ${reportData.policy.includes("의심") ? "badge-warning" : reportData.status === "success" ? "badge-success" : "badge-danger"}`}
             >
               {reportData.status === "success" ? "연결 허용됨" : "연결 차단됨"}
             </span>
             <div>
               <div className="info-row is-compact">
                 <span className="info-label">판별 결과</span>
-                <strong className={`info-value ${reportData.status === "success" ? "text-success" : "text-danger"}`}>
+                <strong className={`info-value ${reportData.policy.includes("의심") ? "text-warning" : reportData.status === "success" ? "text-success" : "text-danger"}`}>
                   {reportData.title}
                 </strong>
+              </div>
+              <div className="info-row is-compact">
+                <span className="info-label">적용 정책</span>
+                <span className="info-value">{reportData.policy}</span>
               </div>
               <div className="info-row is-compact">
                 <span className="info-label">출발지 (Source)</span>
