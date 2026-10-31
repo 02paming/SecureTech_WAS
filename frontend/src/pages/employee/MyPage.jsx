@@ -51,7 +51,7 @@ const MyPage = () => {
       navigate("/");
       return;
     }
-    setTimeout(() => {
+    const timer = setTimeout(() => {
       try {
         const parsedUser = JSON.parse(savedUser);
         setUserData(parsedUser);
@@ -64,6 +64,7 @@ const MyPage = () => {
         navigate("/");
       }
     }, 0);
+    return () => clearTimeout(timer);
   }, [navigate, fetchMyInfo]);
 
   if (loading || !userData)

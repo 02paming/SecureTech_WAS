@@ -60,6 +60,10 @@ export default function TestLab() {
   const [newAddress, setNewAddress] = useState("");
   const [newKind, setNewKind] = useState("manual_allow");
   const logsEndRef = useRef(null);
+  const simTimer = useRef(null);
+
+  // 시뮬레이션 도중 화면을 떠나면 예약된 작업을 취소
+  useEffect(() => () => clearTimeout(simTimer.current), []);
 
   useEffect(() => {
     logsEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -108,7 +112,7 @@ export default function TestLab() {
       message,
       policy,
     });
-    setTimeout(() => setShowModal(true), 600);
+    simTimer.current = setTimeout(() => setShowModal(true), 600);
   };
 
   const executeSimulation = (ip, domain, hasAuth) => {
@@ -198,7 +202,8 @@ export default function TestLab() {
     setSimState("animating");
     addLog(`[${ip}] [${domain}] 패킷 전송 시작...`, "warning");
 
-    setTimeout(() => {
+    clearTimeout(simTimer.current);
+    simTimer.current = setTimeout(() => {
       executeSimulation(ip, domain, isAlreadyAuthenticated);
     }, 1500);
   };
@@ -209,7 +214,8 @@ export default function TestLab() {
     setIsAlreadyAuthenticated(true);
     addLog(`사용자(${empIdInput}) 가상 인증 성공. 패킷 재전송...`, "success");
     setSimState("animating");
-    setTimeout(() => executeSimulation(activeIp, cleanDomain(simUrl), true), 1500);
+    clearTimeout(simTimer.current);
+    simTimer.current = setTimeout(() => executeSimulation(activeIp, cleanDomain(simUrl), true), 1500);
   };
 
   const resetTest = () => {

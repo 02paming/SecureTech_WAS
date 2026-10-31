@@ -19,6 +19,7 @@ import {
 const Dashboard = () => {
   const navigate = useNavigate();
   const chartWrapperRef = useRef(null);
+  const fetchSeq = useRef(0);
 
   const [loading, setLoading] = useState(false);
   const [lastUpdated, setLastUpdated] = useState("");
@@ -52,11 +53,14 @@ const Dashboard = () => {
   );
 
   const fetchData = useCallback(async () => {
+    // 시간 간격을 빠르게 바꿔도 늦게 온 이전 응답이 최신 값을 덮어쓰지 않게 한다
+    const seq = ++fetchSeq.current;
     setLoading(true);
     try {
       const rS = await axios.get(
         `${baseUrl}/api/dashboard/traffic-stats/?interval=${timeInterval}`,
       );
+      if (seq !== fetchSeq.current) return;
       if (rS.data.status === "success") {
         setChartData(rS.data.data || []);
         setTopDomains(
@@ -83,7 +87,7 @@ const Dashboard = () => {
     } catch (e) {
       console.error(e);
     } finally {
-      setLoading(false);
+      if (seq === fetchSeq.current) setLoading(false);
     }
   }, [baseUrl, timeInterval]);
 
