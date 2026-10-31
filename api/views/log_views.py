@@ -27,6 +27,7 @@ from .ai_services import (
 )
 from .utils import (
     DEFAULT_STATIC_WHITELIST,
+    SERVER_ERROR_MESSAGE,
     extract_ip_suffix,
     logger,
     sync_pcap_json_files,
@@ -102,7 +103,7 @@ def report_violation(request):
         return Response({"status": "success"}, status=status.HTTP_201_CREATED)
     except Exception as e:
         logger.error(f"위협 차단 신고 처리 오류: {e}\n{traceback.format_exc()}")
-        return Response({"status": "error", "message": str(e)}, status=500)
+        return Response({"status": "error", "message": SERVER_ERROR_MESSAGE}, status=500)
 
 
 @api_view(["GET"])
@@ -113,7 +114,7 @@ def get_threat_logs(request):
         bl_logs = (
             WebAccessLog.objects.filter(access_flag="차단")
             .select_related("online_list_log__employee")
-            .order_by("-access_time")
+            .order_by("-access_time")[:200]
         )
         for log in bl_logs:
             violator_text = "내부 단말"
@@ -362,7 +363,7 @@ def get_traffic_stats(request):
         )
     except Exception as e:
         logger.error(f"대시보드 통계 조회 오류: {e}")
-        return Response({"status": "error", "message": str(e)}, status=500)
+        return Response({"status": "error", "message": SERVER_ERROR_MESSAGE}, status=500)
 
 
 @api_view(["POST"])
@@ -401,7 +402,7 @@ def simulate_network_access(request):
             if not is_test:
                 WebAccessLog.objects.create(
                     online_list_log=o_log,
-                    target_url=url,
+                    target_url=target,
                     access_flag="정상",
                     access_time=now_t,
                 )
@@ -489,7 +490,7 @@ def simulate_network_access(request):
         if not is_test:
             WebAccessLog.objects.create(
                 online_list_log=o_log,
-                target_url=url,
+                target_url=target,
                 access_flag="정상",
                 access_time=now_t,
             )
@@ -503,7 +504,7 @@ def simulate_network_access(request):
             }
         )
     except Exception as e:
-        return Response({"status": "ERROR", "message": str(e)}, status=500)
+        return Response({"status": "ERROR", "message": SERVER_ERROR_MESSAGE}, status=500)
 
 
 @api_view(["POST"])
@@ -554,7 +555,7 @@ def test_mac_spoofing(request):
         )
     except Exception as e:
         logger.error(f"MAC 스푸핑 오류: {e}\n{traceback.format_exc()}")
-        return Response({"status": "ERROR", "message": str(e)}, status=500)
+        return Response({"status": "ERROR", "message": SERVER_ERROR_MESSAGE}, status=500)
 
 
 @api_view(["GET", "POST"])
@@ -599,7 +600,7 @@ def manage_eqp_run_time(request):
             }
         )
     except Exception as e:
-        return Response({"status": "error", "message": str(e)}, status=500)
+        return Response({"status": "error", "message": SERVER_ERROR_MESSAGE}, status=500)
 
 
 WHITE_POLICY_LABELS = {"USER": "수동 허용", "AI": "AI 안전", "의심": "화이트 의심"}
@@ -677,4 +678,4 @@ def get_integrated_logs(request):
             {"status": "success", "general_logs": general_logs, "ai_data": ai_data}
         )
     except Exception as e:
-        return Response({"status": "error", "message": str(e)}, status=500)
+        return Response({"status": "error", "message": SERVER_ERROR_MESSAGE}, status=500)

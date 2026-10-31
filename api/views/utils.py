@@ -1,3 +1,4 @@
+import hashlib
 import json
 import logging
 import re
@@ -7,7 +8,8 @@ import urllib.request
 
 file_lock = threading.Lock()
 
-from django.db import connection
+from django.core.cache import cache
+from django.db import connection, connections
 
 # 💡 [수정] 통합된 정책 모델 2개와 OnlineList만 import
 from ..models import BlacklistAddr, OnlineList, WhitelistAddr
@@ -21,7 +23,10 @@ DEFAULT_STATIC_WHITELIST = {
     "securetech.co.kr",
     "gw.st.co.kr",
 }
-DYNAMIC_WHITELIST, BLOCKED_EMP_IDS = set(), set()
+
+# DB 오류 원문에는 개인정보가 섞일 수 있으므로 화면에는 이 문구만 보낸다
+SERVER_ERROR_MESSAGE = "요청을 처리하지 못했습니다. 잠시 후 다시 시도해 주세요."
+DUPLICATE_MEMBER_MESSAGE = "이미 등록된 아이디, 이메일, 전화번호 또는 주민등록번호입니다."
 
 
 def format_jumin_and_birth(jumin):
@@ -68,6 +73,23 @@ def save_online_session(emp, sfx, now):
                     f"INSERT INTO {t} (employee_id,online_ip,login_time) VALUES (%s,%s,%s)",
                     [emp.employee_number, sfx, now],
                 )
+
+
+def _blocked_key(emp_id):
+    # 입력값을 그대로 키로 쓰지 않도록 해시로 고정 길이 키를 만든다
+    return "blocked_emp:" + hashlib.sha256(str(emp_id).encode()).hexdigest()
+
+
+def is_emp_blocked(emp_id):
+    return cache.get(_blocked_key(emp_id)) is not None
+
+
+def block_emp(emp_id):
+    cache.set(_blocked_key(emp_id), True, timeout=None)
+
+
+def unblock_emp(emp_id):
+    cache.delete(_blocked_key(emp_id))
 
 
 def resolve_domain_ip(domain):
@@ -167,6 +189,17 @@ def sync_expire_to_pcap(emp_id, kick_ip):
         )
     except Exception as e:
         logger.error(f"Expire 킥 실패: {e}")
+
+
+def sync_pcap_json_files_in_background():
+    def run():
+        try:
+            sync_pcap_json_files()
+        finally:
+            # 스레드가 연 DB 연결은 자동으로 재사용되지 않으므로 바로 닫는다
+            connections.close_all()
+
+    threading.Thread(target=run).start()
 
 
 def notify_pcap_delta(sync_type, action, domain):

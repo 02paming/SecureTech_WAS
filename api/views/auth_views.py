@@ -1,9 +1,9 @@
 import os
 import re
-import threading
 
 import pyotp
 from django.contrib.auth.hashers import check_password, make_password
+from django.db import IntegrityError
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.decorators import api_view
@@ -11,15 +11,19 @@ from rest_framework.response import Response
 
 from ..models import Employees, OnlineList, ProspectiveMembers
 from .utils import (
-    BLOCKED_EMP_IDS,
+    DUPLICATE_MEMBER_MESSAGE,
+    SERVER_ERROR_MESSAGE,
     RESTRICTED_IDS,
     extract_ip_suffix,
     format_jumin_and_birth,
     get_client_ip,
     logger,
     save_online_session,
-    sync_pcap_json_files,
+    is_emp_blocked,
+    sync_pcap_json_files_in_background,
 )
+
+DUPLICATE_CHECK_FIELDS = {"member_id", "email", "phone_number", "jumin_no"}
 
 
 @api_view(["POST"])
@@ -45,13 +49,26 @@ def apply_signup(request):
             date_of_request=timezone.now().date(),
         )
         return Response({"status": "success"}, status=status.HTTP_201_CREATED)
+    except IntegrityError:
+        return Response(
+            {"error": DUPLICATE_MEMBER_MESSAGE}, status=status.HTTP_400_BAD_REQUEST
+        )
     except Exception as e:
-        return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        logger.error("가입 신청 실패: %s", e)
+        return Response(
+            {"error": SERVER_ERROR_MESSAGE}, status=status.HTTP_400_BAD_REQUEST
+        )
 
 
 @api_view(["POST"])
 def check_duplicate(request):
     field, value = request.data.get("field"), str(request.data.get("value", "")).strip()
+    # 정해진 항목만 조회한다. 그대로 쓰면 비밀번호 같은 컬럼도 조회 조건이 될 수 있다
+    if field not in DUPLICATE_CHECK_FIELDS:
+        return Response(
+            {"error": "확인할 수 없는 항목입니다."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
     if field == "member_id" and value.lower() in RESTRICTED_IDS:
         return Response(
             {
@@ -85,7 +102,7 @@ def check_duplicate(request):
 @api_view(["POST"])
 def login(request):
     emp_id = request.data.get("employee_id") or request.data.get("member_id")
-    if str(emp_id) in BLOCKED_EMP_IDS:
+    if is_emp_blocked(emp_id):
         return Response(
             {"status": "error", "message": "관리자에 의해 접근이 제한된 계정입니다."},
             status=status.HTTP_403_FORBIDDEN,
@@ -235,7 +252,7 @@ def captive_login(request):
     emp_id = request.data.get("employee_id")
     is_test = request.data.get("is_test", False)  # 💡 테스트 플래그 확인
 
-    if str(emp_id) in BLOCKED_EMP_IDS:
+    if is_emp_blocked(emp_id):
         return Response(
             {
                 "status": "error",
@@ -256,7 +273,7 @@ def captive_login(request):
                 save_online_session(
                     employee, extract_ip_suffix(client_ip), timezone.now()
                 )
-                threading.Thread(target=sync_pcap_json_files).start()
+                sync_pcap_json_files_in_background()
             except Exception as e:
                 logger.error("캡티브 포털 로깅 실패: %s", e)
 

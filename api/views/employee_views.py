@@ -1,5 +1,6 @@
 from django.core.cache import cache
 from django.db.models import Avg
+from django.db import IntegrityError
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.decorators import api_view
@@ -16,7 +17,11 @@ from ..models import (
 )
 from .ai_services import generate_advisor_message
 from .utils import (
-    BLOCKED_EMP_IDS,
+    DUPLICATE_MEMBER_MESSAGE,
+    SERVER_ERROR_MESSAGE,
+    block_emp,
+    is_emp_blocked,
+    unblock_emp,
     format_jumin_and_birth,
     logger,
     sync_expire_to_pcap,
@@ -74,8 +79,15 @@ def approve_member(request):
         return Response(
             {"error": "대기자를 찾을 수 없습니다."}, status=status.HTTP_404_NOT_FOUND
         )
+    except IntegrityError:
+        return Response(
+            {"error": DUPLICATE_MEMBER_MESSAGE}, status=status.HTTP_400_BAD_REQUEST
+        )
     except Exception as e:
-        return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        logger.error("가입 승인 실패: %s", e)
+        return Response(
+            {"error": SERVER_ERROR_MESSAGE}, status=status.HTTP_400_BAD_REQUEST
+        )
 
 
 @api_view(["POST"])
@@ -88,7 +100,10 @@ def reject_member(request):
             {"error": "대기자를 찾을 수 없습니다."}, status=status.HTTP_404_NOT_FOUND
         )
     except Exception as e:
-        return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        logger.error("가입 반려 실패: %s", e)
+        return Response(
+            {"error": SERVER_ERROR_MESSAGE}, status=status.HTTP_400_BAD_REQUEST
+        )
 
 
 @api_view(["GET"])
@@ -202,7 +217,7 @@ def get_employee_auth_status(request):
             if not emp or emp.deleted_at or emp.employee_id in seen_emps:
                 continue
             seen_emps.add(emp.employee_id)
-            is_blocked = str(emp.employee_id) in BLOCKED_EMP_IDS
+            is_blocked = is_emp_blocked(emp.employee_id)
             current_ym = (
                 emp.hire_date.strftime("%Y%m")
                 if getattr(emp, "hire_date", None)
@@ -310,13 +325,15 @@ def get_employee_security_detail(request, emp_id):
                 item["is_mismatch"] = True
                 item["mismatch_mac"] = mismatch_map[item["log_id"]]
 
-        recent_violations = []
+        recent_violations, violation_count, normal_access_count = [], 0, 0
         if log_ids:
             try:
                 # 💡 [수정] WebAccessLog에서 "차단" 이력만 추출
-                v_qs = WebAccessLog.objects.filter(
+                v_base = WebAccessLog.objects.filter(
                     online_list_log_id__in=log_ids, access_flag="차단"
-                ).order_by("-access_time")
+                )
+                violation_count = v_base.count()
+                v_qs = v_base.order_by("-access_time")[:1000]
                 for v in v_qs:
                     domain_val = getattr(v, "target_url", "-") or "-"
                     v_time = (
@@ -343,14 +360,15 @@ def get_employee_security_detail(request, emp_id):
             except Exception:
                 pass
 
-        violation_count = len(recent_violations)
         web_access_list = []
         if log_ids:
             try:
                 # 💡 [수정] WebAccessLog에서 "정상" 접근만 추출
-                w_qs = WebAccessLog.objects.filter(
+                w_base = WebAccessLog.objects.filter(
                     online_list_log_id__in=log_ids, access_flag="정상"
-                ).order_by("-access_time")[:1000]
+                )
+                normal_access_count = w_base.count()
+                w_qs = w_base.order_by("-access_time")[:1000]
                 for w in w_qs:
                     w_time = (
                         w.access_time.strftime("%Y-%m-%d %H:%M:%S")
@@ -377,14 +395,13 @@ def get_employee_security_detail(request, emp_id):
             except Exception:
                 pass
 
-        normal_access_count = len(web_access_list)
         external_access_logs = sorted(
             recent_violations + web_access_list,
             key=lambda x: x.get("time", ""),
             reverse=True,
         )
         security_score = max(
-            0, 100 - (len(recent_violations) * 10) - (mismatch_count * 15)
+            0, 100 - (violation_count * 10) - (mismatch_count * 15)
         )
         current_mac = (
             online_session.online_mac_addr
@@ -401,7 +418,7 @@ def get_employee_security_detail(request, emp_id):
             avg_ai_score = score_agg.get("ai_score__avg") or 0.0
 
         advisor_message = generate_advisor_message(
-            security_score, mismatch_count, len(recent_violations), avg_ai_score
+            security_score, mismatch_count, violation_count, avg_ai_score
         )
 
         return Response(
@@ -445,7 +462,9 @@ def get_employee_security_detail(request, emp_id):
         )
     except Exception as e:
         logger.error("사원 상세 보안 조회 실패: %s", e)
-        return Response({"status": "error", "message": str(e)}, status=500)
+        return Response(
+            {"status": "error", "message": SERVER_ERROR_MESSAGE}, status=500
+        )
 
 
 @api_view(["POST"])
@@ -457,14 +476,15 @@ def block_employee(request):
         )
         if not emp_id:
             return Response({"error": "사원 ID 필수"}, status=400)
-        BLOCKED_EMP_IDS.add(str(emp_id))
+        block_emp(emp_id)
         OnlineList.objects.filter(employee__employee_id=emp_id).delete()
         sync_expire_to_pcap(emp_id, kick_ip)
         return Response(
             {"status": "success", "message": f"사원({emp_id}) 차단 및 킥 완료"}
         )
     except Exception as e:
-        return Response({"error": str(e)}, status=500)
+        logger.error("사원 차단 처리 실패: %s", e)
+        return Response({"error": SERVER_ERROR_MESSAGE}, status=500)
 
 
 @api_view(["POST"])
@@ -473,8 +493,9 @@ def unblock_employee(request):
         emp_id = request.data.get("employee_id")
         if not emp_id:
             return Response({"error": "사원 ID 필수"}, status=400)
-        BLOCKED_EMP_IDS.discard(str(emp_id))
+        unblock_emp(emp_id)
         sync_pcap_json_files("all")
         return Response({"status": "success", "message": "차단 해제 완료"})
     except Exception as e:
-        return Response({"error": str(e)}, status=500)
+        logger.error("사원 차단 처리 실패: %s", e)
+        return Response({"error": SERVER_ERROR_MESSAGE}, status=500)

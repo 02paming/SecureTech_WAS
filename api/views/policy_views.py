@@ -9,7 +9,13 @@ from rest_framework.response import Response
 
 from api.models import AiModelMetrics, BlacklistAddr, Employees, WhitelistAddr
 
-from .utils import get_client_ip, notify_pcap_delta, sync_pcap_json_files
+from .utils import (
+    SERVER_ERROR_MESSAGE,
+    get_client_ip,
+    logger,
+    notify_pcap_delta,
+    sync_pcap_json_files,
+)
 
 
 def sanitize_domain(raw_domain):
@@ -309,7 +315,8 @@ def promote_ai_policy(request):
     except ValueError as e:
         return Response({"error": str(e)}, status=400)
     except Exception as e:
-        return Response({"error": str(e)}, status=500)
+        logger.error("AI 정책 처리 실패: %s", e)
+        return Response({"error": SERVER_ERROR_MESSAGE}, status=500)
 
 
 @api_view(["GET"])
@@ -340,7 +347,8 @@ def get_ai_policies(request):
         data.sort(key=lambda x: x["detect_time"], reverse=True)
         return Response({"status": "success", "ai_data": data})
     except Exception as e:
-        return Response({"error": str(e)}, status=500)
+        logger.error("AI 정책 처리 실패: %s", e)
+        return Response({"error": SERVER_ERROR_MESSAGE}, status=500)
 
 
 @api_view(["GET"])
@@ -367,4 +375,5 @@ def get_ai_model_metrics(request):
             )
         return Response({"status": "success", "metrics": metrics})
     except Exception as e:
-        return Response({"error": str(e)}, status=500)
+        logger.error("AI 정책 처리 실패: %s", e)
+        return Response({"error": SERVER_ERROR_MESSAGE}, status=500)
