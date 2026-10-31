@@ -2110,8 +2110,7 @@ textarea.custom-input {
 
 .st-hero-card,
 .st-board-card,
-.st-panel,
-.st-arch-card {
+.st-panel {
   border: 1px solid var(--border-color);
   border-radius: var(--radius-card);
   box-shadow: var(--shadow-sm);
@@ -2119,8 +2118,21 @@ textarea.custom-input {
 }
 
 .st-hero-card {
-  padding: 48px 40px 36px;
-  text-align: center;
+  padding: 24px;
+}
+
+.st-hero-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 24px;
+}
+
+.st-hero-main {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 16px;
 }
 
 .st-badge {
@@ -2148,8 +2160,7 @@ textarea.custom-input {
 }
 
 .st-hero-desc {
-  max-width: 720px;
-  margin: 0 auto 36px;
+  margin: 0;
   font-size: 14px;
   line-height: 1.65;
   color: var(--text-muted);
@@ -2157,7 +2168,7 @@ textarea.custom-input {
 
 .st-metrics-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
   text-align: left;
 }
@@ -2194,14 +2205,39 @@ textarea.custom-input {
   color: var(--text-title);
 }
 
-.st-arch-grid {
+.st-flow {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 16px;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 24px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
-.st-arch-card {
-  padding: 20px;
+.st-flow-step {
+  position: relative;
+  padding: 16px;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  box-shadow: var(--shadow-sm);
+  background-color: var(--bg-card);
+}
+
+.st-flow-step:not(:last-child)::after {
+  content: "→";
+  position: absolute;
+  top: 50%;
+  right: -19px;
+  font-size: 14px;
+  color: var(--text-muted);
+  transform: translateY(-50%);
+}
+
+.st-flow-no {
+  margin-bottom: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-primary);
 }
 
 .st-arch-name {
@@ -2219,7 +2255,7 @@ textarea.custom-input {
 
 .st-bottom-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
   margin-top: 24px;
 }
@@ -2337,11 +2373,16 @@ textarea.custom-input {
 }
 
 @media (max-width: 900px) {
+  .st-hero-grid,
+  .st-flow,
   .st-metrics-grid,
-  .st-arch-grid,
   .st-bottom-grid,
   .st-res-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .st-flow-step:not(:last-child)::after {
+    display: none;
   }
 
   .st-subnav {

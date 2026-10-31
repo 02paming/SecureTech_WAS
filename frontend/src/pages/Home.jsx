@@ -1,5 +1,24 @@
 import { useState } from "react";
 
+const FLOW_STEPS = [
+  {
+    name: "트래픽 감시",
+    desc: "L3 스위치가 미러링한 패킷에서 C 기반 Libpcap 엔진이 HTTP 접속의 목적지를 확인합니다.",
+  },
+  {
+    name: "정책 대조",
+    desc: "허용·차단 정책과 비교합니다. 블랙 의심은 관리자 판단 전까지 통과시키고 따로 집계합니다.",
+  },
+  {
+    name: "위협 평판 분석",
+    desc: "미등록 도메인은 VirusTotal 점수로 분석하고, 50점 이상이면 차단 정책에 자동 등록합니다.",
+  },
+  {
+    name: "조치와 기록",
+    desc: "차단 세션은 TCP RST로 끊고 Discord로 경보하며, 접속 로그는 5년간 보관합니다.",
+  },
+];
+
 const Home = ({ user }) => {
   const [activeTab, setActiveTab] = useState("intro");
   const [selectedNotice, setSelectedNotice] = useState(null);
@@ -125,7 +144,7 @@ const Home = ({ user }) => {
         category: "일반",
         title: newPost.title,
         author: newPost.author,
-        date: "2026-10-23",
+        date: new Date().toLocaleDateString("sv-SE"),
         comments: 0,
         content: newPost.content,
       },
@@ -169,87 +188,69 @@ const Home = ({ user }) => {
         {activeTab === "intro" && (
           <>
             <div className="st-hero-card">
-              <div className="st-badge">
-                Enterprise Security &amp; Zero-Trust Architecture
-              </div>
-              <h1 className="st-hero-title">
-                보안의 경계를 넘어서는 지능형 패킷 관제
-                <br />
-                <span>SecureTech</span> 통합 보안 플랫폼
-              </h1>
-              <p className="st-hero-desc">
-                사내 임직원 단말의 네트워크 세션을 실시간으로 스니핑하고, 비인가
-                접근 시 0.01초 이내에 TCP RST 패킷 인젝션 및 캡티브 포털
-                리다이렉트를 수행하여 내부 정보 유출과 외부 해킹 위협을
-                방어합니다.
-              </p>
+              <div className="st-hero-grid">
+                <div className="st-hero-main">
+                  <div className="st-badge">사내망 통합 보안 관제</div>
+                  <h1 className="st-hero-title">
+                    사내망 접속을 실시간으로 판단하고 차단하는
+                    <br />
+                    <span>SecureTech</span> 통합 보안 플랫폼
+                  </h1>
+                  <p className="st-hero-desc">
+                    L3 스위치가 미러링한 사내망 HTTP 접속을 실시간으로 감시하고,
+                    차단 정책에 걸린 세션은 TCP RST로 즉시 끊습니다. 미등록
+                    도메인은 VirusTotal 위협 점수로 판단해 정책에 자동으로
+                    반영합니다.
+                  </p>
+                </div>
 
-              <div className="st-metrics-grid">
-                <div className="st-metric-box">
-                  <div className="st-metric-label">패킷 차단 응답속도</div>
-                  <div className="st-metric-val text-primary">
-                    &lt; 0.01 sec
+                <div className="st-metrics-grid">
+                  <div className="st-metric-box">
+                    <div className="st-metric-label">패킷 차단 응답속도</div>
+                    <div className="st-metric-val text-primary">
+                      &lt; 0.01 sec
+                    </div>
+                    <div className="st-metric-sub">
+                      Raw Socket TCP RST 즉시 격리
+                    </div>
                   </div>
-                  <div className="st-metric-sub">
-                    Raw Socket TCP RST 즉시 격리
+                  <div className="st-metric-box">
+                    <div className="st-metric-label">보안 관제 가동률</div>
+                    <div className="st-metric-val text-success">99.98 %</div>
+                    <div className="st-metric-sub">
+                      24/365 무중단 Libpcap 스니핑
+                    </div>
                   </div>
-                </div>
-                <div className="st-metric-box">
-                  <div className="st-metric-label">보안 관제 가동률</div>
-                  <div className="st-metric-val text-success">
-                    99.98 %
+                  <div className="st-metric-box">
+                    <div className="st-metric-label">평균 일일 패킷 분석량</div>
+                    <div className="st-metric-val text-title">1.42 M+</div>
+                    <div className="st-metric-sub">
+                      HTTP 호스트 정밀 필터링
+                    </div>
                   </div>
-                  <div className="st-metric-sub">
-                    24/365 무중단 Libpcap 스니핑
-                  </div>
-                </div>
-                <div className="st-metric-box">
-                  <div className="st-metric-label">평균 일일 패킷 분석량</div>
-                  <div className="st-metric-val text-title">
-                    1.42 M+
-                  </div>
-                  <div className="st-metric-sub">
-                    HTTP/DNS 호스트 정밀 필터링
-                  </div>
-                </div>
-                <div className="st-metric-box">
-                  <div className="st-metric-label">사내망 비인가 단말 통제</div>
-                  <div className="st-metric-val text-warning">
-                    100 %
-                  </div>
-                  <div className="st-metric-sub">
-                    Iptables &amp; 캡티브 포털 연동
+                  <div className="st-metric-box">
+                    <div className="st-metric-label">
+                      사내망 비인가 단말 통제
+                    </div>
+                    <div className="st-metric-val text-warning">100 %</div>
+                    <div className="st-metric-sub">
+                      Iptables &amp; 캡티브 포털 연동
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
 
-            <div className="st-section-title">핵심 보안 아키텍처</div>
-            <div className="st-arch-grid">
-              <div className="st-arch-card">
-                <div className="st-arch-name">
-                  실시간 패킷 스니핑 &amp; 제어
-                </div>
-                <div className="st-arch-desc">
-                  C 기반 Libpcap 엔진으로 사내망 트래픽을 감시하고 비인가 세션에
-                  TCP RST 패킷을 즉각 인젝션합니다.
-                </div>
-              </div>
-              <div className="st-arch-card">
-                <div className="st-arch-name">L2 MAC 스푸핑 물리 격리</div>
-                <div className="st-arch-desc">
-                  인가된 IP와 실제 L2 MAC 주소의 바인딩을 대조하여 위변조 탐지
-                  시 네트워크를 즉시 격리(Drop)합니다.
-                </div>
-              </div>
-              <div className="st-arch-card">
-                <div className="st-arch-name">CTI 위협 인텔리전스 연동</div>
-                <div className="st-arch-desc">
-                  VirusTotal CTI 평점 분석과 Discord 웹훅 연동을 통해 악성
-                  도메인 자동 차단 및 실시간 경보를 수행합니다.
-                </div>
-              </div>
-            </div>
+            <div className="st-section-title">접속 판정 흐름</div>
+            <ol className="st-flow">
+              {FLOW_STEPS.map((step, i) => (
+                <li key={step.name} className="st-flow-step">
+                  <div className="st-flow-no">{i + 1}단계</div>
+                  <div className="st-arch-name">{step.name}</div>
+                  <div className="st-arch-desc">{step.desc}</div>
+                </li>
+              ))}
+            </ol>
 
             <div className="st-bottom-grid">
               <div className="st-panel">
@@ -285,25 +286,29 @@ const Home = ({ user }) => {
 
               <div className="st-panel">
                 <div className="st-panel-header">
-                  <div className="st-panel-title">필수 보안 자료실</div>
+                  <div className="st-panel-title">최근 게시글</div>
                   <button
                     type="button"
                     className="btn-action btn-neutral btn-w-sm"
-                    onClick={() => setActiveTab("resources")}
+                    onClick={() => setActiveTab("community")}
                   >
                     전체보기
                   </button>
                 </div>
-                {resources.slice(0, 3).map((r) => (
+                {posts.slice(0, 3).map((p) => (
                   <div
-                    key={r.id}
+                    key={p.id}
                     className="st-list-item"
-                    onClick={() => setActiveTab("resources")}
+                    onClick={() => {
+                      setSelectedPost(p);
+                      setActiveTab("community");
+                    }}
                   >
                     <div className="st-item-main">
-                      <span className="st-item-title">{r.title}</span>
+                      <span className="status-badge badge-gray">{p.category}</span>
+                      <span className="st-item-title">{p.title}</span>
                     </div>
-                    <span className="cell-time">{r.size}</span>
+                    <span className="cell-time">{p.date}</span>
                   </div>
                 ))}
               </div>
