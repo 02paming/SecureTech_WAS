@@ -3,12 +3,20 @@ import re
 
 from django.contrib.auth.hashers import check_password
 from django.db import transaction
+from django.db.models import Count, Max, OuterRef, Subquery
 from django.utils import timezone
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
-from api.models import AiModelMetrics, BlacklistAddr, Employees, WhitelistAddr
+from api.models import (
+    AiModelMetrics,
+    BlacklistAddr,
+    Employees,
+    WebAccessLog,
+    WhitelistAddr,
+)
 
+from .audit import audited
 from .utils import (
     SERVER_ERROR_MESSAGE,
     get_client_ip,
@@ -48,15 +56,43 @@ def verify_admin_auth(request, emp_id, emp_pw):
     return False, "비밀번호가 일치하지 않습니다."
 
 
+def _domain_access_stats(domains):
+    """도메인별 접속 수와 최근 접속 시간을 돌려준다."""
+    rows = (
+        WebAccessLog.objects.filter(target_url__in=domains)
+        .values("target_url")
+        .annotate(count=Count("pk"), last=Max("access_time"))
+    )
+    return {
+        r["target_url"]: {
+            "access_count": r["count"],
+            "last_access": r["last"].strftime("%Y-%m-%d %H:%M") if r["last"] else None,
+        }
+        for r in rows
+    }
+
+
+NO_ACCESS_STATS = {"access_count": 0, "last_access": None}
+
+
 @api_view(["GET"])
 def get_blocklist(request):
     results = []
-    for p in BlacklistAddr.objects.filter(deleted_at__isnull=True, source="USER"):
-        results.append({"blacklist_domain": p.blacklist_domain, "source": "USER"})
+    policies = list(BlacklistAddr.objects.filter(deleted_at__isnull=True, source="USER"))
+    stats = _domain_access_stats([p.blacklist_domain for p in policies])
+    for p in policies:
+        results.append(
+            {
+                "blacklist_domain": p.blacklist_domain,
+                "source": "USER",
+                **stats.get(p.blacklist_domain, NO_ACCESS_STATS),
+            }
+        )
     return Response(results)
 
 
 @api_view(["POST"])
+@audited("차단 정책 등록", "blacklist_domain", "no_access_domain")
 def add_policy(request):
     domain = sanitize_domain(
         request.data.get("blacklist_domain") or request.data.get("no_access_domain", "")
@@ -64,7 +100,7 @@ def add_policy(request):
     if not domain:
         return Response({"error": "차단할 도메인 주소를 입력해주세요."}, status=400)
 
-    # 💡 [핵심 복구] 화이트리스트에 이미 존재하는지 엄격히 검사
+    # 화이트리스트에 이미 존재하는지 엄격히 검사
     if WhitelistAddr.objects.filter(
         whitelist_domain=domain, deleted_at__isnull=True
     ).exists():
@@ -95,6 +131,7 @@ def add_policy(request):
 
 
 @api_view(["POST"])
+@audited("차단 정책 해제", "blacklist_domain", "no_access_domain")
 def delete_policy(request):
     domain = sanitize_domain(
         request.data.get("no_access_domain") or request.data.get("blacklist_domain", "")
@@ -116,9 +153,13 @@ def delete_policy(request):
 @api_view(["GET"])
 def get_whitelist(request):
     res = []
-    for w in WhitelistAddr.objects.filter(
-        deleted_at__isnull=True, source="USER"
-    ).order_by("-is_protected", "whitelist_domain"):
+    policies = list(
+        WhitelistAddr.objects.filter(deleted_at__isnull=True, source="USER").order_by(
+            "-is_protected", "whitelist_domain"
+        )
+    )
+    stats = _domain_access_stats([w.whitelist_domain for w in policies])
+    for w in policies:
         res.append(
             {
                 "domain": w.whitelist_domain,
@@ -126,18 +167,20 @@ def get_whitelist(request):
                 if w.is_protected
                 else "일반 허용 도메인 (사용자)",
                 "is_protected": w.is_protected,
+                **stats.get(w.whitelist_domain, NO_ACCESS_STATS),
             }
         )
     return Response(res)
 
 
 @api_view(["POST"])
+@audited("허용 정책 등록", "domain")
 def add_whitelist(request):
     domain = sanitize_domain(request.data.get("domain", ""))
     if not domain:
         return Response({"error": "도메인을 입력해주세요."}, status=400)
 
-    # 💡 [핵심 복구] 블랙리스트에 이미 존재하는지 엄격히 검사
+    # 블랙리스트에 이미 존재하는지 엄격히 검사
     if BlacklistAddr.objects.filter(
         blacklist_domain=domain, deleted_at__isnull=True
     ).exists():
@@ -168,6 +211,7 @@ def add_whitelist(request):
 
 
 @api_view(["POST"])
+@audited("허용 정책 해제", "domain")
 def delete_whitelist(request):
     domain = sanitize_domain(request.data.get("domain", ""))
     try:
@@ -178,7 +222,7 @@ def delete_whitelist(request):
             raise WhitelistAddr.DoesNotExist
 
         if w_obj.is_protected:
-            # 💡 [개인 룰 적용] 문구 유지
+            # 문구 유지
             return Response(
                 {"error": "시스템 보호 도메인은 관리자 권한으로 강제 해제해야 합니다."},
                 status=403,
@@ -194,6 +238,7 @@ def delete_whitelist(request):
 
 
 @api_view(["POST"])
+@audited("보호 도메인 지정", "domain", actor_key="employee_id")
 def upgrade_whitelist(request):
     domain = sanitize_domain(request.data.get("domain", ""))
     emp_id, emp_pw = request.data.get("employee_id"), request.data.get("password")
@@ -207,6 +252,7 @@ def upgrade_whitelist(request):
 
 
 @api_view(["POST"])
+@audited("보호 도메인 해제", "domain", actor_key="employee_id")
 def force_delete_whitelist(request):
     domain = sanitize_domain(request.data.get("domain", ""))
     emp_id, emp_pw = request.data.get("employee_id"), request.data.get("password")
@@ -244,6 +290,7 @@ def _activate_as_user(model, domain_field, domain):
 
 
 @api_view(["POST"])
+@audited("AI 정책 이관", "action", "domains", "domain", actor_key="employee_id")
 def promote_ai_policy(request):
     action = request.data.get("action")
     domains = request.data.get("domains", [])
@@ -319,26 +366,43 @@ def promote_ai_policy(request):
         return Response({"error": SERVER_ERROR_MESSAGE}, status=500)
 
 
+def _latest_ai_score(domain_field):
+    """도메인의 가장 최근 AI 점수. 점수 없는 기록(-1)은 제외한다."""
+    return Subquery(
+        WebAccessLog.objects.filter(
+            target_url=OuterRef(domain_field), ai_score__gte=0
+        )
+        .order_by("-access_time")
+        .values("ai_score")[:1]
+    )
+
+
 @api_view(["GET"])
 def get_ai_policies(request):
     try:
         data = []
-        for w in WhitelistAddr.objects.filter(deleted_at__isnull=True, source__in=["AI", "의심"]):
+        for w in WhitelistAddr.objects.filter(
+            deleted_at__isnull=True, source__in=["AI", "DOUBT"]
+        ).annotate(ai_score=_latest_ai_score("whitelist_domain")):
             time_val = getattr(w, "insert_time", getattr(w, "created_at", None))
             time_str = time_val.strftime("%Y-%m-%d %H:%M:%S") if time_val else "-"
             data.append({
                 "domain": w.whitelist_domain,
                 "ai_status": w.source,
+                "ai_score": w.ai_score,
                 "source": "white",
                 "detect_time": time_str
             })
 
-        for b in BlacklistAddr.objects.filter(deleted_at__isnull=True, source__in=["AI", "의심"]):
+        for b in BlacklistAddr.objects.filter(
+            deleted_at__isnull=True, source__in=["AI", "DOUBT"]
+        ).annotate(ai_score=_latest_ai_score("blacklist_domain")):
             time_val = getattr(b, "insert_time", getattr(b, "created_at", None))
             time_str = time_val.strftime("%Y-%m-%d %H:%M:%S") if time_val else "-"
             data.append({
                 "domain": b.blacklist_domain,
                 "ai_status": b.source,
+                "ai_score": b.ai_score,
                 "source": "black",
                 "detect_time": time_str
             })

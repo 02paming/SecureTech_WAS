@@ -11,11 +11,12 @@ file_lock = threading.Lock()
 from django.core.cache import cache
 from django.db import connection, connections
 
-# 💡 [수정] 통합된 정책 모델 2개와 OnlineList만 import
 from ..models import BlacklistAddr, OnlineList, WhitelistAddr
 
 logger = logging.getLogger(__name__)
 RESTRICTED_IDS = {"admin", "root", "manager", "test", "guest"}
+# 완전 삭제한 사원의 자리표시 아이디. 가입에 쓸 수 없다
+ANONYMIZED_ID_PREFIX = "deleted_"
 DEFAULT_STATIC_WHITELIST = {
     "localhost",
     "127.0.0.1",
@@ -41,11 +42,24 @@ def format_jumin_and_birth(jumin):
     )
 
 
+LOCAL_PROXIES = {"127.0.0.1", "::1"}
+
+
 def get_client_ip(request):
-    xf = request.META.get("HTTP_X_FORWARDED_FOR")
-    return (
-        xf.split(",")[0].strip() if xf else request.META.get("REMOTE_ADDR", "127.0.0.1")
-    )
+    """요청 IP를 돌려준다. X-Forwarded-For는 위조할 수 있어 같은 서버의 nginx를 거칠 때만 믿는다."""
+    remote = request.META.get("REMOTE_ADDR", "127.0.0.1")
+    if remote not in LOCAL_PROXIES:
+        return remote
+    # nginx가 맨 뒤에 붙인 값이 실제 접속 주소다
+    forwarded = [
+        ip.strip()
+        for ip in request.META.get("HTTP_X_FORWARDED_FOR", "").split(",")
+        if ip.strip()
+    ]
+    for ip in reversed(forwarded):
+        if ip not in LOCAL_PROXIES:
+            return ip
+    return remote
 
 
 def extract_ip_suffix(ip_str):
@@ -100,15 +114,72 @@ def resolve_domain_ip(domain):
         return "0.0.0.0"
 
 
+WHITE_POLICY_LABELS = {"USER": "수동 허용", "AI": "AI 안전", "DOUBT": "화이트 의심"}
+BLACK_POLICY_LABELS = {"USER": "수동 차단", "AI": "AI 위험", "DOUBT": "블랙 의심"}
+
+
+def get_policy_states():
+    """활성 정책의 도메인별 정책 판단 이름과 출처를 돌려준다."""
+    states = {}
+    for domain, source, is_protected in WhitelistAddr.objects.filter(
+        deleted_at__isnull=True
+    ).values_list("whitelist_domain", "source", "is_protected"):
+        states[domain] = {
+            "label": "보호 허용"
+            if is_protected
+            else WHITE_POLICY_LABELS.get(source, source),
+            "source": source,
+        }
+    for domain, source in BlacklistAddr.objects.filter(
+        deleted_at__isnull=True
+    ).values_list("blacklist_domain", "source"):
+        states[domain] = {
+            "label": BLACK_POLICY_LABELS.get(source, source),
+            "source": source,
+        }
+    return states
+
+
+def get_policy_domain_sets():
+    """현재 정책 기준의 차단 도메인과 의심 도메인을 돌려준다."""
+    blocked = set(
+        BlacklistAddr.objects.filter(
+            deleted_at__isnull=True, source__in=["USER", "AI"]
+        ).values_list("blacklist_domain", flat=True)
+    )
+    suspect = set(
+        WhitelistAddr.objects.filter(
+            deleted_at__isnull=True, source="DOUBT"
+        ).values_list("whitelist_domain", flat=True)
+    ) | set(
+        BlacklistAddr.objects.filter(
+            deleted_at__isnull=True, source="DOUBT"
+        ).values_list("blacklist_domain", flat=True)
+    )
+    return blocked, suspect
+
+
+def classify_access(access_flag, domain, blocked_domains, suspect_domains):
+    """접속 기록을 정상·의심·차단 중 하나로 나눈다.
+
+    로그 원본은 고치지 않고, 통과했던 기록도 도메인이 지금 차단 정책이면 차단으로 집계한다.
+    """
+    if access_flag == "차단" or domain in blocked_domains:
+        return "차단"
+    if domain in suspect_domains:
+        return "의심"
+    return "정상"
+
+
 def sync_pcap_json_files(sync_type="all"):
     with file_lock:
         try:
-            # 💡 [수정] 통합 BlacklistAddr만 조회
+            # 통합 BlacklistAddr만 조회
             blacklists = [
                 p.blacklist_domain
                 # 블랙 의심은 관리자 판단 전까지 차단하지 않으므로 엔진 목록에서 제외
                 for p in BlacklistAddr.objects.filter(deleted_at__isnull=True).exclude(
-                    source="의심"
+                    source="DOUBT"
                 )
             ]
 
@@ -124,7 +195,7 @@ def sync_pcap_json_files(sync_type="all"):
                     f,
                 )
 
-            # 💡 [수정] 통합 WhitelistAddr만 조회
+            # 통합 WhitelistAddr만 조회
             whitelists = [
                 w.whitelist_domain
                 for w in WhitelistAddr.objects.filter(deleted_at__isnull=True)
@@ -143,7 +214,7 @@ def sync_pcap_json_files(sync_type="all"):
                             "employee_id": l.employee.employee_id,
                             "online_ip": l.online_ip,
                         }
-                        for l in OnlineList.objects.select_related("employee")[:100]
+                        for l in OnlineList.objects.select_related("employee")
                         if l.employee
                     ],
                     f,
@@ -171,7 +242,7 @@ def sync_expire_to_pcap(emp_id, kick_ip):
             json.dump(
                 [
                     {"employee_id": l.employee.employee_id, "online_ip": l.online_ip}
-                    for l in OnlineList.objects.select_related("employee")[:100]
+                    for l in OnlineList.objects.select_related("employee")
                     if l.employee
                 ],
                 f,

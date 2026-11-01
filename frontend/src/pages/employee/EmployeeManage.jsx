@@ -2,6 +2,8 @@ import axios from "axios";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import PageHeader from "../../components/PageHeader";
 import PaginationBar from "../../components/PaginationBar";
+import { padRows, useResetPage } from "../../utils/table";
+import { API_BASE_URL } from "../../api";
 
 function useDebounce(value, delay) {
   const [debouncedValue, setDebouncedValue] = useState(value);
@@ -11,12 +13,6 @@ function useDebounce(value, delay) {
   }, [value, delay]);
   return debouncedValue;
 }
-
-const padRows = (arr, length) => {
-  const padded = [...arr];
-  while (padded.length < length) padded.push({ isEmpty: true });
-  return padded;
-};
 
 const ResizableTh = ({
   colKey,
@@ -43,6 +39,18 @@ const ResizableTh = ({
   </th>
 );
 
+const COLUMNS = [
+  { id: "empNum", label: "사번" },
+  { id: "joinDate", label: "입사일" },
+  { id: "name", label: "이름" },
+  { id: "userId", label: "아이디" },
+  { id: "email", label: "이메일" },
+  { id: "phone", label: "연락처" },
+  { id: "birth", label: "생년월일" },
+  { id: "address", label: "주소" },
+  { id: "jumin", label: "주민등록번호" },
+];
+
 const EmployeeManage = () => {
   const [employees, setEmployees] = useState([]);
   const [searchInput, setSearchInput] = useState("");
@@ -57,18 +65,6 @@ const EmployeeManage = () => {
     address: "",
     email: "",
   });
-
-  const COLUMNS = [
-    { id: "empNum", label: "사번" },
-    { id: "joinDate", label: "입사일" },
-    { id: "name", label: "이름" },
-    { id: "userId", label: "아이디" },
-    { id: "email", label: "이메일" },
-    { id: "phone", label: "연락처" },
-    { id: "birth", label: "생년월일" },
-    { id: "address", label: "주소" },
-    { id: "jumin", label: "주민등록번호" },
-  ];
 
   const defaultCols = {
     empNum: true,
@@ -106,16 +102,9 @@ const EmployeeManage = () => {
     action: 160,
   });
 
-  const baseUrl = useMemo(
-    () =>
-      (
-        import.meta.env.VITE_API_BASE_URL ||
-        `http://${window.location.hostname}:8000`
-      ).replace(/\/+$/, ""),
-    [],
-  );
+  const baseUrl = API_BASE_URL;
 
-  // 💡 [핵심 수정 부분] 눈에 보이는 열의 갯수를 동적으로 계산 (데이터 컬럼 + 관리 버튼 컬럼 1개)
+  // 눈에 보이는 열의 갯수를 동적으로 계산 (데이터 컬럼 + 관리 버튼 컬럼 1개)
   const visibleColCount = useMemo(() => {
     return Object.values(activeCols).filter(Boolean).length + 1;
   }, [activeCols]);
@@ -165,8 +154,9 @@ const EmployeeManage = () => {
 
   useEffect(() => {
     sessionStorage.setItem("empFilterRole", filterRole);
-    setCurrentPage(1);
-  }, [filterRole, debouncedSearch, activeCols, sortOrder]);
+  }, [filterRole]);
+
+  useResetPage([filterRole, debouncedSearch, activeCols, sortOrder], () => setCurrentPage(1));
 
   const handleEmpCardClick = async (emp) => {
     const targetKey = emp.employee_id || emp.employee_number;
@@ -179,7 +169,10 @@ const EmployeeManage = () => {
         setIsDetailModalOpen(true);
         return;
       }
-    } catch (err) {}
+    } catch (err) {
+      // 상세 조회에 실패하면 아래 기본 정보로 창을 연다
+      console.error("사원 상세 정보 조회 실패:", err);
+    }
     setSelectedEmpDetail({
       emp_code: emp.emp_code || "-",
       employee_id: emp.employee_id || "-",
@@ -229,7 +222,7 @@ const EmployeeManage = () => {
         window.location.reload();
       }
     } catch {
-      alert("수정 실패");
+      alert("수정에 실패했습니다.");
     } finally {
       setLoading(false);
     }
@@ -244,20 +237,20 @@ const EmployeeManage = () => {
       alert("처리되었습니다.");
       window.location.reload();
     } catch {
-      alert("오류 발생");
+      alert("처리 중 오류가 발생했습니다.");
     }
   };
 
   const handleHardDelete = async (empId, empName) => {
-    if (!window.confirm(`'${empName}' 데이터 파기?`)) return;
+    if (!window.confirm(`'${empName}' 데이터를 완전히 삭제하시겠습니까?`)) return;
     try {
       await axios.post(`${baseUrl}/api/employees/hard-delete/`, {
         employee_id: empId,
       });
-      alert("파기되었습니다.");
+      alert("삭제되었습니다.");
       window.location.reload();
     } catch {
-      alert("오류 발생");
+      alert("처리 중 오류가 발생했습니다.");
     }
   };
 
@@ -342,7 +335,7 @@ const EmployeeManage = () => {
 
     sortedEmployees.forEach((emp) => {
       const rowData = visibleCols.map((col) => {
-        let val = "";
+        let val;
         switch (col.id) {
           case "empNum":
             val = emp.emp_code || emp.employee_number || "";
@@ -391,13 +384,13 @@ const EmployeeManage = () => {
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
-  }, [sortedEmployees, activeCols, filterRole, COLUMNS]);
+  }, [sortedEmployees, activeCols, filterRole]);
 
   return (
     <div className="page-container admin-page">
       <PageHeader
         title="사원 관리"
-        subtitle="사번을 클릭하여 사원의 상세 개인정보 및 인적 사항을 확인하세요."
+        subtitle="사번을 클릭하면 사원 상세 정보를 확인할 수 있습니다."
         lastUpdated={lastUpdated}
         onRefresh={fetchEmployees}
       />
@@ -566,7 +559,7 @@ const EmployeeManage = () => {
                           <td
                             className={`cell-ellipsis ${emp.is_deleted ? "cell-link-off" : "cell-link"}`}
                             onClick={() => handleEmpCardClick(emp)}
-                            title="클릭하여 상세 개인정보 보기"
+                            title="클릭하여 상세 정보 보기"
                           >
                             {emp.emp_code || "-"}
                           </td>
@@ -739,14 +732,14 @@ const EmployeeManage = () => {
       {isDetailModalOpen && selectedEmpDetail && (
         <div className="dialog-overlay">
           <div className="dialog-box dialog-md">
-            <h3 className="dialog-title">사원 상세 개인정보 조회</h3>
+            <h3 className="dialog-title">사원 상세 정보</h3>
             <div>
               <div className="info-row is-compact">
                 <span className="info-label">사번</span>
                 <span className="info-value">{selectedEmpDetail.emp_code}</span>
               </div>
               <div className="info-row is-compact">
-                <span className="info-label">아이디(ID)</span>
+                <span className="info-label">아이디</span>
                 <span className="info-value">{selectedEmpDetail.employee_id}</span>
               </div>
               <div className="info-row is-compact">

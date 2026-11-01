@@ -10,12 +10,12 @@ const FLOW_STEPS = [
     desc: "허용·차단 정책과 비교합니다. 블랙 의심은 관리자 판단 전까지 통과시키고 따로 집계합니다.",
   },
   {
-    name: "위협 평판 분석",
-    desc: "미등록 도메인은 VirusTotal 점수로 분석하고, 50점 이상이면 차단 정책에 자동 등록합니다.",
+    name: "AI 위협 분석",
+    desc: "미분류 도메인은 AI 엔진이 위협 점수를 매겨 안전, 의심, 위험으로 분류합니다.",
   },
   {
     name: "조치와 기록",
-    desc: "차단 세션은 TCP RST로 끊고 Discord로 경보하며, 접속 로그는 5년간 보관합니다.",
+    desc: "차단 세션은 TCP RST로 끊고, MAC 변조는 Discord로 경보하며, 접속 로그는 5년간 보관합니다.",
   },
 ];
 
@@ -40,30 +40,30 @@ const Home = ({ user }) => {
       writer: "네트워크보안팀",
       views: 518,
       content:
-        "사내 모든 임직원 단말은 사원망 접속 시 최초 캡티브 포털 인증을 거쳐야 하며, 미인증 단말 및 인가되지 않은 MAC 주소(MAC Spoofing) 탐지 시 즉각 물리적 격리가 수행됩니다.",
+        "사내 모든 임직원 단말은 사원망 접속 시 최초 캡티브 포털 인증을 거쳐야 하며, 미인증 단말 및 인가되지 않은 MAC 주소(MAC Spoofing) 탐지 시 즉시 차단되고 관리자에게 경보가 전송됩니다.",
     },
     {
       id: 3,
       tag: "시스템",
       tagTone: "success",
       title:
-        "VirusTotal CTI 위협 인텔리전스 연동 및 DB 로그 5년 보관 정책 적용",
+        "DB 로그 5년 보관 정책 적용",
       date: "2026-10-15",
       writer: "시스템관리자",
       views: 289,
       content:
-        "글로벌 위협 인텔리전스(CTI) 연동을 통해 악성 평점 기반 자동 차단이 적용되었으며, 모든 위협 탐지 로그와 정책 이력은 사내 보안 규정에 따라 5년간 보관 후 자동 파기됩니다.",
+        "모든 위협 탐지 로그와 정책 이력은 사내 보안 규정에 따라 5년간 보관 후 자동 파기됩니다.",
     },
     {
       id: 4,
       tag: "안내",
       tagTone: "warning",
-      title: "임직원 단말 보안 건전성 점수(Security Score) 산정 기준 안내",
+      title: "임직원 보안 건전성 점수 산정 기준 안내",
       date: "2026-10-10",
       writer: "보안관제팀",
       views: 410,
       content:
-        "단말 보안 건전성은 기본 100점 만점 기준으로 유해 사이트 차단 횟수, MAC 변조 여부를 종합하여 AI 보안 어드바이저가 실시간 산출합니다.",
+        "보안 건전성은 기본 100점 만점 기준으로 최근 30일 활동 중 차단·의심 통과 비율과 MAC 변조 여부를 종합하여 보안 어드바이저가 실시간 산출합니다.",
     },
   ];
 
@@ -198,8 +198,8 @@ const Home = ({ user }) => {
                   </h1>
                   <p className="st-hero-desc">
                     L3 스위치가 미러링한 사내망 HTTP 접속을 실시간으로 감시하고,
-                    차단 정책에 걸린 세션은 TCP RST로 즉시 끊습니다. 미등록
-                    도메인은 VirusTotal 위협 점수로 판단해 정책에 자동으로
+                    차단 정책에 걸린 세션은 TCP RST로 즉시 끊습니다. 미분류
+                    도메인은 AI 엔진의 위협 점수로 판단해 정책에 자동으로
                     반영합니다.
                   </p>
                 </div>
@@ -255,7 +255,7 @@ const Home = ({ user }) => {
             <div className="st-bottom-grid">
               <div className="st-panel">
                 <div className="st-panel-header">
-                  <div className="st-panel-title">최근 보안 공지사항</div>
+                  <div className="st-panel-title">최근 공지사항</div>
                   <button
                     type="button"
                     className="btn-action btn-neutral btn-w-sm"
@@ -320,7 +320,7 @@ const Home = ({ user }) => {
           <div className="st-board-card">
             <div className="card-header">
               <div>
-                <h2 className="page-title">보안 공지사항</h2>
+                <h2 className="page-title">공지사항</h2>
                 <p className="page-subtitle">
                   사내 네트워크 통제 정책 및 보안 관제 시스템 업데이트 소식을
                   안내합니다.
@@ -333,8 +333,8 @@ const Home = ({ user }) => {
                   <tr>
                     <th style={{ width: "90px" }}>구분</th>
                     <th className="th-main">제목</th>
-                    <th style={{ width: "130px" }}>작성부서</th>
-                    <th style={{ width: "120px" }}>등록일</th>
+                    <th style={{ width: "130px" }}>작성자</th>
+                    <th style={{ width: "120px" }}>작성일</th>
                     <th style={{ width: "90px" }}>조회</th>
                   </tr>
                 </thead>
@@ -383,7 +383,7 @@ const Home = ({ user }) => {
           <div className="st-board-card">
             <div className="card-header">
               <div>
-                <h2 className="page-title">사내 보안 커뮤니티</h2>
+                <h2 className="page-title">사내 커뮤니티</h2>
                 <p className="page-subtitle">
                   단말 인증 문의, 오탐 차단 해제 요청 및 보안 팁을 자유롭게
                   공유하세요.
@@ -431,7 +431,7 @@ const Home = ({ user }) => {
                     type="submit"
                     className="btn-action btn-primary btn-w-md btn-header"
                   >
-                    등록하기
+                    등록
                   </button>
                 </div>
               </form>
@@ -440,7 +440,7 @@ const Home = ({ user }) => {
               <table className="custom-table">
                 <thead>
                   <tr>
-                    <th style={{ width: "90px" }}>분류</th>
+                    <th style={{ width: "90px" }}>구분</th>
                     <th className="th-main">제목</th>
                     <th style={{ width: "160px" }}>작성자</th>
                     <th style={{ width: "120px" }}>작성일</th>
@@ -491,7 +491,7 @@ const Home = ({ user }) => {
           <div className="st-board-card">
             <div className="card-header">
               <div>
-                <h2 className="page-title">사내 보안 자료실</h2>
+                <h2 className="page-title">보안 자료실</h2>
                 <p className="page-subtitle">
                   사내망 접속 매뉴얼, 보안 에이전트 및 정보보안 규정 문서를
                   다운로드할 수 있습니다.

@@ -6,25 +6,27 @@ const ADMIN_SERVER = "192.168.3.23";
 const STORAGE_KEY = "testLabAddresses";
 
 const TEST_KINDS = {
-  manual_allow: { label: "수동 허용", result: "통과", tone: "success", blocked: false, message: "허용 목록에 등록된 주소입니다." },
-  ai_safe: { label: "AI 안전", result: "통과", tone: "success", blocked: false, message: "AI가 안전으로 판별한 주소입니다." },
-  white_suspect: { label: "화이트 의심", result: "통과 (경고)", tone: "warning", blocked: false, message: "허용 목록의 의심 주소입니다. 통과시키고 AI 의심으로 집계합니다." },
-  black_suspect: { label: "블랙 의심", result: "통과 (경고)", tone: "warning", blocked: false, message: "차단 후보인 의심 주소입니다. 관리자 판단 전까지 통과시키고 AI 의심으로 집계합니다." },
+  system_allow: { label: "시스템 기본 허용", result: "정상 통과", tone: "success", blocked: false, message: "시스템에 고정된 사내 주소입니다." },
+  protected_allow: { label: "보호 허용", result: "정상 통과", tone: "success", blocked: false, message: "관리자가 보호로 지정한 주소입니다." },
+  manual_allow: { label: "수동 허용", result: "정상 통과", tone: "success", blocked: false, message: "허용 목록에 등록된 주소입니다." },
+  ai_safe: { label: "AI 안전", result: "정상 통과", tone: "success", blocked: false, message: "AI가 안전으로 판별한 주소입니다." },
+  white_suspect: { label: "화이트 의심", result: "AI 의심 통과", tone: "score-yellow", blocked: false, suspect: true, message: "AI가 화이트 의심으로 판별한 주소입니다. 표시 후 통과시킵니다." },
+  black_suspect: { label: "블랙 의심", result: "AI 의심 통과", tone: "score-orange", blocked: false, suspect: true, message: "AI가 블랙 의심으로 판별한 주소입니다. 관리자 판단 전까지 표시 후 통과시킵니다." },
   manual_block: { label: "수동 차단", result: "차단", tone: "danger", blocked: true, message: "차단 목록에 등록된 주소입니다." },
   ai_danger: { label: "AI 위험", result: "차단", tone: "danger", blocked: true, message: "AI가 위험으로 판별한 주소입니다." },
-  cti_threat: { label: "CTI 위협", result: "차단", tone: "danger", blocked: true, message: "미등록 주소이며 위협 점수가 50점 이상이라 자동 차단합니다." },
-  cti_clean: { label: "CTI 정상", result: "통과", tone: "gray", blocked: false, message: "미등록 주소이며 위협 점수가 낮아 통과합니다." },
+  unregistered: { label: "미분류", result: "정상 통과", tone: "gray", blocked: false, message: "어느 정책에도 분류되지 않은 주소라 통과합니다." },
 };
 
 const DEFAULT_ADDRESSES = [
+  { address: "test-system-allow.local", kind: "system_allow" },
+  { address: "test-protected-allow.local", kind: "protected_allow" },
   { address: "test-manual-allow.local", kind: "manual_allow" },
   { address: "test-ai-safe.local", kind: "ai_safe" },
   { address: "test-white-suspect.local", kind: "white_suspect" },
   { address: "test-black-suspect.local", kind: "black_suspect" },
   { address: "test-manual-block.local", kind: "manual_block" },
   { address: "test-ai-danger.local", kind: "ai_danger" },
-  { address: "test-cti-threat.local", kind: "cti_threat" },
-  { address: "test-cti-clean.local", kind: "cti_clean" },
+  { address: "test-unregistered.local", kind: "unregistered" },
 ];
 
 const loadAddresses = () => {
@@ -94,6 +96,8 @@ export default function TestLab() {
 
   const handleApplyIp = (e) => {
     e.preventDefault();
+    clearTimeout(simTimer.current);
+    setShowModal(false);
     const target = pcIp.trim() || "192.168.2.100";
     setActiveIp(target);
     setIsAlreadyAuthenticated(false);
@@ -102,16 +106,9 @@ export default function TestLab() {
     addLog(`IP가 ${target} (으)로 재설정되었습니다. (세션 초기화)`, "info");
   };
 
-  const showSimulationResult = (status, title, message, policy = "-") => {
+  const showSimulationResult = (ip, domain, status, title, message, policy = "-", tone = status === "success" ? "success" : "danger") => {
     setSimState(status === "success" ? "success" : "blocked");
-    setReportData({
-      ip: activeIp,
-      domain: cleanDomain(simUrl),
-      status,
-      title,
-      message,
-      policy,
-    });
+    setReportData({ ip, domain, status, title, message, policy, tone });
     simTimer.current = setTimeout(() => setShowModal(true), 600);
   };
 
@@ -122,73 +119,76 @@ export default function TestLab() {
 
     if (!isInternalIp) {
       if (isAccessingAdminServer) {
-        addLog(`사외망 IP에서 관제 서버(망분리) 접근 시도 차단됨`, "danger");
+        addLog(`사외망에서 관제 서버 접근 차단 (망분리)`, "danger");
         showSimulationResult(
+          ip,
+          domain,
           "blocked",
-          "망분리 접근 통제",
-          "사외망(외부망) 대역에서는 보안 관제 서버로 접근할 수 없습니다.",
+          "차단",
+          "사외망에서는 관제 서버에 접속할 수 없습니다.",
+          "망분리",
         );
       } else {
-        addLog(`사외망 단말 트래픽 (사내 방화벽 관제 예외)`, "info");
+        addLog(`사외망 단말 접속 (관제 대상 아님)`, "info");
         showSimulationResult(
+          ip,
+          domain,
           "success",
-          "관제 대상 아님 (사외망)",
-          `IP(${ip})는 사내망이 아니므로 NAC(MAC 검사) 및 사내 보안 정책이 적용되지 않습니다.`,
+          "정상 통과",
+          `IP(${ip})는 사내망이 아니므로 MAC 검사와 도메인 정책을 적용하지 않습니다.`,
+          "관제 대상 아님",
         );
       }
       return;
     }
 
     if (isSpoofing) {
-      addLog(
-        `MAC 주소 불일치 감지. 방화벽 스위치 포트(L2) 물리적 차단`,
-        "warning",
-      );
+      addLog(`MAC 변조 탐지. 접속 차단 및 Discord 경보`, "danger");
       showSimulationResult(
+        ip,
+        domain,
         "blocked",
-        "MAC 스푸핑 탐지 (격리)",
-        "인가된 내부 IP이나 MAC 주소가 변조되어 물리적 통신이 차단되었습니다.",
+        "차단",
+        "접속 기록의 MAC 주소와 달라 차단하고 관리자에게 Discord로 경보합니다.",
+        "MAC 변조",
       );
       return;
     }
 
     // 규칙 A. 망분리: 사원 대역에서 보안 관제 서버(3.23) 접근 시 차단
     if (isAccessingAdminServer && !ip.startsWith("192.168.3.")) {
-      addLog(`사원망에서 관제 서버(망분리) 접근 시도 차단됨`, "danger");
+      addLog(`사원망에서 관제 서버 접근 차단 (망분리)`, "danger");
       showSimulationResult(
+        ip,
+        domain,
         "blocked",
-        "망분리 접근 통제",
-        "해당 사내 대역에서는 보안 관제 서버로 접근할 수 없습니다.",
+        "차단",
+        "사원망에서는 관제 서버에 접속할 수 없습니다.",
+        "망분리",
       );
       return;
     }
 
-    // 규칙 B. 제로 트러스트: 관리자/사원 대역 무조건 캡티브 포털 인증 요구
+    // 규칙 B. 관리자/사원 대역은 무조건 캡티브 포털 인증 요구
     if (!hasAuth) {
-      addLog(`내부망 접근 제어(NAC): 캡티브 포털 인증 요청`, "warning");
+      addLog(`캡티브 포털 인증 요청`, "warning");
       setSimState("captive");
       return;
     }
 
-    // 목록에 없는 주소는 미등록 주소로 보고 위협이 낮은 경우(CTI 정상)로 판정
+    // 목록에 없는 주소는 미분류로 보고 통과시킨다
     const registered = testAddresses.find((a) => a.address === domain);
-    const kind = TEST_KINDS[registered?.kind || "cti_clean"];
-    const isSuspicious = kind.tone === "warning";
+    const kind = TEST_KINDS[registered?.kind || "unregistered"];
 
     if (kind.blocked) {
-      addLog(`[정책] ${kind.label}: [${domain}] 차단 완료`, "danger");
-      showSimulationResult("blocked", "차단 정책 위반", kind.message, kind.label);
+      addLog(`[정책] ${kind.label}: [${domain}] 차단`, "danger");
+      showSimulationResult(ip, domain, "blocked", kind.result, kind.message, kind.label);
     } else {
       addLog(
-        `[정책] ${kind.label}: [${domain}] 트래픽 통과`,
-        isSuspicious ? "warning" : "success",
+        `[정책] ${kind.label}: [${domain}] ${kind.result}`,
+        kind.suspect ? "warning" : "success",
       );
-      showSimulationResult(
-        "success",
-        isSuspicious ? "AI 의심 통과" : "정상 접근 승인",
-        kind.message,
-        kind.label,
-      );
+      showSimulationResult(ip, domain, "success", kind.result, kind.message, kind.label, kind.tone);
     }
   };
 
@@ -200,7 +200,7 @@ export default function TestLab() {
 
     setShowModal(false);
     setSimState("animating");
-    addLog(`[${ip}] [${domain}] 패킷 전송 시작...`, "warning");
+    addLog(`[${ip}] [${domain}] 접속 시도`, "warning");
 
     clearTimeout(simTimer.current);
     simTimer.current = setTimeout(() => {
@@ -212,13 +212,14 @@ export default function TestLab() {
   const handleCaptiveLogin = (e) => {
     e.preventDefault();
     setIsAlreadyAuthenticated(true);
-    addLog(`사용자(${empIdInput}) 가상 인증 성공. 패킷 재전송...`, "success");
+    addLog(`사용자(${empIdInput}) 가상 인증 완료. 접속 재시도`, "success");
     setSimState("animating");
     clearTimeout(simTimer.current);
     simTimer.current = setTimeout(() => executeSimulation(activeIp, cleanDomain(simUrl), true), 1500);
   };
 
   const resetTest = () => {
+    clearTimeout(simTimer.current);
     setPcIp("");
     setActiveIp("192.168.2.100");
     setSimUrl("");
@@ -234,11 +235,11 @@ export default function TestLab() {
   return (
     <div className="page-container admin-page">
       <PageHeader
-        title="통합 보안 및 패킷 관제 시뮬레이션"
-        subtitle="네트워크 대역별 접근 통제 검증"
+        title="보안 테스트실"
+        subtitle="망 구분, MAC 검사, 인증, 도메인 정책 판단을 가상으로 확인합니다."
       >
         <span className="tag text-warning">
-          ※ DB와 연결되지 않은 가상 시뮬레이션입니다.
+          DB와 연결되지 않은 가상 화면입니다.
         </span>
       </PageHeader>
 
@@ -247,22 +248,19 @@ export default function TestLab() {
           <h4 className="info-box-title text-primary">판정 순서</h4>
           <ol className="notice-list">
             <li>
-              <strong>망 구분:</strong> 사외망은 관제 대상이 아니며 관제 서버 접근은 차단
+              <strong>망 구분:</strong> 사외망은 관제 대상이 아니며 관제 서버 접속은 차단
             </li>
             <li>
-              <strong>MAC 검사:</strong> 사내망에서 MAC이 변조되면 물리 격리
+              <strong>MAC 검사:</strong> 사내망에서 MAC이 변조되면 차단 및 Discord 경보
             </li>
             <li>
-              <strong>망분리:</strong> 사원망(192.168.2.x)의 관제 서버 접근 차단
+              <strong>망분리:</strong> 사원망(192.168.2.x)의 관제 서버 접속 차단
             </li>
             <li>
-              <strong>캡티브 인증:</strong> 미인증 단말은 인증 요구. 웹 로그인과 별개
+              <strong>캡티브 인증:</strong> 미인증 단말은 인증 요구 (웹 로그인과 별개)
             </li>
             <li>
-              <strong>등록 정책:</strong> 허용·차단 목록과 AI 판별 결과 적용
-            </li>
-            <li>
-              <strong>CTI 조회:</strong> 미등록 도메인은 위협 점수 50점 이상이면 자동 차단
+              <strong>도메인 정책:</strong> 허용은 통과, 의심은 표시 후 통과, 차단은 차단
             </li>
           </ol>
 
@@ -372,7 +370,7 @@ export default function TestLab() {
               </button>
             </div>
             <form onSubmit={handleNavigate} className="toolbar-group">
-              <span className="form-label">연결 도메인:</span>
+              <span className="form-label">도메인:</span>
               <input
                 type="text"
                 className="custom-input"
@@ -384,7 +382,7 @@ export default function TestLab() {
                 type="submit"
                 className="btn-action btn-primary btn-w-lg btn-form"
               >
-                시뮬레이션 시작
+                접속 시도
               </button>
             </form>
           </div>
@@ -417,7 +415,7 @@ export default function TestLab() {
                     <div
                       className={`anim-icon ${simState === "animating" ? "fw-pulse" : ""} ${simState === "blocked" ? "is-blocked" : ""} ${simState === "success" ? "is-passed" : ""}`}
                     >
-                      FW
+                      ENG
                     </div>
                     <span className="anim-label">
                       보안 관제 엔진
@@ -432,7 +430,7 @@ export default function TestLab() {
                     <span className="anim-label">
                       목적지
                       <br />
-                      {cleanDomain(simUrl) || "Target"}
+                      {cleanDomain(simUrl) || "-"}
                     </span>
                   </div>
                 </div>
@@ -441,7 +439,7 @@ export default function TestLab() {
             {simState === "captive" && (
               <div className="info-box sim-captive">
                 <h3 className="dialog-title text-primary">
-                  가상 캡티브 포털 인증
+                  캡티브 포털 인증 (가상)
                 </h3>
                 <form onSubmit={handleCaptiveLogin} className="dialog-form">
                   <input
@@ -464,7 +462,7 @@ export default function TestLab() {
                     type="submit"
                     className="btn-action btn-primary btn-form"
                   >
-                    인증 및 승인
+                    인증
                   </button>
                 </form>
               </div>
@@ -478,7 +476,7 @@ export default function TestLab() {
             <span>
               인증 상태:{" "}
               {isAlreadyAuthenticated ? (
-                <strong className="text-success">승인됨 (제로 트러스트)</strong>
+                <strong className="text-success">인증 완료</strong>
               ) : (
                 <strong className="text-danger">미인증</strong>
               )}
@@ -494,7 +492,7 @@ export default function TestLab() {
               onClick={() => setVirtualLogs([])}
               className="console-clear"
             >
-              Clear
+              지우기
             </button>
           </div>
           <div className="console-body">
@@ -516,29 +514,22 @@ export default function TestLab() {
       {showModal && reportData && (
         <div className="dialog-overlay">
           <div className="dialog-box">
-            <h3 className="dialog-title">분석 리포트</h3>
-            <span
-              className={`status-badge ${reportData.policy.includes("의심") ? "badge-warning" : reportData.status === "success" ? "badge-success" : "badge-danger"}`}
-            >
-              {reportData.status === "success" ? "연결 허용됨" : "연결 차단됨"}
-            </span>
+            <h3 className="dialog-title">판정 결과</h3>
             <div>
               <div className="info-row is-compact">
-                <span className="info-label">판별 결과</span>
-                <strong className={`info-value ${reportData.policy.includes("의심") ? "text-warning" : reportData.status === "success" ? "text-success" : "text-danger"}`}>
-                  {reportData.title}
-                </strong>
+                <span className="info-label">처리 결과</span>
+                <span className={`status-badge badge-${reportData.tone}`}>{reportData.title}</span>
               </div>
               <div className="info-row is-compact">
-                <span className="info-label">적용 정책</span>
+                <span className="info-label">정책 판단</span>
                 <span className="info-value">{reportData.policy}</span>
               </div>
               <div className="info-row is-compact">
-                <span className="info-label">출발지 (Source)</span>
+                <span className="info-label">출발지 IP</span>
                 <span className="info-value">{reportData.ip}</span>
               </div>
               <div className="info-row is-compact">
-                <span className="info-label">목적지 (Target)</span>
+                <span className="info-label">도메인</span>
                 <span className="info-value">{reportData.domain}</span>
               </div>
               <div className="info-row is-compact">

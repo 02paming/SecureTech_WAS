@@ -10,14 +10,14 @@ pymysql.install_as_MySQLdb()
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# 💡 [서버 배포 및 로컬 테스트 공통]
+# 서버 배포 및 로컬 테스트 공통
 # 프로젝트 루트 경로에 있는 .env 파일을 자동으로 읽어옵니다.
-load_dotenv(os.path.join(BASE_DIR.parent, ".env"))
+load_dotenv(os.path.join(BASE_DIR, ".env"))
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = "django-insecure-)rev%!mc71tjj#g1bvhdmc(k2ksz!)*!jp@p4)*r%(dcm=-gs_"
+SECRET_KEY = os.environ["DJANGO_SECRET_KEY"]
 
-# 🟢 [수정 후] .env 파일에 DEBUG=True가 있을 때만 켜지고, 없으면(실서버) 안전하게 꺼짐
+# .env 파일에 DEBUG=True가 있을 때만 켜지고, 없으면(실서버) 안전하게 꺼짐
 DEBUG = os.environ.get("DEBUG", "False") == "True"
 
 # 1. 외부 도메인 접속 허용
@@ -57,7 +57,7 @@ MIDDLEWARE = [
 
 ROOT_URLCONF = "config.urls"
 
-# 💡 [수정 완료] React 빌드 파일(dist) 경로를 템플릿 디렉토리에 추가
+# React 빌드 파일(dist) 경로를 템플릿 디렉토리에 추가
 FRONTEND_DIST_DIR = os.path.join(BASE_DIR, "frontend", "dist")
 
 TEMPLATES = [
@@ -78,7 +78,7 @@ TEMPLATES = [
 WSGI_APPLICATION = "config.wsgi.application"
 
 # =====================================================================
-# 💡 [데이터베이스 설정]
+# 데이터베이스 설정
 # 원격 DB 서버(192.168.4.15) 연동 설정
 # =====================================================================
 DATABASES = {
@@ -86,7 +86,7 @@ DATABASES = {
         "ENGINE": "django.db.backends.mysql",
         "NAME": "internal_db",
         "USER": "ubuntu",
-        "PASSWORD": "ubuntu",
+        "PASSWORD": os.environ["DB_PASSWORD"],
         "HOST": "192.168.4.15",
         "PORT": "3306",
         # 요청마다 DB에 새로 연결하지 않고 재사용 (끊긴 연결은 확인 후 다시 연결)
@@ -124,7 +124,7 @@ USE_TZ = False
 # Static files (CSS, JavaScript, Images)
 STATIC_URL = "static/"
 
-# 💡 [수정 완료] React 빌드 시 생성되는 assets 폴더를 정적 파일 경로에 추가
+# React 빌드 시 생성되는 assets 폴더를 정적 파일 경로에 추가
 STATICFILES_DIRS = [
     os.path.join(FRONTEND_DIST_DIR, "assets"),
 ]
@@ -147,12 +147,14 @@ CORS_ALLOWED_ORIGINS += [
     "http://192.168.3.23",
 ]
 
-# 💡 최적화: 대시보드 API에서 사용할 메모리 캐시 설정
+# 대시보드 API에서 사용할 캐시 설정
 CACHES = {
     # gunicorn 작업자 4개가 같은 값을 보도록 메모리가 아닌 파일에 저장 (재시작해도 유지)
     "default": {
         "BACKEND": "django.core.cache.backends.filebased.FileBasedCache",
         "LOCATION": BASE_DIR / "cache_data",
+        # 항목이 많아져도 사원 차단 상태가 임의로 지워지지 않게 한도를 넉넉히 둔다
+        "OPTIONS": {"MAX_ENTRIES": 100000},
     }
 }
 

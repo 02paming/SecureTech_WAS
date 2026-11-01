@@ -1,6 +1,7 @@
 import { useState } from "react";
 import axios from "axios";
 import { useNavigate, Link } from "react-router-dom";
+import { API_BASE_URL } from "../../api";
 
 const FieldMessage = ({ success, error }) => (
   <>
@@ -24,13 +25,7 @@ const Signup = () => {
   const [successMsgs, setSuccessMsgs] = useState({});
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
-
-  const currentHost = window.location.hostname;
-  const baseUrl =
-    import.meta.env.VITE_API_BASE_URL ||
-    (currentHost === "localhost" || currentHost.startsWith("192.168.")
-      ? `http://${currentHost}:8000`
-      : "https://api.securetechkg.digital");
+  const baseUrl = API_BASE_URL;
 
   const validateRRN = (rrn) => {
     const cleanRRN = rrn.replace(/[^0-9]/g, "");
@@ -210,7 +205,7 @@ const Signup = () => {
 
     setLoading(true);
     try {
-      // 💡 가입 신청 API 호출
+      // 가입 신청 API 호출
       const res = await axios.post(`${baseUrl}/api/auth/signup/`, formData);
       if (res.data.status === "success") {
         alert("가입 신청이 완료되었습니다. 관리자 승인 후 로그인 가능합니다.");
@@ -233,14 +228,14 @@ const Signup = () => {
         <div className="auth-header">
           <h2 className="auth-title">SecureTech 가입 신청</h2>
           <p className="auth-subtitle">
-            사내 인트라넷 및 보안망 접근을 위한 계정을 신청합니다.
+            사내망 접속에 사용할 계정을 신청합니다.
           </p>
         </div>
 
         <form onSubmit={handleSubmit} className="auth-form">
           <div className="form-group">
             <label className="form-label">
-              가입 희망 아이디 <span className="text-danger">*</span>
+              아이디 <span className="text-danger">*</span>
             </label>
             <div className="input-with-btn">
               <input
@@ -257,7 +252,7 @@ const Signup = () => {
                 onClick={handleCheckId}
                 className="btn-action btn-neutral btn-w-md btn-form"
               >
-                중복확인
+                중복 확인
               </button>
             </div>
             <FieldMessage success={successMsgs.member_id} error={duplicateErrors.member_id} />
@@ -347,7 +342,7 @@ const Signup = () => {
 
           <div className="form-group">
               <label className="form-label">
-                거주지 주소 <span className="text-danger">*</span>
+                주소 <span className="text-danger">*</span>
               </label>
               <input
                 type="text"
@@ -355,7 +350,7 @@ const Signup = () => {
                 value={formData.address}
                 onChange={handleChange}
                 required
-                placeholder="실 거주지 주소 입력"
+                placeholder="주소 입력"
                 className="custom-input"
               />
           </div>
@@ -366,7 +361,7 @@ const Signup = () => {
               <li>
                 가입 신청 후 관리자의 승인이 완료되어야 로그인이 가능합니다.
               </li>
-              <li>정규 사원으로 승인될 경우 사번이 자동 부여됩니다.</li>
+              <li>사원으로 승인되면 사번이 자동 부여됩니다.</li>
             </ul>
           </div>
 
@@ -375,13 +370,13 @@ const Signup = () => {
             disabled={loading}
             className="btn-action btn-primary btn-block"
           >
-            {loading ? "신청 중..." : "가입 신청하기"}
+            {loading ? "신청 중..." : "가입 신청"}
           </button>
         </form>
 
         <div className="auth-footer">
           <Link to="/user-login" className="text-link is-primary">
-            ← 로그인 화면으로 돌아가기
+            ← 로그인으로
           </Link>
         </div>
       </div>

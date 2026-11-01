@@ -1,14 +1,7 @@
 import { useMemo, useState } from "react";
 import { getSecurityTheme } from "../utils/securityTheme";
 import PaginationBar from "./PaginationBar";
-
-const padRows = (arr, length) => {
-  const padded = [...arr];
-  while (padded.length < length) {
-    padded.push({ isEmpty: true });
-  }
-  return padded;
-};
+import { padRows } from "../utils/table";
 
 function IpMacHistoryColumn({ logs }) {
   const [search, setSearch] = useState("");
@@ -121,7 +114,8 @@ function ExternalAccessColumn({ externalLogs }) {
     () =>
       externalLogs
         .filter((item) => {
-          if (statusFilter === "allowed" && item.is_blocked) return false;
+          if (statusFilter === "allowed" && (item.is_blocked || item.is_suspect)) return false;
+          if (statusFilter === "suspect" && !item.is_suspect) return false;
           if (statusFilter === "blocked" && !item.is_blocked) return false;
           return (
             !search ||
@@ -152,12 +146,13 @@ function ExternalAccessColumn({ externalLogs }) {
       <div className="info-box-row">
         <div className="card-title-group">
           <h4 className="info-box-title">
-            활동현황 <span className="text-primary">{filteredLogs.length}건</span>
+            활동 현황 <span className="text-primary">{filteredLogs.length}건</span>
           </h4>
           <div className="btn-group">
             {[
               { k: "all", l: "전체" },
-              { k: "allowed", l: "허용" },
+              { k: "allowed", l: "정상" },
+              { k: "suspect", l: "의심" },
               { k: "blocked", l: "차단" },
             ].map((t) => (
               <button
@@ -213,7 +208,7 @@ function ExternalAccessColumn({ externalLogs }) {
           </thead>
           <tbody>
             {currentItems.map((item, idx) => (
-              <tr key={idx} className={item.is_blocked ? "row-danger" : ""}>
+              <tr key={idx} className={item.is_blocked ? "row-danger" : item.is_suspect ? "row-warning" : ""}>
                 {item.isEmpty ? (
                   <td colSpan="4" className="text-muted">
                     {idx === 0 && filteredLogs.length === 0 ? "활동 기록이 없습니다." : "\u00a0"}
@@ -221,12 +216,12 @@ function ExternalAccessColumn({ externalLogs }) {
                 ) : (
                   <>
                     <td>
-                      <span className={`tag ${item.is_blocked ? "text-danger" : "text-success"}`}>
-                        {item.is_blocked ? "차단" : "허용"}
+                      <span className={`tag ${item.is_blocked ? "text-danger" : item.is_suspect ? "text-warning" : "text-success"}`}>
+                        {item.is_blocked ? "차단" : item.is_suspect ? "의심" : "정상"}
                       </span>
                     </td>
                     <td>{item.ip || "-"}</td>
-                    <td className={`cell-ellipsis fw-bold ${item.is_blocked ? "text-danger" : "text-primary"}`}>
+                    <td className={`cell-ellipsis fw-bold ${item.is_blocked ? "text-danger" : item.is_suspect ? "text-warning" : "text-primary"}`}>
                       {item.domain || "-"}
                     </td>
                     <td className="text-muted">{item.time || "-"}</td>
@@ -259,7 +254,7 @@ function SecurityDetailDialog({ security, onClose, onRefresh, refreshing }) {
     <div className="dialog-overlay">
       <div className="dialog-box dialog-lg">
         <div className="dialog-header">
-          <h3 className="dialog-title">보안 관제 상세 현황</h3>
+          <h3 className="dialog-title">보안 상세 현황</h3>
           <div className="btn-group">
             <span className="tag tag-primary">ID: {security.employee_id}</span>
             <button
@@ -283,7 +278,7 @@ function SecurityDetailDialog({ security, onClose, onRefresh, refreshing }) {
           <div className="info-stack">
             <div className={`info-box tone-${theme.tone}`}>
               <div className="info-box-row">
-                <span className="info-box-title">단말 보안 건전성</span>
+                <span className="info-box-title">보안 건전성</span>
                 <span className={`fw-bold text-${theme.tone}`}>
                   {security?.security_score}점 ({theme.label})
                 </span>
@@ -295,8 +290,8 @@ function SecurityDetailDialog({ security, onClose, onRefresh, refreshing }) {
                 />
               </div>
               <div className="info-box-row info-box-note">
-                <span>정상: {security?.normal_access_count}건</span>
-                <span>변조 탐지: {security?.mismatch_count}건</span>
+                <span>최근 30일 통과: {security?.recent_pass_count || 0}건 (의심 {security?.recent_suspect_count || 0}건)</span>
+                <span>MAC 변조: {security?.recent_mismatch_count || 0}건</span>
               </div>
             </div>
             <div className="info-box info-box-row">
@@ -312,7 +307,7 @@ function SecurityDetailDialog({ security, onClose, onRefresh, refreshing }) {
                 <strong className="info-box-value">{security.name}</strong>
               </div>
               <span className="tag tag-primary">
-                {security.is_manager ? "관리자" : "일반사원"}
+                {security.is_manager ? "관리자" : "일반 사원"}
               </span>
             </div>
             <div className="info-box">
@@ -326,7 +321,7 @@ function SecurityDetailDialog({ security, onClose, onRefresh, refreshing }) {
             </div>
             <div className="info-box tone-primary">
               <div className="info-box-row">
-                <span className="info-box-label">유해 사이트 차단 누적</span>
+                <span className="info-box-label">차단 누적</span>
                 <strong className="text-danger">{security.violation_count}건</strong>
               </div>
               <div className="progress is-danger-track">
@@ -343,7 +338,7 @@ function SecurityDetailDialog({ security, onClose, onRefresh, refreshing }) {
               </div>
             </div>
             <div className={`info-box tone-box tone-${theme.tone}`}>
-              <span className="info-box-title">AI 보안 어드바이저</span>
+              <span className="info-box-title">보안 어드바이저</span>
               <p
                 className="tone-box-text"
                 dangerouslySetInnerHTML={{

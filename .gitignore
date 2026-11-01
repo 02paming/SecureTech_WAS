@@ -78,3 +78,5 @@ venv/
 .venv/
 node_modules/
 cache_data/
+policy_history_data/
+audit_data/

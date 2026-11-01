@@ -16,6 +16,8 @@
   --color-success: #10b981;
   --color-danger: #ef4444;
   --color-warning: #f59e0b;
+  --color-score-yellow: #ca8a04;
+  --color-score-orange: #ea580c;
   --color-neutral: #94a3b8;
   --chart-normal: #38bdf8;
   --chart-threat: #f87171;
@@ -53,6 +55,8 @@ body.dark-mode {
   --color-danger: #f87171;
   --color-success: #34d399;
   --color-warning: #fbbf24;
+  --color-score-yellow: #facc15;
+  --color-score-orange: #fb923c;
 }
 
 * {
@@ -208,6 +212,12 @@ body {
 }
 
 /* 1. 왼쪽 맞춤 (로고) */
+.brand-logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .nav-logo {
   justify-self: start;
   color: #38bdf8;
@@ -753,6 +763,16 @@ a.btn-action {
   background-color: rgba(245, 158, 11, 0.12);
 }
 
+.badge-score-yellow {
+  color: var(--color-score-yellow);
+  background-color: rgba(234, 179, 8, 0.12);
+}
+
+.badge-score-orange {
+  color: var(--color-score-orange);
+  background-color: rgba(249, 115, 22, 0.12);
+}
+
 .badge-outline {
   color: var(--color-primary);
   background-color: transparent;
@@ -957,6 +977,22 @@ body.dark-mode .auth-admin {
   width: 40px;
 }
 
+/* 체크박스가 칸보다 넓어 말줄임표(.)가 생기지 않도록 좌우 여백을 없앤다 */
+.custom-table th.col-check,
+.custom-table .cell-check {
+  padding-right: 0;
+  padding-left: 0;
+  text-overflow: clip;
+}
+
+.col-count {
+  width: 80px;
+}
+
+.col-time-sm {
+  width: 140px;
+}
+
 .col-status {
   width: 110px;
 }
@@ -1038,6 +1074,12 @@ body.dark-mode .auth-admin {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* 글자색은 상태 색을 유지하고 누를 수 있다는 표시만 더한다 */
+.custom-table .cell-clickable {
+  text-decoration: underline;
+  cursor: pointer;
 }
 
 .custom-table .cell-link {
@@ -1336,6 +1378,30 @@ body.dark-mode .auth-admin {
 
 .dialog-grid-3 {
   grid-template-columns: 1fr 1.5fr 1.5fr;
+}
+
+.dialog-grid-even {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+/* 큰 창의 상단 요약 영역 */
+.dialog-summary {
+  display: grid;
+  flex-shrink: 0;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.info-grid-2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 24px;
+}
+
+/* 2열 배치에서는 맨 아래 두 칸의 밑줄을 함께 없앤다 */
+.info-grid-2 .info-row:nth-last-child(-n + 2) {
+  border-bottom: none;
 }
 
 /* PATTERN LIBRARY (Info Rows): 항목명 + 값 한 줄 */
@@ -2521,6 +2587,14 @@ textarea.custom-input {
 
 .text-danger {
   color: var(--color-danger);
+}
+
+.text-score-yellow {
+  color: var(--color-score-yellow);
+}
+
+.text-score-orange {
+  color: var(--color-score-orange);
 }
 
 .fw-bold {

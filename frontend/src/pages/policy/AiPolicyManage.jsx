@@ -1,18 +1,17 @@
 import axios from "axios";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import AdminAuthDialog from "../../components/AdminAuthDialog";
+import DomainDetailDialog from "../../components/DomainDetailDialog";
 import PageHeader from "../../components/PageHeader";
 import PaginationBar from "../../components/PaginationBar";
-
-const padRows = (arr, length) => {
-  const padded = [...arr];
-  while (padded.length < length) padded.push({ isEmpty: true });
-  return padded;
-};
+import { getAiScoreClass, hasAiScore } from "../../utils/aiScore";
+import { padRows } from "../../utils/table";
+import { API_BASE_URL } from "../../api";
 
 const AiPolicyManage = () => {
   const [aiData, setAiData] = useState([]);
   const [lastUpdated, setLastUpdated] = useState("");
+  const [detailDomain, setDetailDomain] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
 
   const [whitePage, setWhitePage] = useState(1);
@@ -27,7 +26,7 @@ const AiPolicyManage = () => {
 
   const [authModal, setAuthModal] = useState({ isOpen: false, domains: [], action: "" });
 
-  const baseUrl = useMemo(() => (import.meta.env.VITE_API_BASE_URL || `http://${window.location.hostname}:8000`).replace(/\/+$/, ""), []);
+  const baseUrl = API_BASE_URL;
 
   const fetchAiPolicies = useCallback(async () => {
     try {
@@ -64,19 +63,19 @@ const AiPolicyManage = () => {
       closeAuthModal();
       fetchAiPolicies();
     } catch (err) {
-      alert(err.response?.data?.error || "인증 실패");
+      alert(err.response?.data?.error || "인증에 실패했습니다.");
     }
   };
 
   const filteredData = useMemo(() => aiData.filter((d) => (d.domain || "").toLowerCase().includes(searchTerm.toLowerCase())), [aiData, searchTerm]);
 
-  const whiteListAll = useMemo(() => filteredData.filter((d) => d.source === "white" && (!whiteSuspiciousOnly || d.ai_status === "의심")), [filteredData, whiteSuspiciousOnly]);
-  const blackListAll = useMemo(() => filteredData.filter((d) => d.source === "black" && (!blackSuspiciousOnly || d.ai_status === "의심")), [filteredData, blackSuspiciousOnly]);
+  const whiteListAll = useMemo(() => filteredData.filter((d) => d.source === "white" && (!whiteSuspiciousOnly || d.ai_status === "DOUBT")), [filteredData, whiteSuspiciousOnly]);
+  const blackListAll = useMemo(() => filteredData.filter((d) => d.source === "black" && (!blackSuspiciousOnly || d.ai_status === "DOUBT")), [filteredData, blackSuspiciousOnly]);
 
   const paginatedWhite = useMemo(() => padRows(whiteListAll.slice((whitePage - 1) * itemsPerPage, whitePage * itemsPerPage), itemsPerPage), [whiteListAll, whitePage]);
   const paginatedBlack = useMemo(() => padRows(blackListAll.slice((blackPage - 1) * itemsPerPage, blackPage * itemsPerPage), itemsPerPage), [blackListAll, blackPage]);
 
-  const toggleSelect = (domain, selectedList, setSelectedList) => {
+  const toggleSelect = (domain, setSelectedList) => {
     setSelectedList((prev) => prev.includes(domain) ? prev.filter((d) => d !== domain) : [...prev, domain]);
   };
   const toggleSelectAll = (paginatedData, selectedList, setSelectedList) => {
@@ -88,15 +87,19 @@ const AiPolicyManage = () => {
 
   const renderBadge = (source, aiStatus) => {
     if (source === "white" && aiStatus === "AI") return <span className="status-badge badge-success">AI 안전</span>;
-    if (source === "white" && aiStatus === "의심") return <span className="status-badge badge-warning">화이트 의심</span>;
-    if (source === "black" && aiStatus === "의심") return <span className="status-badge badge-warning">블랙 의심</span>;
+    if (source === "white" && aiStatus === "DOUBT") return <span className="status-badge badge-score-yellow">화이트 의심</span>;
+    if (source === "black" && aiStatus === "DOUBT") return <span className="status-badge badge-score-orange">블랙 의심</span>;
     if (source === "black" && aiStatus === "AI") return <span className="status-badge badge-danger">AI 위험</span>;
     return <span className="text-muted">-</span>;
   };
 
+  const renderScore = (score) => (
+    <span className={`fw-bold ${getAiScoreClass(score)}`}>{hasAiScore(score) ? `${score}점` : "-"}</span>
+  );
+
   // 의심은 관리자가 허용/차단을 결정하고, AI가 확정한 안전/위험은 해제만 가능
   const renderActions = (domain, aiStatus) => {
-    if (aiStatus === "의심") {
+    if (aiStatus === "DOUBT") {
       return (
         <div className="action-btn-group">
           <button type="button" onClick={() => openAuthModal([domain], "to_user_white")} className="btn-action btn-success btn-w-sm">허용 이관</button>
@@ -115,6 +118,8 @@ const AiPolicyManage = () => {
 
   return (
     <div className="page-container admin-page">
+      {detailDomain && <DomainDetailDialog domain={detailDomain} onClose={() => setDetailDomain(null)} />}
+
       {authModal.isOpen && (
         <AdminAuthDialog
           title={AUTH_TITLES[authModal.action]}
@@ -126,8 +131,8 @@ const AiPolicyManage = () => {
       )}
 
       <PageHeader
-        title="AI 탐지 도메인 이관 현황"
-        subtitle="엔진이 자동으로 수집한 의심/안전 도메인을 정식 사용자 정책으로 이관합니다."
+        title="AI 탐지 도메인 관리"
+        subtitle="AI 엔진이 판별한 도메인을 확인하고 수동 정책으로 이관합니다."
         lastUpdated={lastUpdated}
         onRefresh={fetchAiPolicies}
       >
@@ -155,7 +160,7 @@ const AiPolicyManage = () => {
                 disabled={selectedWhite.length === 0}
                 className="btn-action btn-success btn-w-auto btn-header"
               >
-                선택 일괄 정식 허용 ({selectedWhite.length})
+                선택 허용 이관 ({selectedWhite.length})
               </button>
             </div>
           </div>
@@ -164,19 +169,21 @@ const AiPolicyManage = () => {
               <thead>
                 <tr>
                   <th className="col-check"><input type="checkbox" onChange={() => toggleSelectAll(paginatedWhite, selectedWhite, setSelectedWhite)} checked={paginatedWhite.filter((p) => !p.isEmpty).length > 0 && paginatedWhite.filter((p) => !p.isEmpty).every((p) => selectedWhite.includes(p.domain))} /></th>
-                  <th className="col-status">상태</th>
-                  <th className="th-main">도메인 (URL)</th>
-                  <th className="col-action">관리</th>
+                  <th className="col-status">정책 판단</th>
+                  <th className="th-main">도메인</th>
+                  <th className="col-status">AI 위협 점수</th>
+                  <th className="col-action">조치</th>
                 </tr>
               </thead>
               <tbody>
                 {paginatedWhite.map((p, idx) => (
-                  <tr key={p.isEmpty ? `w-empty-${idx}` : p.domain} className={!p.isEmpty && p.ai_status === "의심" ? "row-warning" : ""}>
-                    {p.isEmpty ? (<td colSpan="4">&nbsp;</td>) : (
+                  <tr key={p.isEmpty ? `w-empty-${idx}` : p.domain} className={!p.isEmpty && p.ai_status === "DOUBT" ? "row-warning" : ""}>
+                    {p.isEmpty ? (<td colSpan="5">&nbsp;</td>) : (
                       <>
-                        <td><input type="checkbox" checked={selectedWhite.includes(p.domain)} onChange={() => toggleSelect(p.domain, selectedWhite, setSelectedWhite)} /></td>
+                        <td className="cell-check"><input type="checkbox" checked={selectedWhite.includes(p.domain)} onChange={() => toggleSelect(p.domain, setSelectedWhite)} /></td>
                         <td>{renderBadge("white", p.ai_status)}</td>
-                        <td className="cell-main">{p.domain}</td>
+                        <td className="cell-main cell-clickable" onClick={() => setDetailDomain(p.domain)}>{p.domain}</td>
+                        <td>{renderScore(p.ai_score)}</td>
                         <td>{renderActions(p.domain, p.ai_status)}</td>
                       </>
                     )}
@@ -208,7 +215,7 @@ const AiPolicyManage = () => {
                 disabled={selectedBlack.length === 0}
                 className="btn-action btn-danger btn-w-auto btn-header"
               >
-                선택 일괄 정식 차단 ({selectedBlack.length})
+                선택 차단 이관 ({selectedBlack.length})
               </button>
             </div>
           </div>
@@ -217,19 +224,21 @@ const AiPolicyManage = () => {
               <thead>
                 <tr>
                   <th className="col-check"><input type="checkbox" onChange={() => toggleSelectAll(paginatedBlack, selectedBlack, setSelectedBlack)} checked={paginatedBlack.filter((p) => !p.isEmpty).length > 0 && paginatedBlack.filter((p) => !p.isEmpty).every((p) => selectedBlack.includes(p.domain))} /></th>
-                  <th className="col-status">상태</th>
-                  <th className="th-main">도메인 (URL)</th>
-                  <th className="col-action">관리</th>
+                  <th className="col-status">정책 판단</th>
+                  <th className="th-main">도메인</th>
+                  <th className="col-status">AI 위협 점수</th>
+                  <th className="col-action">조치</th>
                 </tr>
               </thead>
               <tbody>
                 {paginatedBlack.map((p, idx) => (
-                  <tr key={p.isEmpty ? `b-empty-${idx}` : p.domain} className={!p.isEmpty && p.ai_status === "의심" ? "row-warning" : ""}>
-                    {p.isEmpty ? (<td colSpan="4">&nbsp;</td>) : (
+                  <tr key={p.isEmpty ? `b-empty-${idx}` : p.domain} className={!p.isEmpty && p.ai_status === "DOUBT" ? "row-warning" : ""}>
+                    {p.isEmpty ? (<td colSpan="5">&nbsp;</td>) : (
                       <>
-                        <td><input type="checkbox" checked={selectedBlack.includes(p.domain)} onChange={() => toggleSelect(p.domain, selectedBlack, setSelectedBlack)} /></td>
+                        <td className="cell-check"><input type="checkbox" checked={selectedBlack.includes(p.domain)} onChange={() => toggleSelect(p.domain, setSelectedBlack)} /></td>
                         <td>{renderBadge("black", p.ai_status)}</td>
-                        <td className="cell-main">{p.domain}</td>
+                        <td className="cell-main cell-clickable" onClick={() => setDetailDomain(p.domain)}>{p.domain}</td>
+                        <td>{renderScore(p.ai_score)}</td>
                         <td>{renderActions(p.domain, p.ai_status)}</td>
                       </>
                     )}

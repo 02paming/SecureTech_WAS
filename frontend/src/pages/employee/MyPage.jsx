@@ -69,18 +69,18 @@ const MyPage = () => {
 
   if (loading || !userData)
     return (
-      <div className="page-container empty-state">로딩 중...</div>
+      <div className="page-container empty-state">페이지를 불러오는 중입니다...</div>
     );
 
   const renderRoleBadge = () => {
     if (userData.is_manager)
-      return <span className="status-badge badge-primary">관리자 (보안망)</span>;
+      return <span className="status-badge badge-primary">관리자</span>;
     if (
       userData.employee_number ||
       (userData.emp_code && userData.emp_code !== "-")
     )
-      return <span className="status-badge badge-success">정규 사원 (일반망)</span>;
-    return <span className="status-badge badge-gray">일반 회원 (제한적 접근)</span>;
+      return <span className="status-badge badge-success">일반 사원</span>;
+    return <span className="status-badge badge-gray">일반 회원</span>;
   };
 
   const employeeId =
@@ -143,7 +143,7 @@ const MyPage = () => {
           </div>
           <div className="info-rows">
           <div className="info-row">
-            <span className="info-label">권한 등급</span>
+            <span className="info-label">권한</span>
             <div className="info-value">{renderRoleBadge()}</div>
           </div>
           <div className="info-row">
@@ -151,11 +151,11 @@ const MyPage = () => {
             <span className="info-value fw-bold text-title">{userData.name}</span>
           </div>
           <div className="info-row">
-            <span className="info-label">로그인 ID</span>
+            <span className="info-label">아이디</span>
             <span className="tag tag-mono">{employeeId}</span>
           </div>
           <div className="info-row">
-            <span className="info-label">사원 번호</span>
+            <span className="info-label">사번</span>
             <span className="info-value fw-bold text-primary">
               {userData.emp_code && userData.emp_code !== "-"
                 ? userData.emp_code
@@ -201,7 +201,7 @@ const MyPage = () => {
                 </span>
               </div>
               <div className="info-row">
-                <span className="info-label">거주지 주소</span>
+                <span className="info-label">주소</span>
                 <span className="info-value">{userData.address || "미입력"}</span>
               </div>
             </div>
@@ -209,13 +209,13 @@ const MyPage = () => {
 
           <div className="card">
             <div className="card-header has-divider">
-              <h3 className="card-title">단말 네트워크 상태</h3>
+              <h3 className="card-title">네트워크 인증 상태</h3>
             </div>
             <div className="info-rows">
             <div className="info-row">
-              <span className="info-label">외부 인터넷</span>
+              <span className="info-label">인증 상태</span>
               {userData.network_authenticated ? (
-                <span className="status-badge badge-success">캡티브 포털 인증됨</span>
+                <span className="status-badge badge-success">인증 완료</span>
               ) : (
                 <span className="status-badge badge-gray">미인증</span>
               )}
@@ -225,7 +225,7 @@ const MyPage = () => {
               <span className="info-value">{userData.network_ip || "-"}</span>
             </div>
             <div className="info-row">
-              <span className="info-label">인증 시각</span>
+              <span className="info-label">인증 시간</span>
               <span className="info-value">{userData.network_auth_time || "-"}</span>
             </div>
             </div>
@@ -236,7 +236,7 @@ const MyPage = () => {
       {isEditing && (
         <div className="dialog-overlay">
           <div className="dialog-box dialog-md">
-            <h3 className="dialog-title">연락처 정보 수정</h3>
+            <h3 className="dialog-title">정보 수정</h3>
             <form onSubmit={handleSave} className="auth-form">
               <div className="form-group">
                 <label className="form-label">이메일</label>
@@ -262,7 +262,7 @@ const MyPage = () => {
                 />
               </div>
               <div className="form-group">
-                <label className="form-label">거주지 주소</label>
+                <label className="form-label">주소</label>
                 <input
                   type="text"
                   name="address"

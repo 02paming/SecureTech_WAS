@@ -1,13 +1,13 @@
 import axios from "axios";
 import { useState } from "react";
 import QRCode from "react-qr-code";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
+import { API_BASE_URL } from "../../api";
 
 const Login = ({ setUser, isAdminMode = false }) => {
   const [empId, setEmpId] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  const navigate = useNavigate();
 
   const [otpMode, setOtpMode] = useState(false);
   const [otpSetupMode, setOtpSetupMode] = useState(false);
@@ -15,18 +15,13 @@ const Login = ({ setUser, isAdminMode = false }) => {
   const [otpUri, setOtpUri] = useState("");
   const [otpCode, setOtpCode] = useState("");
   const [tempEmpId, setTempEmpId] = useState("");
-
-  const currentHost = window.location.hostname;
-  const baseUrl =
-    import.meta.env.VITE_API_BASE_URL ||
-    (currentHost === "localhost" || currentHost.startsWith("192.168.")
-      ? `http://${currentHost}:8000`
-      : "https://api.securetechkg.digital");
+  const [otpTicket, setOtpTicket] = useState("");
+  const baseUrl = API_BASE_URL;
 
   const processLoginSuccess = (rawUser) => {
     if (isAdminMode && !rawUser.is_manager) {
       alert(
-        "관리자 권한이 없는 일반 계정입니다.\n사원 전용 로그인 창을 이용해 주세요.",
+        "관리자 권한이 없는 일반 계정입니다.\n사원 로그인 화면을 이용해 주세요.",
       );
       setLoading(false);
       return;
@@ -72,16 +67,18 @@ const Login = ({ setUser, isAdminMode = false }) => {
       const response = await axios.post(`${baseUrl}/api/auth/login/`, {
         employee_id: empId.trim(),
         password: password,
-        is_admin_login: isAdminMode, // 💡 백엔드에 관리자 창 여부를 전달하여 차단/허용 판단 보조
+        is_admin_login: isAdminMode, // 백엔드에 관리자 창 여부를 전달하여 차단/허용 판단 보조
       });
 
       if (response.data.status === "otp_required") {
         setTempEmpId(response.data.employee_id);
+        setOtpTicket(response.data.otp_ticket);
         setOtpMode(true);
         setOtpSetupMode(false);
         setLoading(false);
       } else if (response.data.status === "otp_setup_required") {
         setTempEmpId(response.data.employee_id);
+        setOtpTicket(response.data.otp_ticket);
         setOtpSecret(response.data.otp_secret);
         setOtpUri(response.data.otp_uri);
         setOtpMode(true);
@@ -112,6 +109,7 @@ const Login = ({ setUser, isAdminMode = false }) => {
       const response = await axios.post(`${baseUrl}/api/auth/verify-otp/`, {
         employee_id: tempEmpId,
         otp_code: otpCode.trim(),
+        otp_ticket: otpTicket,
       });
 
       if (response.data.status === "success") {
@@ -207,7 +205,7 @@ const Login = ({ setUser, isAdminMode = false }) => {
             <div className="auth-header">
               <h2 className="auth-title text-primary">
                 {isAdminMode
-                  ? "보안 관제 콘솔 로그인"
+                  ? "관리자 로그인"
                   : "SecureTech 사원 로그인"}
               </h2>
               <p className="auth-subtitle">
@@ -280,7 +278,7 @@ const Login = ({ setUser, isAdminMode = false }) => {
                   ← 홈으로
                 </Link>
                 <Link to="/signup" className="text-link is-primary">
-                  신규 사원 계정 신청
+                  가입 신청
                 </Link>
               </div>
             )}

@@ -1,6 +1,9 @@
 import axios from "axios";
 
 const getBaseUrl = () => {
+  if (import.meta.env.VITE_API_BASE_URL) {
+    return import.meta.env.VITE_API_BASE_URL.replace(/\/+$/, "");
+  }
   try {
     const host = window.location.hostname;
     if (
@@ -20,8 +23,12 @@ const getBaseUrl = () => {
   return `http://${window.location.hostname}:8000`;
 };
 
+export const API_BASE_URL = getBaseUrl();
+// 관제 화면 자동 갱신 주기
+export const MONITOR_REFRESH_MS = 30000;
+
 export const api = axios.create({
-  baseURL: getBaseUrl(),
+  baseURL: API_BASE_URL,
   headers: { "Content-Type": "application/json" },
   timeout: 10000,
   withCredentials: true,
@@ -52,10 +59,10 @@ api.interceptors.response.use(
   (error) => {
     if (error.response) {
       console.warn(
-        `[API 경고] ${error.config?.url} 요청 실패 (상태코드: ${error.response.status})`,
+        `[API] ${error.config?.url} 요청 실패 (상태코드: ${error.response.status})`,
       );
     } else {
-      console.warn("[API 경고] 백엔드 서버와 통신할 수 없습니다.");
+      console.warn("[API] 백엔드 서버와 통신할 수 없습니다.");
     }
     return Promise.reject(error);
   },

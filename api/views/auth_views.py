@@ -1,8 +1,11 @@
+import hmac
 import os
 import re
+import secrets
 
 import pyotp
 from django.contrib.auth.hashers import check_password, make_password
+from django.core.cache import cache
 from django.db import IntegrityError
 from django.utils import timezone
 from rest_framework import status
@@ -10,29 +13,74 @@ from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
 from ..models import Employees, OnlineList, ProspectiveMembers
+from .audit import audited
 from .utils import (
+    ANONYMIZED_ID_PREFIX,
     DUPLICATE_MEMBER_MESSAGE,
-    SERVER_ERROR_MESSAGE,
     RESTRICTED_IDS,
+    SERVER_ERROR_MESSAGE,
     extract_ip_suffix,
     format_jumin_and_birth,
     get_client_ip,
+    is_emp_blocked,
     logger,
     save_online_session,
-    is_emp_blocked,
     sync_pcap_json_files_in_background,
 )
 
 DUPLICATE_CHECK_FIELDS = {"member_id", "email", "phone_number", "jumin_no"}
+MIN_PASSWORD_LENGTH = 8
+MAX_AUTH_FAILURES = 5
+AUTH_LOCK_SECONDS = 300
+OTP_TICKET_SECONDS = 300
+
+
+def _is_reserved_id(member_id):
+    return member_id in RESTRICTED_IDS or member_id.startswith(ANONYMIZED_ID_PREFIX)
+
+
+def _is_locked(kind, emp_id):
+    return (cache.get(f"auth_fail:{kind}:{emp_id}") or 0) >= MAX_AUTH_FAILURES
+
+
+def _add_failure(kind, emp_id):
+    key = f"auth_fail:{kind}:{emp_id}"
+    cache.set(key, (cache.get(key) or 0) + 1, AUTH_LOCK_SECONDS)
+
+
+def _clear_failures(kind, emp_id):
+    cache.delete(f"auth_fail:{kind}:{emp_id}")
+
+
+def _locked_response():
+    return Response(
+        {
+            "status": "error",
+            "message": f"인증 실패가 {MAX_AUTH_FAILURES}회를 넘어 {AUTH_LOCK_SECONDS // 60}분간 시도할 수 없습니다.",
+        },
+        status=status.HTTP_429_TOO_MANY_REQUESTS,
+    )
+
+
+def _issue_otp_ticket(emp_id):
+    """비밀번호를 통과했다는 표시. OTP 단계에서 함께 확인한다."""
+    ticket = secrets.token_urlsafe(32)
+    cache.set(f"otp_ticket:{emp_id}", ticket, OTP_TICKET_SECONDS)
+    return ticket
 
 
 @api_view(["POST"])
 def apply_signup(request):
     try:
         member_id = str(request.data.get("member_id", "")).strip().lower()
-        if not member_id or member_id in RESTRICTED_IDS:
+        if not member_id or _is_reserved_id(member_id):
             return Response(
                 {"error": f"'{member_id}'는 사용할 수 없는 아이디입니다."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if len(str(request.data.get("password") or "")) < MIN_PASSWORD_LENGTH:
+            return Response(
+                {"error": f"비밀번호는 {MIN_PASSWORD_LENGTH}자 이상이어야 합니다."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -69,7 +117,7 @@ def check_duplicate(request):
             {"error": "확인할 수 없는 항목입니다."},
             status=status.HTTP_400_BAD_REQUEST,
         )
-    if field == "member_id" and value.lower() in RESTRICTED_IDS:
+    if field == "member_id" and _is_reserved_id(value.lower()):
         return Response(
             {
                 "is_duplicate": True,
@@ -100,6 +148,7 @@ def check_duplicate(request):
 
 
 @api_view(["POST"])
+@audited("로그인", "employee_id", "member_id", actor_key="employee_id")
 def login(request):
     emp_id = request.data.get("employee_id") or request.data.get("member_id")
     if is_emp_blocked(emp_id):
@@ -107,11 +156,14 @@ def login(request):
             {"status": "error", "message": "관리자에 의해 접근이 제한된 계정입니다."},
             status=status.HTTP_403_FORBIDDEN,
         )
+    if _is_locked("login", emp_id):
+        return _locked_response()
 
     employee = Employees.objects.filter(
         employee_id=emp_id, deleted_at__isnull=True
     ).first()
     if employee and check_password(request.data.get("password"), employee.password):
+        _clear_failures("login", emp_id)
         client_ip = get_client_ip(request)
         is_admin_login = request.data.get("is_admin_login", False)
 
@@ -160,6 +212,7 @@ def login(request):
                         "status": "otp_setup_required",
                         "employee_id": employee.employee_id,
                         "otp_secret": new_secret,
+                        "otp_ticket": _issue_otp_ticket(employee.employee_id),
                         "otp_uri": otp_uri,
                         "message": "구글 OTP 초기 설정이 필요합니다.",
                     }
@@ -169,6 +222,7 @@ def login(request):
                 {
                     "status": "otp_required",
                     "employee_id": employee.employee_id,
+                    "otp_ticket": _issue_otp_ticket(employee.employee_id),
                     "message": "OTP 인증 번호를 입력해주세요.",
                 }
             )
@@ -189,6 +243,7 @@ def login(request):
                 }
             )
 
+    _add_failure("login", emp_id)
     return Response(
         {"status": "error", "message": "아이디 또는 비밀번호가 일치하지 않습니다."},
         status=status.HTTP_401_UNAUTHORIZED,
@@ -196,9 +251,23 @@ def login(request):
 
 
 @api_view(["POST"])
+@audited("OTP 인증", "employee_id", actor_key="employee_id")
 def verify_otp(request):
     emp_id = request.data.get("employee_id")
     otp_code = str(request.data.get("otp_code", "")).strip()
+
+    if _is_locked("otp", emp_id):
+        return _locked_response()
+
+    # 비밀번호 단계를 통과한 요청만 OTP를 확인한다
+    ticket = cache.get(f"otp_ticket:{emp_id}")
+    if not ticket or not hmac.compare_digest(
+        ticket, str(request.data.get("otp_ticket", ""))
+    ):
+        return Response(
+            {"status": "error", "message": "인증 시간이 지났습니다. 다시 로그인해주세요."},
+            status=status.HTTP_401_UNAUTHORIZED,
+        )
 
     employee = Employees.objects.filter(
         employee_id=emp_id, deleted_at__isnull=True
@@ -223,6 +292,8 @@ def verify_otp(request):
 
     totp = pyotp.TOTP(current_secret)
     if totp.verify(otp_code):
+        _clear_failures("otp", emp_id)
+        cache.delete(f"otp_ticket:{emp_id}")
         client_ip = get_client_ip(request)
         # 웹 로그인은 네트워크 인증이 아니므로 online_list를 건드리지 않는다 (캡티브 포털에서만 기록)
         return Response(
@@ -238,6 +309,7 @@ def verify_otp(request):
             }
         )
     else:
+        _add_failure("otp", emp_id)
         return Response(
             {
                 "status": "error",
@@ -248,9 +320,10 @@ def verify_otp(request):
 
 
 @api_view(["POST"])
+@audited("캡티브 포털 인증", "employee_id", actor_key="employee_id")
 def captive_login(request):
     emp_id = request.data.get("employee_id")
-    is_test = request.data.get("is_test", False)  # 💡 테스트 플래그 확인
+    is_test = request.data.get("is_test", False)  # 테스트 플래그 확인
 
     if is_emp_blocked(emp_id):
         return Response(
@@ -260,14 +333,17 @@ def captive_login(request):
             },
             status=status.HTTP_403_FORBIDDEN,
         )
+    if _is_locked("captive", emp_id):
+        return _locked_response()
 
     employee = Employees.objects.filter(
         employee_id=emp_id, deleted_at__isnull=True
     ).first()
     if employee and check_password(request.data.get("password"), employee.password):
+        _clear_failures("captive", emp_id)
         client_ip = get_client_ip(request)
 
-        # 💡 테스트 모드가 아닐 때만 실제 세션 및 PCAP 로깅 수행
+        # 테스트 모드가 아닐 때만 실제 세션 및 PCAP 로깅 수행
         if not is_test:
             try:
                 save_online_session(
@@ -288,6 +364,7 @@ def captive_login(request):
                 },
             }
         )
+    _add_failure("captive", emp_id)
     return Response(
         {"status": "error", "message": "인증 정보가 일치하지 않습니다."},
         status=status.HTTP_401_UNAUTHORIZED,
@@ -301,6 +378,7 @@ def logout_user(request):
 
 
 @api_view(["GET", "PUT"])
+@audited("내 정보 수정", "employee_id", actor_key="employee_id")
 def my_profile(request):
     try:
         emp = Employees.objects.get(
@@ -348,7 +426,9 @@ def my_profile(request):
 
     # 이름·주민번호 등 필수 개인정보는 본인이 바꿀 수 없다 (이메일·연락처·주소·비밀번호만 허용)
     email = str(request.data.get("email", emp.email)).strip()
-    phone_number = re.sub(r"[^0-9]", "", str(request.data.get("phone_number", emp.phone_number)))
+    phone_number = re.sub(
+        r"[^0-9]", "", str(request.data.get("phone_number", emp.phone_number))
+    )
     address = str(request.data.get("address", emp.address)).strip()
     new_password = str(request.data.get("new_password") or "").strip()
 
@@ -359,11 +439,13 @@ def my_profile(request):
         error = "연락처는 숫자 10~11자리로 입력해주세요."
     elif not address:
         error = "주소를 입력해주세요."
-    elif new_password and len(new_password) < 4:
-        error = "새 비밀번호는 4자 이상이어야 합니다."
+    elif new_password and len(new_password) < MIN_PASSWORD_LENGTH:
+        error = f"새 비밀번호는 {MIN_PASSWORD_LENGTH}자 이상이어야 합니다."
     elif Employees.objects.filter(email=email).exclude(pk=emp.pk).exists():
         error = "이미 사용 중인 이메일입니다."
-    elif Employees.objects.filter(phone_number=phone_number).exclude(pk=emp.pk).exists():
+    elif (
+        Employees.objects.filter(phone_number=phone_number).exclude(pk=emp.pk).exists()
+    ):
         error = "이미 사용 중인 연락처입니다."
     if error:
         return Response(
@@ -397,7 +479,9 @@ def get_my_info(request):
                 "data": {
                     "network_authenticated": bool(session),
                     "network_ip": f"192.168.2.{session.online_ip}" if session else None,
-                    "network_auth_time": session.login_time.strftime("%Y-%m-%d %H:%M:%S")
+                    "network_auth_time": session.login_time.strftime(
+                        "%Y-%m-%d %H:%M:%S"
+                    )
                     if session and session.login_time
                     else None,
                     "emp_code": f"ST{current_ym}{emp.employee_number:02d}"

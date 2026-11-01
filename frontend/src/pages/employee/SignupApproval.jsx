@@ -2,14 +2,8 @@ import axios from "axios";
 import { useCallback, useEffect, useState } from "react";
 import PageHeader from "../../components/PageHeader";
 import PaginationBar from "../../components/PaginationBar";
-
-const padRows = (arr, length) => {
-  const padded = [...arr];
-  while (padded.length < length) {
-    padded.push({ isEmpty: true });
-  }
-  return padded;
-};
+import { padRows } from "../../utils/table";
+import { API_BASE_URL } from "../../api";
 
 const ResizableTh = ({ colKey, label, colWidths, handleMouseDown }) => (
   <th className="th-resizable" style={{ width: colWidths[colKey] }}>
@@ -37,10 +31,7 @@ const SignupApproval = () => {
     birth: 140,
     action: 180,
   });
-  const baseUrl = (
-    import.meta.env.VITE_API_BASE_URL ||
-    `http://${window.location.hostname}:8000`
-  ).replace(/\/+$/, "");
+  const baseUrl = API_BASE_URL;
 
   const formatPhone = (phone) => {
     if (!phone) return "-";
@@ -57,7 +48,9 @@ const SignupApproval = () => {
       const res = await axios.get(`${baseUrl}/api/approvals/pending/`);
       setPendingList(Array.isArray(res.data) ? res.data : res.data?.data || []);
       setLastUpdated(new Date().toLocaleTimeString("ko-KR", { hour12: false }));
-    } catch (err) {}
+    } catch (err) {
+      console.error("가입 대기 목록 조회 실패:", err);
+    }
   }, [baseUrl]);
   useEffect(() => {
     fetchPending();
@@ -71,21 +64,21 @@ const SignupApproval = () => {
         member_id: memberId,
       });
       fetchPending();
-    } catch (err) {
-      alert("승인 오류");
+    } catch {
+      alert("승인에 실패했습니다.");
     } finally {
       setLoading(false);
     }
   };
   const handleReject = async (memberId, name) => {
-    if (!window.confirm(`${name} 요청을 반려(삭제)할까요?`)) return;
+    if (!window.confirm(`${name} 요청을 반려할까요? 신청 내용은 삭제됩니다.`)) return;
     try {
       await axios.post(`${baseUrl}/api/approvals/reject/`, {
         member_id: memberId,
       });
       fetchPending();
-    } catch (err) {
-      alert("반려 오류");
+    } catch {
+      alert("반려에 실패했습니다.");
     }
   };
 
@@ -129,8 +122,8 @@ const SignupApproval = () => {
   return (
     <div className="page-container admin-page">
       <PageHeader
-        title="신규 회원 가입 승인 관리"
-        subtitle="가입 대기자를 검토하고 정규 사원으로 승인합니다."
+        title="가입 승인"
+        subtitle="가입 대기자를 검토하고 사원으로 승인합니다."
         lastUpdated={lastUpdated}
         onRefresh={fetchPending}
       />
@@ -153,13 +146,13 @@ const SignupApproval = () => {
               <tr>
                 <ResizableTh
                   colKey="date"
-                  label="신청 일자"
+                  label="신청일"
                   colWidths={colWidths}
                   handleMouseDown={handleMouseDown}
                 />
                 <ResizableTh
                   colKey="id"
-                  label="신청 ID"
+                  label="아이디"
                   colWidths={colWidths}
                   handleMouseDown={handleMouseDown}
                 />
@@ -171,7 +164,7 @@ const SignupApproval = () => {
                 />
                 <ResizableTh
                   colKey="email"
-                  label="개인 이메일"
+                  label="이메일"
                   colWidths={colWidths}
                   handleMouseDown={handleMouseDown}
                 />
@@ -189,7 +182,7 @@ const SignupApproval = () => {
                 />
                 <ResizableTh
                   colKey="action"
-                  label="승인 / 반려"
+                  label="조치"
                   colWidths={colWidths}
                   handleMouseDown={handleMouseDown}
                 />

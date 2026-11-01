@@ -16,6 +16,19 @@ import "@fontsource/jetbrains-mono/400.css";
 import "@fontsource/jetbrains-mono/700.css";
 import "./App.css";
 import api from "./api";
+import BrandIcon from "./components/BrandIcon";
+
+const ADMIN_MENU = [
+  { to: "/dashboard", label: "관제 대시보드" },
+  { to: "/log-analysis", label: "로그 분석실" },
+  { to: "/employee-auth", label: "사원 인증 현황" },
+  { to: "/policies", label: "도메인 정책 관리" },
+  { to: "/ai-policies", label: "AI 탐지 도메인 관리" },
+  { to: "/ai-metrics", label: "AI 모델 성능" },
+  { to: "/approvals", label: "가입 승인" },
+  { to: "/employees", label: "사원 관리" },
+  { to: "/test-lab", label: "보안 테스트실" },
+];
 
 const Home = lazy(() => import("./pages/Home"));
 const Login = lazy(() => import("./pages/auth/Login"));
@@ -53,7 +66,6 @@ const NavigationBar = memo(function NavigationBar({
   isDarkMode,
   layoutWidth,
   setLayoutWidth,
-  isInternalAdminNetwork,
 }) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -92,7 +104,8 @@ const NavigationBar = memo(function NavigationBar({
   return (
     <div className="navbar">
       <div className="mobile-header-bar">
-        <Link to="/" className="m-logo">
+        <Link to="/" className="m-logo brand-logo">
+          <BrandIcon />
           SecureTech
         </Link>
         <button
@@ -105,7 +118,8 @@ const NavigationBar = memo(function NavigationBar({
 
       <div className="desktop-header-bar">
         <div className="nav-left-group">
-          <Link to="/" className="nav-logo">
+          <Link to="/" className="nav-logo brand-logo">
+            <BrandIcon />
             SecureTech
           </Link>
         </div>
@@ -120,78 +134,17 @@ const NavigationBar = memo(function NavigationBar({
           </NavLink>
           {showAdminMenu && (
             <>
-              <NavLink
-                to="/dashboard"
-                className={({ isActive }) =>
-                  `nav-link ${isActive ? "active" : ""}`
-                }
-              >
-                관제 대시보드
-              </NavLink>
-              <NavLink
-                to="/log-analysis"
-                className={({ isActive }) =>
-                  `nav-link ${isActive ? "active" : ""}`
-                }
-              >
-                로그 분석실
-              </NavLink>
-              <NavLink
-                to="/employee-auth"
-                className={({ isActive }) =>
-                  `nav-link ${isActive ? "active" : ""}`
-                }
-              >
-                사원 인증 현황
-              </NavLink>
-              <NavLink
-                to="/policies"
-                className={({ isActive }) =>
-                  `nav-link ${isActive ? "active" : ""}`
-                }
-              >
-                차단 정책 관리
-              </NavLink>
-              <NavLink
-                to="/ai-policies"
-                className={({ isActive }) =>
-                  `nav-link ${isActive ? "active" : ""}`
-                }
-              >
-                AI 차단 현황 관리
-              </NavLink>
-              <NavLink
-                to="/ai-metrics"
-                className={({ isActive }) =>
-                  `nav-link ${isActive ? "active" : ""}`
-                }
-              >
-                AI 모델 성능
-              </NavLink>
-              <NavLink
-                to="/approvals"
-                className={({ isActive }) =>
-                  `nav-link ${isActive ? "active" : ""}`
-                }
-              >
-                가입 승인
-              </NavLink>
-              <NavLink
-                to="/employees"
-                className={({ isActive }) =>
-                  `nav-link ${isActive ? "active" : ""}`
-                }
-              >
-                사원 관리
-              </NavLink>
-              <NavLink
-                to="/test-lab"
-                className={({ isActive }) =>
-                  `nav-link ${isActive ? "active" : ""}`
-                }
-              >
-                보안 테스트실
-              </NavLink>
+              {ADMIN_MENU.map((m) => (
+                <NavLink
+                  key={m.to}
+                  to={m.to}
+                  className={({ isActive }) =>
+                    `nav-link ${isActive ? "active" : ""}`
+                  }
+                >
+                  {m.label}
+                </NavLink>
+              ))}
             </>
           )}
           {user && (
@@ -306,69 +259,16 @@ const NavigationBar = memo(function NavigationBar({
           </Link>
           {showAdminMenu && (
             <>
-              <Link
-                to="/dashboard"
-                className="mobile-nav-link"
-                onClick={() => setIsMobileMenuOpen(false)}
-              >
-                관제 대시보드
-              </Link>
-              <Link
-                to="/log-analysis"
-                className="mobile-nav-link"
-                onClick={() => setIsMobileMenuOpen(false)}
-              >
-                로그 분석실
-              </Link>
-              <Link
-                to="/employee-auth"
-                className="mobile-nav-link"
-                onClick={() => setIsMobileMenuOpen(false)}
-              >
-                사원 인증 현황
-              </Link>
-              <Link
-                to="/policies"
-                className="mobile-nav-link"
-                onClick={() => setIsMobileMenuOpen(false)}
-              >
-                차단 정책 관리
-              </Link>
-              <Link
-                to="/ai-policies"
-                className="mobile-nav-link"
-                onClick={() => setIsMobileMenuOpen(false)}
-              >
-                AI 차단 현황 관리
-              </Link>
-              <Link
-                to="/ai-metrics"
-                className="mobile-nav-link"
-                onClick={() => setIsMobileMenuOpen(false)}
-              >
-                AI 모델 성능
-              </Link>
-              <Link
-                to="/approvals"
-                className="mobile-nav-link"
-                onClick={() => setIsMobileMenuOpen(false)}
-              >
-                가입 승인
-              </Link>
-              <Link
-                to="/employees"
-                className="mobile-nav-link"
-                onClick={() => setIsMobileMenuOpen(false)}
-              >
-                사원 관리
-              </Link>
-              <Link
-                to="/test-lab"
-                className="mobile-nav-link"
-                onClick={() => setIsMobileMenuOpen(false)}
-              >
-                보안 테스트실
-              </Link>
+              {ADMIN_MENU.map((m) => (
+                <Link
+                  key={m.to}
+                  to={m.to}
+                  className="mobile-nav-link"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                >
+                  {m.label}
+                </Link>
+              ))}
             </>
           )}
           {user && (
@@ -467,7 +367,9 @@ function App() {
           setUser(parsedUser);
           setIsAdminPortal(Boolean(adminMode && checkIsManager(parsedUser)));
           return;
-        } catch {}
+        } catch {
+          // 저장값이 손상되면 아래에서 로그아웃 상태로 되돌린다
+        }
       }
       sessionStorage.removeItem("user");
       sessionStorage.removeItem("adminPortalMode");
@@ -509,7 +411,6 @@ function App() {
           isDarkMode={isDarkMode}
           layoutWidth={layoutWidth}
           setLayoutWidth={setLayoutWidth}
-          isInternalAdminNetwork={isInternalAdminNetwork}
         />
         <main className="main-content">
           <Suspense

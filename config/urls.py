@@ -1,7 +1,14 @@
 from django.contrib import admin
 from django.urls import path
 
-from api.views import auth_views, employee_views, log_views, policy_views
+from api.views import (
+    auth_views,
+    dashboard_views,
+    employee_views,
+    log_views,
+    policy_views,
+    test_views,
+)
 
 urlpatterns = [
     path("admin/", admin.site.urls),
@@ -68,7 +75,7 @@ urlpatterns = [
         policy_views.delete_whitelist,
         name="delete_whitelist",
     ),
-    # 💡 [추가] 관리자 ID/PW 인증 및 IP 제한(192.168.3.23) 기반 보호 도메인 제어 라우팅
+    # 관리자 ID/PW 인증 및 IP 제한(192.168.3.23) 기반 보호 도메인 제어 라우팅
     path(
         "api/policies/whitelist/upgrade/",
         policy_views.upgrade_whitelist,
@@ -92,39 +99,19 @@ urlpatterns = [
     path(
         "api/dashboard/threat-logs/", log_views.get_threat_logs, name="get_threat_logs"
     ),
-    path("api/dashboard/online/", log_views.get_online_users, name="get_online_users"),
+    path("api/dashboard/online/", dashboard_views.get_online_users, name="get_online_users"),
     path(
         "api/dashboard/external/",
-        log_views.get_external_access_logs,
+        dashboard_views.get_external_access_logs,
         name="get_external_access_logs",
     ),
     path(
         "api/dashboard/traffic-stats/",
-        log_views.get_traffic_stats,
+        dashboard_views.get_traffic_stats,
         name="get_traffic_stats",
     ),
     path(
-        "api/test/sqli-detection/",
-        log_views.test_sqli_detection,
-        name="test_sqli_detection",
-    ),
-    path(
-        "api/test/ddos-detection/",
-        log_views.test_ddos_detection,
-        name="test_ddos_detection",
-    ),
-    path(
-        "api/test/network-isolation/",
-        log_views.test_network_isolation,
-        name="test_network_isolation",
-    ),
-    path(
-        "api/test/simulate-access/",
-        log_views.simulate_network_access,
-        name="simulate_network_access",
-    ),
-    path(
-        "api/test/mac-spoofing/", log_views.test_mac_spoofing, name="test_mac_spoofing"
+        "api/test/mac-spoofing/", test_views.test_mac_spoofing, name="test_mac_spoofing"
     ),
     path("blocklist/", policy_views.get_blocklist),
     path("report-violation/", log_views.report_violation),
@@ -132,8 +119,13 @@ urlpatterns = [
     path("login/", auth_views.login),
     path(
         "api/dashboard/eqp-run-time/",
-        log_views.manage_eqp_run_time,
+        dashboard_views.manage_eqp_run_time,
         name="manage_eqp_run_time",
+    ),
+    path(
+        "api/dashboard/domain-detail/<str:domain>/",
+        log_views.get_domain_detail,
+        name="get_domain_detail",
     ),
     path(
         "api/dashboard/integrated-logs/",

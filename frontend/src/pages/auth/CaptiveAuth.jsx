@@ -1,6 +1,7 @@
 import { useState } from "react";
 import axios from "axios";
 import { Link } from "react-router-dom";
+import { API_BASE_URL } from "../../api";
 
 const CaptiveAuth = () => {
   const [employeeId, setEmployeeId] = useState("");
@@ -10,10 +11,7 @@ const CaptiveAuth = () => {
   const [userName, setUserName] = useState("");
 
   // 백엔드 API 기본 주소 설정
-  const baseUrl = (
-    import.meta.env.VITE_API_BASE_URL ||
-    `http://${window.location.hostname}:8000`
-  ).replace(/\/+$/, "");
+  const baseUrl = API_BASE_URL;
 
   // 사내망 캡티브 포털 인증 요청
   const handleAuth = async (e) => {
@@ -25,7 +23,7 @@ const CaptiveAuth = () => {
 
     setLoading(true);
     try {
-      // 💡 백엔드 captive_login API 호출 (views.py captive_login과 연동)
+      // 백엔드 captive_login API 호출
       const res = await axios.post(`${baseUrl}/api/auth/captive-login/`, {
         employee_id: employeeId.trim(),
         password: password,
@@ -63,7 +61,7 @@ const CaptiveAuth = () => {
     <div className="auth-wrapper">
       <div className="card auth-card captive-card">
         <div className="auth-header">
-          <h2 className="auth-title">사내 네트워크 접근 인증 (NAC)</h2>
+          <h2 className="auth-title">사내망 접속 인증</h2>
           <p className="auth-subtitle">
             외부 인터넷 연결을 위해 <strong>사원 인증</strong>이 필요합니다.
             <br />
@@ -74,7 +72,7 @@ const CaptiveAuth = () => {
         {isSuccess ? (
           <div className="captive-success-box">
             <div className="captive-success-icon">✓</div>
-            <h3 className="captive-success-title">인증 승인 완료</h3>
+            <h3 className="captive-success-title">인증 완료</h3>
             <p className="captive-success-desc">
               <strong>{userName}</strong> 사원님의 단말이 외부 인터넷 접속 승인
               목록에 등록되었습니다.
@@ -128,7 +126,7 @@ const CaptiveAuth = () => {
             >
               {loading
                 ? "인증 확인 중..."
-                : "사내망 인증 및 외부 인터넷 접속 승인"}
+                : "사내망 인증"}
             </button>
           </form>
         )}

@@ -15,6 +15,9 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { API_BASE_URL, MONITOR_REFRESH_MS } from "../../api";
+
+const LOG_DELAY_WARNING_MINUTES = 30;
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -26,6 +29,7 @@ const Dashboard = () => {
   const [chartData, setChartData] = useState([]);
   const [topDomains, setTopDomains] = useState([]);
   const [topAiSuspicious, setTopAiSuspicious] = useState([]);
+  const [monitoring, setMonitoring] = useState(null);
   const [showConfigModal, setShowConfigModal] = useState(false);
 
   const [panOffset, setPanOffset] = useState(0);
@@ -43,14 +47,7 @@ const Dashboard = () => {
   });
   const [idleMinutes, setIdleMinutes] = useState(30);
 
-  const baseUrl = useMemo(
-    () =>
-      (
-        import.meta.env.VITE_API_BASE_URL ||
-        `http://${window.location.hostname}:8000`
-      ).replace(/\/+$/, ""),
-    [],
-  );
+  const baseUrl = API_BASE_URL;
 
   const fetchData = useCallback(async () => {
     // 시간 간격을 빠르게 바꿔도 늦게 온 이전 응답이 최신 값을 덮어쓰지 않게 한다
@@ -69,6 +66,7 @@ const Dashboard = () => {
           ),
         );
         setTopAiSuspicious(rS.data.top_ai_suspicious || []);
+        setMonitoring(rS.data.monitoring || null);
         setLastUpdated(
           new Date().toLocaleTimeString("ko-KR", { hour12: false }),
         );
@@ -93,7 +91,7 @@ const Dashboard = () => {
 
   useEffect(() => {
     fetchData();
-    const t = setInterval(fetchData, 600000);
+    const t = setInterval(fetchData, MONITOR_REFRESH_MS);
     return () => clearInterval(t);
   }, [fetchData]);
 
@@ -115,7 +113,7 @@ const Dashboard = () => {
         alert("근무 및 유휴 시간이 성공적으로 저장되었습니다.");
         setShowConfigModal(false);
       }
-    } catch (err) {
+    } catch {
       alert("설정 저장에 실패했습니다.");
     }
   }, [baseUrl, eqpConfig, idleMinutes]);
@@ -182,18 +180,30 @@ const Dashboard = () => {
   return (
     <div className="page-container admin-page">
       <PageHeader
-        title="통합 보안 관제 대시보드"
-        subtitle="실시간 네트워크 세션 흐름 및 주요 위협 지표 모니터링"
+        title="관제 대시보드"
+        subtitle="실시간 접속 흐름과 주요 위협 현황을 확인합니다."
         lastUpdated={lastUpdated}
         onRefresh={fetchData}
         refreshing={loading}
-      />
+      >
+        {monitoring && (
+          <>
+            <span className={`tag ${monitoring.minutes_since_log === null || monitoring.minutes_since_log > LOG_DELAY_WARNING_MINUTES ? "text-warning" : "text-success"}`}>
+              마지막 로그: {monitoring.last_log_time || "없음"}
+              {monitoring.minutes_since_log !== null && ` (${monitoring.minutes_since_log}분 전)`}
+            </span>
+            <span className={`tag ${monitoring.watcher_alive ? "text-success" : "text-danger"}`}>
+              감시 프로그램: {monitoring.watcher_alive ? "정상" : "중단"}
+            </span>
+          </>
+        )}
+      </PageHeader>
 
       <div className="panel-row">
         <div className="card dashboard-card card-fill card-fill-wide">
           <div className="card-header">
             <div className="card-title-group">
-              <h3 className="card-title">실시간 트래픽 흐름</h3>
+              <h3 className="card-title">실시간 접속 흐름</h3>
               {panOffset > 0 && (
                 <button
                   type="button"
@@ -219,7 +229,7 @@ const Dashboard = () => {
                   checked={showThreat}
                   onChange={(e) => setShowThreat(e.target.checked)}
                 />
-                위협 차단
+                차단
               </label>
               <label className={`check-label text-warning ${showAi ? "" : "is-off"}`}>
                 <input
@@ -227,7 +237,7 @@ const Dashboard = () => {
                   checked={showAi}
                   onChange={(e) => setShowAi(e.target.checked)}
                 />
-                AI 의심
+                AI 의심 통과
               </label>
               <select
                 value={timeInterval}
@@ -244,7 +254,7 @@ const Dashboard = () => {
                 onClick={() => setShowConfigModal(true)}
                 className="btn-action btn-neutral btn-w-md btn-header"
               >
-                인증 설정
+                인증 정책 설정
               </button>
             </div>
           </div>
@@ -338,6 +348,7 @@ const Dashboard = () => {
                     <Area
                       type="monotone"
                       dataKey="정상접속"
+                      name="정상 통과"
                       stroke="var(--chart-normal)"
                       strokeWidth={3}
                       fillOpacity={1}
@@ -349,6 +360,7 @@ const Dashboard = () => {
                     <Area
                       type="monotone"
                       dataKey="AI의심"
+                      name="AI 의심 통과"
                       stroke="var(--chart-ai)"
                       strokeWidth={3}
                       fillOpacity={1}
@@ -360,6 +372,7 @@ const Dashboard = () => {
                     <Area
                       type="monotone"
                       dataKey="위협차단"
+                      name="차단"
                       stroke="var(--chart-threat)"
                       strokeWidth={3}
                       fillOpacity={1}
@@ -387,8 +400,8 @@ const Dashboard = () => {
           <div className="card dashboard-card card-fill">
             <div className="card-header">
               <div>
-                <h3 className="card-title title-danger">정식 위협 차단 현황</h3>
-                <p className="card-subtitle">차단 트래픽 누적 발생 기준 (Top 5)</p>
+                <h3 className="card-title title-danger">차단 도메인 Top 5</h3>
+                <p className="card-subtitle">누적 차단 건수 기준</p>
               </div>
               <button
                 type="button"
@@ -412,7 +425,7 @@ const Dashboard = () => {
                       dataKey="value"
                       stroke="none"
                     >
-                      {topDomains.map((e, i) => (
+                      {topDomains.map((_, i) => (
                         <Cell
                           key={`pie-cell-${i}`}
                           fill={COLORS[i % COLORS.length]}
@@ -420,7 +433,7 @@ const Dashboard = () => {
                       ))}
                     </Pie>
                     <RechartsTooltip
-                      formatter={(v) => [`${v}건`, "차단됨"]}
+                      formatter={(v) => [`${v}건`, "차단"]}
                       contentStyle={{
                         background: "var(--bg-card)",
                         borderRadius: "8px",
@@ -453,15 +466,15 @@ const Dashboard = () => {
                   </PieChart>
                 </ResponsiveContainer>
               ) : (
-                <div className="empty-state">누적된 차단 내역이 없습니다.</div>
+                <div className="empty-state">차단 기록이 없습니다.</div>
               )}
             </div>
           </div>
           <div className="card dashboard-card card-fill">
             <div className="card-header">
               <div>
-                <h3 className="card-title text-warning">AI 탐지 기반 대기열 (위험/의심)</h3>
-                <p className="card-subtitle">엔진이 자동 수집한 판별 대기 도메인</p>
+                <h3 className="card-title text-warning">AI 탐지 도메인 (위험/의심)</h3>
+                <p className="card-subtitle">AI 엔진이 판별한 도메인</p>
               </div>
               <button
                 type="button"
@@ -489,7 +502,7 @@ const Dashboard = () => {
                   </div>
                 ))
               ) : (
-                <div className="empty-state">현재 탐지된 의심 도메인이 없습니다.</div>
+                <div className="empty-state">탐지된 도메인이 없습니다.</div>
               )}
             </div>
           </div>
@@ -499,7 +512,7 @@ const Dashboard = () => {
       {showConfigModal && (
         <div className="dialog-overlay">
           <div className="dialog-box">
-            <h3 className="dialog-title">사내망 접근 인증 정책 설정</h3>
+            <h3 className="dialog-title">인증 정책 설정</h3>
             <div className="auth-form">
               <div className="form-group">
                 <label className="form-label">

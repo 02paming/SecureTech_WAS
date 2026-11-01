@@ -1,12 +1,13 @@
+from datetime import timedelta
+
 from django.core.cache import cache
-from django.db.models import Avg
 from django.db import IntegrityError
+from django.db.models import Q
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
-# 💡 [수정] BlacklistAddrAccessLog 제거, WebAccessLog 사용
 from ..models import (
     Employees,
     OnlineIpMacMismatchLog,
@@ -15,11 +16,19 @@ from ..models import (
     ProspectiveMembers,
     WebAccessLog,
 )
-from .ai_services import generate_advisor_message
+from .audit import audited
+from .security_services import (
+    SCORE_WINDOW_DAYS,
+    calculate_security_score,
+    generate_advisor_message,
+)
 from .utils import (
+    ANONYMIZED_ID_PREFIX,
     DUPLICATE_MEMBER_MESSAGE,
     SERVER_ERROR_MESSAGE,
     block_emp,
+    classify_access,
+    get_policy_domain_sets,
     is_emp_blocked,
     unblock_emp,
     format_jumin_and_birth,
@@ -50,6 +59,7 @@ def get_pending_members(request):
 
 
 @api_view(["POST"])
+@audited("가입 승인", "member_id")
 def approve_member(request):
     try:
         candidate = ProspectiveMembers.objects.get(
@@ -91,6 +101,7 @@ def approve_member(request):
 
 
 @api_view(["POST"])
+@audited("가입 반려", "member_id")
 def reject_member(request):
     try:
         ProspectiveMembers.objects.get(member_id=request.data.get("member_id")).delete()
@@ -112,7 +123,7 @@ def get_employees(request):
     if cached_data:
         return Response(cached_data)
     data = []
-    for emp in Employees.objects.all():
+    for emp in Employees.objects.exclude(employee_id__startswith=ANONYMIZED_ID_PREFIX):
         current_ym = emp.hire_date.strftime("%Y%m") if emp.hire_date else "202610"
         birth_date, masked_jumin = format_jumin_and_birth(getattr(emp, "jumin_no", ""))
         data.append(
@@ -140,6 +151,7 @@ def get_employees(request):
 
 
 @api_view(["POST"])
+@audited("사원 정보 수정", "employee_id")
 def update_employee(request):
     try:
         employee = Employees.objects.get(employee_id=request.data.get("employee_id"))
@@ -157,6 +169,7 @@ def update_employee(request):
 
 
 @api_view(["POST"])
+@audited("퇴사 처리", "employee_id")
 def delete_employee(request):
     try:
         employee = Employees.objects.get(employee_id=request.data.get("employee_id"))
@@ -176,27 +189,27 @@ def delete_employee(request):
 
 
 @api_view(["POST"])
+@audited("사원 완전 삭제", "employee_id")
 def hard_delete_employee(request):
     try:
         employee = Employees.objects.get(employee_id=request.data.get("employee_id"))
-        log_ids = list(
-            OnlineListLog.objects.filter(employee=employee).values_list(
-                "online_list_log_id", flat=True
-            )
-        )
-        if log_ids:
-            # 💡 [수정] WebAccessLog 하나만 삭제(정상, 차단 모두 포함)
-            WebAccessLog.objects.filter(online_list_log_id__in=log_ids).delete()
-            OnlineIpMacMismatchLog.objects.filter(
-                online_list_log_id__in=log_ids
-            ).delete()
-
+        # 보안 로그는 5년 보관 대상이라 지우지 않고, 사원의 개인정보만 파기한다
+        number = employee.employee_number
         OnlineList.objects.filter(employee=employee).delete()
-        OnlineListLog.objects.filter(employee=employee).delete()
-        employee.delete()
+        employee.employee_id = f"{ANONYMIZED_ID_PREFIX}{number}"
+        employee.password = "!"
+        employee.name = "파기된 사원"
+        employee.email = f"{ANONYMIZED_ID_PREFIX}{number}@invalid"
+        employee.address = "-"
+        employee.phone_number = f"D{number:010d}"
+        employee.jumin_no = f"D{number:012d}"
+        employee.otp_secret = None
+        employee.is_manager = False
+        employee.deleted_at = employee.deleted_at or timezone.now().date()
+        employee.save()
         cache.delete("employee_list_data")
         return Response(
-            {"status": "success", "message": "사원 데이터가 완전히 파기되었습니다."}
+            {"status": "success", "message": "사원 개인정보를 파기했습니다. 보안 로그는 보존됩니다."}
         )
     except Employees.DoesNotExist:
         return Response(
@@ -317,8 +330,9 @@ def get_employee_security_detail(request, emp_id):
                     mismatch_map[m.online_list_log_id] = getattr(
                         m, "mismatch_mac_addr", "-"
                     )
-            except Exception:
-                pass
+            except Exception as e:
+                logger.error("사원 보안 상세 집계 실패: %s", e)
+                raise
 
         for item in recent_logs:
             if item["log_id"] in mismatch_map:
@@ -326,14 +340,15 @@ def get_employee_security_detail(request, emp_id):
                 item["mismatch_mac"] = mismatch_map[item["log_id"]]
 
         recent_violations, violation_count, normal_access_count = [], 0, 0
+        blocked_domains, suspect_domains = get_policy_domain_sets()
         if log_ids:
             try:
-                # 💡 [수정] WebAccessLog에서 "차단" 이력만 추출
+                # WebAccessLog에서 "차단" 이력만 추출
                 v_base = WebAccessLog.objects.filter(
                     online_list_log_id__in=log_ids, access_flag="차단"
                 )
                 violation_count = v_base.count()
-                v_qs = v_base.order_by("-access_time")[:1000]
+                v_qs = v_base.order_by("-access_time")
                 for v in v_qs:
                     domain_val = getattr(v, "target_url", "-") or "-"
                     v_time = (
@@ -357,18 +372,22 @@ def get_employee_security_detail(request, emp_id):
                             "is_blocked": True,
                         }
                     )
-            except Exception:
-                pass
+            except Exception as e:
+                logger.error("사원 보안 상세 집계 실패: %s", e)
+                raise
 
         web_access_list = []
         if log_ids:
             try:
-                # 💡 [수정] WebAccessLog에서 "정상" 접근만 추출
+                # WebAccessLog에서 "정상" 접근만 추출
                 w_base = WebAccessLog.objects.filter(
                     online_list_log_id__in=log_ids, access_flag="정상"
                 )
-                normal_access_count = w_base.count()
-                w_qs = w_base.order_by("-access_time")[:1000]
+                # 통과했던 기록도 도메인이 지금 차단 정책이면 차단으로 집계한다
+                moved_to_block = w_base.filter(target_url__in=blocked_domains).count()
+                normal_access_count = w_base.count() - moved_to_block
+                violation_count += moved_to_block
+                w_qs = w_base.order_by("-access_time")
                 for w in w_qs:
                     w_time = (
                         w.access_time.strftime("%Y-%m-%d %H:%M:%S")
@@ -377,6 +396,9 @@ def get_employee_security_detail(request, emp_id):
                     )
                     session_info = log_map.get(w.online_list_log_id, {})
                     target_domain = getattr(w, "target_url", "-") or "알 수 없는 목적지"
+                    access_status = classify_access(
+                        w.access_flag, target_domain, blocked_domains, suspect_domains
+                    )
                     web_access_list.append(
                         {
                             "ip": session_info.get(
@@ -388,20 +410,45 @@ def get_employee_security_detail(request, emp_id):
                             "mac": session_info.get("mac", "-"),
                             "domain": target_domain,
                             "time": w_time,
-                            "status": "허용",
-                            "is_blocked": False,
+                            "status": "차단" if access_status == "차단" else "허용",
+                            "is_blocked": access_status == "차단",
+                            "is_suspect": access_status == "의심",
                         }
                     )
-            except Exception:
-                pass
+            except Exception as e:
+                logger.error("사원 보안 상세 집계 실패: %s", e)
+                raise
 
         external_access_logs = sorted(
             recent_violations + web_access_list,
             key=lambda x: x.get("time", ""),
             reverse=True,
         )
-        security_score = max(
-            0, 100 - (violation_count * 10) - (mismatch_count * 15)
+        # 건전성 점수와 어드바이저는 최근 활동만 본다. 위 누적 수치는 화면의 이력 표시용이다
+        since = timezone.now() - timedelta(days=SCORE_WINDOW_DAYS)
+        recent_access = WebAccessLog.objects.filter(
+            online_list_log_id__in=log_ids, access_time__gte=since
+        )
+        recent_pass = recent_access.filter(access_flag="정상").exclude(
+            target_url__in=blocked_domains
+        )
+        recent_pass_count = recent_pass.count()
+        recent_block_count = recent_access.filter(
+            Q(access_flag="차단") | Q(target_url__in=blocked_domains)
+        ).count()
+        # 의심 도메인으로 통과한 접속은 건전성 점수에 일부 반영한다
+        recent_suspect_count = recent_pass.filter(
+            target_url__in=suspect_domains
+        ).count()
+        recent_mismatch_count = OnlineIpMacMismatchLog.objects.filter(
+            online_list_log_id__in=log_ids, insert_time__gte=since
+        ).count()
+
+        security_score = calculate_security_score(
+            recent_pass_count,
+            recent_block_count,
+            recent_suspect_count,
+            recent_mismatch_count,
         )
         current_mac = (
             online_session.online_mac_addr
@@ -409,16 +456,12 @@ def get_employee_security_detail(request, emp_id):
             else (recent_logs[0].get("mac", "-") if recent_logs else "-")
         )
 
-        avg_ai_score = 0.0
-        if log_ids:
-            # 💡 [수정] 차단 내역에서 평균 AI 의심 스코어 계산
-            score_agg = WebAccessLog.objects.filter(
-                online_list_log_id__in=log_ids, access_flag="차단", ai_score__gt=0.0
-            ).aggregate(Avg("ai_score"))
-            avg_ai_score = score_agg.get("ai_score__avg") or 0.0
-
         advisor_message = generate_advisor_message(
-            security_score, mismatch_count, violation_count, avg_ai_score
+            security_score,
+            recent_pass_count,
+            recent_block_count,
+            recent_suspect_count,
+            recent_mismatch_count,
         )
 
         return Response(
@@ -452,6 +495,9 @@ def get_employee_security_detail(request, emp_id):
                     else "-",
                     "violation_count": violation_count,
                     "normal_access_count": normal_access_count,
+                    "recent_pass_count": recent_pass_count,
+                    "recent_suspect_count": recent_suspect_count,
+                    "recent_mismatch_count": recent_mismatch_count,
                     "mismatch_count": mismatch_count,
                     "recent_violations": recent_violations,
                     "recent_logs": recent_logs,
@@ -468,6 +514,7 @@ def get_employee_security_detail(request, emp_id):
 
 
 @api_view(["POST"])
+@audited("사원 차단", "employee_id")
 def block_employee(request):
     try:
         emp_id, kick_ip = (
@@ -488,6 +535,7 @@ def block_employee(request):
 
 
 @api_view(["POST"])
+@audited("사원 차단 해제", "employee_id")
 def unblock_employee(request):
     try:
         emp_id = request.data.get("employee_id")

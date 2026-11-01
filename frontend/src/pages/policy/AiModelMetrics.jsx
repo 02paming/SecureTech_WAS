@@ -12,18 +12,14 @@ import {
 } from "recharts";
 import PageHeader from "../../components/PageHeader";
 import PaginationBar from "../../components/PaginationBar";
+import { padRows } from "../../utils/table";
+import { API_BASE_URL } from "../../api";
 
 const SERIES = [
   { key: "accuracy", label: "정확도", color: "var(--series-1)" },
   { key: "precision", label: "정밀도", color: "var(--series-2)" },
   { key: "f1_score", label: "F1 스코어", color: "var(--series-3)" },
 ];
-
-const padRows = (arr, length) => {
-  const padded = [...arr];
-  while (padded.length < length) padded.push({ isEmpty: true });
-  return padded;
-};
 
 const formatPercent = (value) =>
   value === null || value === undefined ? "-" : `${Number(value).toFixed(2)}%`;
@@ -56,14 +52,7 @@ const AiModelMetrics = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 3;
 
-  const baseUrl = useMemo(
-    () =>
-      (
-        import.meta.env.VITE_API_BASE_URL ||
-        `http://${window.location.hostname}:8000`
-      ).replace(/\/+$/, ""),
-    [],
-  );
+  const baseUrl = API_BASE_URL;
 
   const fetchMetrics = useCallback(async () => {
     setLoading(true);

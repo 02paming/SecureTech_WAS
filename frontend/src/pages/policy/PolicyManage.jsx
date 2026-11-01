@@ -1,14 +1,11 @@
 import axios from "axios";
 import { useCallback, useEffect, useState } from "react";
 import AdminAuthDialog from "../../components/AdminAuthDialog";
+import DomainDetailDialog from "../../components/DomainDetailDialog";
 import PageHeader from "../../components/PageHeader";
 import PaginationBar from "../../components/PaginationBar";
-
-const padRows = (arr, length) => {
-  const padded = [...arr];
-  while (padded.length < length) padded.push({ isEmpty: true });
-  return padded;
-};
+import { padRows } from "../../utils/table";
+import { API_BASE_URL } from "../../api";
 
 const PolicyManage = () => {
   const [policies, setPolicies] = useState([]);
@@ -16,6 +13,7 @@ const PolicyManage = () => {
   const [newDomain, setNewDomain] = useState("");
   const [whiteDomain, setWhiteDomain] = useState("");
   const [lastUpdated, setLastUpdated] = useState("");
+  const [detailDomain, setDetailDomain] = useState(null);
 
   const [currentPage, setCurrentPage] = useState(1);
   const [whitePage, setWhitePage] = useState(1);
@@ -23,7 +21,7 @@ const PolicyManage = () => {
 
   const [authModal, setAuthModal] = useState({ isOpen: false, action: null, domain: "" });
 
-  const baseUrl = (import.meta.env.VITE_API_BASE_URL || `http://${window.location.hostname}:8000`).replace(/\/+$/, "");
+  const baseUrl = API_BASE_URL;
 
   const fetchPolicies = useCallback(async () => {
     try {
@@ -53,7 +51,7 @@ const PolicyManage = () => {
       setNewDomain("");
       fetchPolicies();
     } catch (err) {
-      alert(err.response?.data?.error || "차단 등록 실패");
+      alert(err.response?.data?.error || "차단 등록에 실패했습니다.");
     }
   };
 
@@ -63,7 +61,7 @@ const PolicyManage = () => {
       await axios.post(`${baseUrl}/api/policies/delete/`, { blacklist_domain: domain });
       fetchPolicies();
     } catch (err) {
-      alert(err.response?.data?.error || "차단 해제 실패");
+      alert(err.response?.data?.error || "차단 해제에 실패했습니다.");
     }
   };
 
@@ -75,7 +73,7 @@ const PolicyManage = () => {
       setWhiteDomain("");
       fetchPolicies();
     } catch (err) {
-      alert(err.response?.data?.error || "허용 등록 실패");
+      alert(err.response?.data?.error || "허용 등록에 실패했습니다.");
     }
   };
 
@@ -85,7 +83,7 @@ const PolicyManage = () => {
       await axios.post(`${baseUrl}/api/policies/whitelist/delete/`, { domain });
       fetchPolicies();
     } catch (err) {
-      alert(err.response?.data?.error || err.response?.data?.message || "허용 해제 실패");
+      alert(err.response?.data?.error || err.response?.data?.message || "허용 해제에 실패했습니다.");
     }
   };
 
@@ -99,9 +97,9 @@ const PolicyManage = () => {
       await axios.post(`${baseUrl}${endpoint}`, { domain: authModal.domain, ...credentials });
       setAuthModal({ isOpen: false, action: null, domain: "" });
       fetchPolicies();
-      alert(authModal.action === "upgrade" ? "시스템 기본 보호 도메인으로 격상되었습니다." : "보호가 해제되었습니다.");
+      alert(authModal.action === "upgrade" ? "보호 도메인으로 지정되었습니다." : "보호가 해제되었습니다.");
     } catch (err) {
-      alert(err.response?.data?.error || "인증 실패");
+      alert(err.response?.data?.error || "인증에 실패했습니다.");
     }
   };
 
@@ -111,8 +109,8 @@ const PolicyManage = () => {
   return (
     <div className="page-container admin-page">
       <PageHeader
-        title="차단 및 허용 정책 관리"
-        subtitle="네트워크 접근 제어를 위한 도메인 허용/차단 목록 통합 관리 (수동 정책)"
+        title="도메인 정책 관리"
+        subtitle="관리자가 직접 등록하는 허용·차단 도메인을 관리합니다."
         lastUpdated={lastUpdated}
         onRefresh={fetchPolicies}
       />
@@ -133,7 +131,9 @@ const PolicyManage = () => {
               <thead>
                 <tr>
                   <th className="col-no">No</th>
-                  <th className="th-main">허용 도메인 주소 (URL)</th>
+                  <th>허용 도메인 주소 (URL)</th>
+                  <th className="col-count">접속 수</th>
+                  <th className="col-time-sm">최근 접속</th>
                   <th className="col-action">조치</th>
                 </tr>
               </thead>
@@ -141,11 +141,13 @@ const PolicyManage = () => {
                 {paginatedWhite.map((p, idx) => (
                   <tr key={p.isEmpty ? `white-empty-${idx}` : p.domain}>
                     {p.isEmpty ? (
-                      <td colSpan="3">&nbsp;</td>
+                      <td colSpan="5">&nbsp;</td>
                     ) : (
                       <>
                         <td className="cell-no">{(whitePage - 1) * itemsPerPage + idx + 1}</td>
-                        <td className={`cell-main ${p.is_protected ? "is-protected" : ""}`}>{p.domain}</td>
+                        <td className={`cell-main cell-clickable ${p.is_protected ? "is-protected" : ""}`} title={p.domain} onClick={() => setDetailDomain(p.domain)}>{p.domain}</td>
+                        <td>{p.access_count}건</td>
+                        <td className="text-muted">{p.last_access || "-"}</td>
                         <td>
                           <div className="action-btn-group">
                             {p.is_protected ? (
@@ -186,7 +188,9 @@ const PolicyManage = () => {
               <thead>
                 <tr>
                   <th className="col-no">No</th>
-                  <th className="th-main">차단 도메인 주소 (URL)</th>
+                  <th>차단 도메인 주소 (URL)</th>
+                  <th className="col-count">접속 수</th>
+                  <th className="col-time-sm">최근 접속</th>
                   <th className="col-action">조치</th>
                 </tr>
               </thead>
@@ -194,11 +198,13 @@ const PolicyManage = () => {
                 {paginatedBlock.map((p, idx) => (
                   <tr key={p.isEmpty ? `block-empty-${idx}` : p.blacklist_domain}>
                     {p.isEmpty ? (
-                      <td colSpan="3">&nbsp;</td>
+                      <td colSpan="5">&nbsp;</td>
                     ) : (
                       <>
                         <td className="cell-no">{(currentPage - 1) * itemsPerPage + idx + 1}</td>
-                        <td className="cell-main">{p.blacklist_domain}</td>
+                        <td className="cell-main cell-clickable" title={p.blacklist_domain} onClick={() => setDetailDomain(p.blacklist_domain)}>{p.blacklist_domain}</td>
+                        <td>{p.access_count}건</td>
+                        <td className="text-muted">{p.last_access || "-"}</td>
                         <td>
                           <div className="action-btn-group">
                             <button type="button" onClick={() => handleDeletePolicy(p.blacklist_domain)} className="btn-action btn-danger btn-w-sm">해제</button>
@@ -215,9 +221,11 @@ const PolicyManage = () => {
         </div>
       </div>
 
+      {detailDomain && <DomainDetailDialog domain={detailDomain} onClose={() => setDetailDomain(null)} />}
+
       {authModal.isOpen && (
         <AdminAuthDialog
-          title={authModal.action === "upgrade" ? "시스템 보호 도메인 등록" : "시스템 보호 해제 인증"}
+          title={authModal.action === "upgrade" ? "보호 도메인 지정 인증" : "보호 도메인 해제 인증"}
           target={authModal.domain}
           danger={authModal.action !== "upgrade"}
           onSubmit={handleAuthSubmit}
