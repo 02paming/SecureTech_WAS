@@ -1,4 +1,5 @@
 import datetime
+import os
 from datetime import timedelta
 
 import requests
@@ -27,6 +28,8 @@ from .utils import (
     get_threshold_config,
     logger,
 )
+
+AI_SERVER_URL = os.getenv("AI_SERVER_URL", "http://192.168.1.17")
 
 
 @api_view(["GET"])
@@ -276,6 +279,19 @@ def manage_eqp_run_time(request):
         return Response({"status": "error", "message": SERVER_ERROR_MESSAGE}, status=500)
 
 
+def _send_to_ai_server(path, payload):
+    """DB에 저장한 값을 AI 서버에 바로 알린다. 전달 여부를 돌려준다."""
+    try:
+        return requests.post(f"{AI_SERVER_URL}{path}", json=payload, timeout=2).ok
+    except requests.RequestException as e:
+        logger.warning("AI 서버 전송 실패 (%s): %s", path, e)
+        return False
+
+
+def _with_delivery(message, delivered):
+    return message if delivered else f"{message} 다만 AI 서버에는 전달하지 못했습니다."
+
+
 @api_view(["GET", "POST"])
 @audited("AI 판별 기준 변경", "white_start", "black_start", "block_start", actor_key="employee_id")
 def manage_ai_thresholds(request):
@@ -310,14 +326,28 @@ def manage_ai_thresholds(request):
                 status=400,
             )
 
-        # 엔진 서버는 DB에서 값을 가져간다. 어느 행을 읽어도 같도록 모든 행을 맞춘다
+        # 어느 행을 읽어도 같도록 모든 행을 맞춘다
         AiThresholdConfig.objects.update(
             white_doubt_limit=white_start,
             black_doubt_limit=black_start,
             black_limit=block_start - 1,
             updated_at=timezone.now(),
         )
-        return Response({"status": "success", "message": "판별 기준을 저장했습니다."})
+        delivered = _send_to_ai_server(
+            "/api/update_ai_threshold",
+            {
+                "white_doubt_limit": white_start,
+                "black_doubt_limit": black_start,
+                "black_limit": block_start - 1,
+            },
+        )
+        return Response(
+            {
+                "status": "success",
+                "ai_server_delivered": delivered,
+                "message": _with_delivery("판별 기준을 저장했습니다.", delivered),
+            }
+        )
     except Exception as e:
         logger.error("AI 판별 기준 처리 오류: %s", e)
         return Response({"status": "error", "message": SERVER_ERROR_MESSAGE}, status=500)
@@ -343,8 +373,15 @@ def activate_ai_model(request):
         with transaction.atomic():
             AiModelMetrics.objects.update(is_active=False)
             AiModelMetrics.objects.filter(pk=target_model.pk).update(is_active=True)
+        delivered = _send_to_ai_server(
+            "/api/update_ai_model", {"model_version": target_model.version_name}
+        )
         return Response(
-            {"status": "success", "message": f"모델 [{version_name}]을(를) 가동 상태로 바꿨습니다."}
+            {
+                "status": "success",
+                "ai_server_delivered": delivered,
+                "message": _with_delivery(f"모델 [{version_name}]을(를) 가동 상태로 바꿨습니다.", delivered),
+            }
         )
     except Exception as e:
         logger.error("AI 모델 가동 전환 오류: %s", e)

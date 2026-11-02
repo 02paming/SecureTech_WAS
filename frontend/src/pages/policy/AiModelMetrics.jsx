@@ -171,23 +171,24 @@ const AiModelMetrics = () => {
         lastUpdated={lastUpdated}
         onRefresh={fetchMetrics}
         refreshing={loading}
-      >
-        <div className="threshold-form">
-          <label className="text-score-yellow">
-            화이트 의심 (이상)
-            <input type="number" min="1" max="100" className="custom-input" value={whiteStart} onChange={(e) => setWhiteStart(e.target.value)} />
-          </label>
-          <label className="text-score-orange">
-            블랙 의심 (이상)
-            <input type="number" min="1" max="100" className="custom-input" value={blackStart} onChange={(e) => setBlackStart(e.target.value)} />
-          </label>
-          <label className="text-danger">
-            차단 (이상)
-            <input type="number" min="1" max="100" className="custom-input" value={blockStart} onChange={(e) => setBlockStart(e.target.value)} />
-          </label>
-          <button type="button" onClick={openThresholdAuth} className="btn-action btn-success btn-w-sm btn-header">적용</button>
-        </div>
-      </PageHeader>
+        center={
+            <div className="threshold-form">
+              <label className="text-score-yellow">
+                화이트 의심 (이상)
+                <input type="number" min="1" max="100" className="custom-input" value={whiteStart} onChange={(e) => setWhiteStart(e.target.value)} />
+              </label>
+              <label className="text-score-orange">
+                블랙 의심 (이상)
+                <input type="number" min="1" max="100" className="custom-input" value={blackStart} onChange={(e) => setBlackStart(e.target.value)} />
+              </label>
+              <label className="text-danger">
+                차단 (이상)
+                <input type="number" min="1" max="100" className="custom-input" value={blockStart} onChange={(e) => setBlockStart(e.target.value)} />
+              </label>
+              <button type="button" onClick={openThresholdAuth} className="btn-action btn-success btn-w-sm btn-header">적용</button>
+            </div>
+        }
+      />
 
       <div className="stat-row">
         <div className="stat-card is-static">

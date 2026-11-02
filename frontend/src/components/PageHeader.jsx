@@ -1,4 +1,4 @@
-// 모든 관리 페이지의 상단 영역: 제목은 왼쪽, 최종 갱신 시간과 새로고침 버튼은 오른쪽에 고정
+// 모든 관리 페이지의 상단 영역: 제목은 왼쪽, 최종 갱신 시간과 새로고침 버튼은 오른쪽에 고정. center는 가운데에 놓는다
 function PageHeader({
   title,
   subtitle,
@@ -6,13 +6,15 @@ function PageHeader({
   onRefresh,
   refreshing = false,
   children,
+  center,
 }) {
   return (
-    <div className="page-header">
+    <div className={`page-header ${center ? "has-center" : ""}`}>
       <div className="page-heading">
         <h2 className="page-title">{title}</h2>
         {subtitle && <p className="page-subtitle">{subtitle}</p>}
       </div>
+      {center && <div className="header-center">{center}</div>}
       <div className="header-actions">
         {children}
         {onRefresh && (
