@@ -164,76 +164,30 @@ const AiModelMetrics = () => {
           onCancel={() => setAuthRequest(null)}
         />
       )}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "16px", marginBottom: "24px" }}>
 
-        <div style={{ flex: 1, minWidth: "250px" }}>
-          <PageHeader
-            title="AI 모델 성능 현황"
-            subtitle="학습된 탐지 모델의 버전별 성능 지표와 판별 결과를 확인합니다."
-          />
+      <PageHeader
+        title="AI 모델 성능 현황"
+        subtitle="학습된 탐지 모델의 버전별 성능 지표와 판별 결과를 확인합니다."
+        lastUpdated={lastUpdated}
+        onRefresh={fetchMetrics}
+        refreshing={loading}
+      >
+        <div className="threshold-form">
+          <label className="text-score-yellow">
+            화이트 의심 (이상)
+            <input type="number" min="1" max="100" className="custom-input" value={whiteStart} onChange={(e) => setWhiteStart(e.target.value)} />
+          </label>
+          <label className="text-score-orange">
+            블랙 의심 (이상)
+            <input type="number" min="1" max="100" className="custom-input" value={blackStart} onChange={(e) => setBlackStart(e.target.value)} />
+          </label>
+          <label className="text-danger">
+            차단 (이상)
+            <input type="number" min="1" max="100" className="custom-input" value={blockStart} onChange={(e) => setBlockStart(e.target.value)} />
+          </label>
+          <button type="button" onClick={openThresholdAuth} className="btn-action btn-success btn-w-sm btn-header">적용</button>
         </div>
-
-        <div style={{ display: "flex", alignItems: "center", gap: "24px", flexWrap: "wrap" }}>
-
-          <div style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "12px",
-            backgroundColor: "var(--bg-card, #1e293b)",
-            padding: "8px 16px",
-            borderRadius: "8px",
-            border: "1px solid var(--border-color, #334155)",
-            boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)",
-          }}>
-            <span style={{ color: "var(--color-score-yellow)", fontWeight: "600", fontSize: "13px" }}>화이트 의심 (이상)</span>
-            <input
-              type="number"
-              value={whiteStart}
-              onChange={(e) => setWhiteStart(e.target.value)}
-              style={{ width: "50px", background: "var(--bg-card)", border: "1px solid var(--border-color)", color: "var(--text-main)", padding: "6px", borderRadius: "6px", fontSize: "14px", outline: "none", textAlign: "center" }}
-            />
-
-            <span style={{ color: "var(--color-score-orange)", fontWeight: "600", fontSize: "13px", marginLeft: "8px" }}>블랙 의심 (이상)</span>
-            <input
-              type="number"
-              value={blackStart}
-              onChange={(e) => setBlackStart(e.target.value)}
-              style={{ width: "50px", background: "var(--bg-card)", border: "1px solid var(--border-color)", color: "var(--text-main)", padding: "6px", borderRadius: "6px", fontSize: "14px", outline: "none", textAlign: "center" }}
-            />
-
-            <span style={{ color: "#ef4444", fontWeight: "600", fontSize: "13px", marginLeft: "8px" }}>차단 (이상)</span>
-            <input
-              type="number"
-              value={blockStart}
-              onChange={(e) => setBlockStart(e.target.value)}
-              style={{ width: "50px", background: "var(--bg-card)", border: "1px solid var(--border-color)", color: "var(--text-main)", padding: "6px", borderRadius: "6px", fontSize: "14px", outline: "none", textAlign: "center" }}
-            />
-
-            <button
-              onClick={openThresholdAuth}
-              className="btn-action btn-primary"
-              style={{ marginLeft: "12px", padding: "6px 14px", fontSize: "14px", fontWeight: "bold", borderRadius: "6px" }}
-            >
-              적용
-            </button>
-          </div>
-
-          <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-            <span style={{ fontSize: "13px", color: "var(--text-muted, #94a3b8)", whiteSpace: "nowrap" }}>
-              최종 갱신: {lastUpdated || "-"}
-            </span>
-            <button
-              onClick={fetchMetrics}
-              className={`btn-action btn-primary ${loading ? 'is-loading' : ''}`}
-              style={{ padding: "8px 20px", fontSize: "14px", fontWeight: "bold", borderRadius: "6px" }}
-              disabled={loading}
-            >
-              {loading ? '갱신 중...' : '새로고침'}
-            </button>
-          </div>
-
-        </div>
-      </div>
+      </PageHeader>
 
       <div className="stat-row">
         <div className="stat-card is-static">

@@ -124,7 +124,7 @@ const AiPolicyManage = () => {
       {authModal.isOpen && (
         <AdminAuthDialog
           title={AUTH_TITLES[authModal.action]}
-          target={authModal.domains.length === 1 ? authModal.domains[0] : `선택한 ${authModal.domains.length}건의`}
+          target={authModal.domains.length === 1 ? authModal.domains[0] : `선택한 ${authModal.domains.length}건`}
           danger={authModal.action !== "to_user_white"}
           onSubmit={confirmPromote}
           onCancel={closeAuthModal}

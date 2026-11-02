@@ -154,8 +154,8 @@ function PolicyHistoryColumn({ history }) {
                 ) : (
                   <>
                     <td className="text-muted">{h.time.slice(0, 16)}</td>
-                    <td className="cell-ellipsis" title={`${h.before} → ${h.after}`}>
-                      {h.before} →{" "}
+                    <td className="cell-ellipsis" title={h.before ? `${h.before} → ${h.after}` : h.after}>
+                      {h.before && `${h.before} → `}
                       <strong className={`text-${POLICY_TONES[h.after] || "muted"}`}>{h.after}</strong>
                     </td>
                     <td>{h.actor}</td>
@@ -272,16 +272,12 @@ function DomainDetailDialog({ domain, onClose }) {
                 <div className="info-box">
                   {/* 날짜 정렬 맞춤을 위해 인라인 블록 및 고정 너비 할당 */}
                   <div className="info-row is-compact">
-                    <span className="info-label" style={{ display: "inline-block", width: "65px" }}>첫 접속</span>
-                    <span className="info-value" style={{ display: "inline-block", minWidth: "145px" }}>
-                      {detail.first_access || "-"}
-                    </span>
+                    <span className="info-label">첫 접속</span>
+                    <span className="info-value info-date">{detail.first_access || "-"}</span>
                   </div>
                   <div className="info-row is-compact">
-                    <span className="info-label" style={{ display: "inline-block", width: "65px" }}>최근 접속</span>
-                    <span className="info-value" style={{ display: "inline-block", minWidth: "145px" }}>
-                      {detail.last_access || "-"}
-                    </span>
+                    <span className="info-label">최근 접속</span>
+                    <span className="info-value info-date">{detail.last_access || "-"}</span>
                   </div>
                 </div>
               </div>

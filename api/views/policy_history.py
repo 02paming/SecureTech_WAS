@@ -12,6 +12,7 @@ HISTORY_FILE = HISTORY_DIR / "policy_history.jsonl"
 SNAPSHOT_FILE = HISTORY_DIR / "policy_snapshot.json"
 NO_POLICY_BEFORE = "-"
 NO_POLICY_AFTER = "정책 해제"
+NO_POLICY_LABELS = {NO_POLICY_BEFORE, NO_POLICY_AFTER, "미등록", "미분류"}
 HEARTBEAT_FILE = HISTORY_DIR / "watcher_heartbeat"
 HEARTBEAT_LIMIT_SECONDS = 60
 
@@ -76,23 +77,26 @@ def record_policy_changes():
 
 
 def read_policy_history(domain):
-    """도메인의 정책 변경 이력을 최신순으로 돌려준다."""
+    """도메인의 정책 변경 이력을 최신순으로 돌려준다. 정책이 잠시 비어 있던 구간은 건너뛰고 잇는다."""
     try:
         lines = HISTORY_FILE.read_text(encoding="utf-8").splitlines()
     except OSError:
         return []
     history = []
+    last_policy = None
     for line in lines:
         try:
             row = json.loads(line)
         except ValueError:
             continue
-        if row.get("domain") == domain:
-            # 예전 이름으로 남은 기록도 같은 표현으로 보여 준다
-            if row.get("before") in ("미등록", "미분류"):
-                row["before"] = NO_POLICY_BEFORE
-            if row.get("after") in ("미등록", "미분류"):
-                row["after"] = NO_POLICY_AFTER
-            history.append(row)
+        if row.get("domain") != domain:
+            continue
+        if last_policy is None and row.get("before") not in NO_POLICY_LABELS:
+            last_policy = row.get("before")
+        after = row.get("after")
+        if after in NO_POLICY_LABELS or after == last_policy:
+            continue
+        history.append({**row, "before": last_policy or ""})
+        last_policy = after
     history.reverse()
     return history

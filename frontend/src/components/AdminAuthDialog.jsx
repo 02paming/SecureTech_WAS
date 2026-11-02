@@ -15,7 +15,7 @@ function AdminAuthDialog({ title, target, danger = false, onSubmit, onCancel }) 
       <div className="dialog-box">
         <h3 className="dialog-title">{title}</h3>
         <p className="dialog-desc">
-          <strong>{target}</strong> 도메인 제어를 위해 통제실 PC(192.168.3.23)에서 관리자 인증을 진행해주세요.
+          <strong>{target}</strong> 작업을 위해 관리자 인증을 진행해 주세요.
         </p>
         <form onSubmit={handleSubmit} className="dialog-form">
           <input
