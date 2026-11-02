@@ -11,10 +11,8 @@ from .policy_history import read_policy_history
 from .utils import (
     DEFAULT_STATIC_WHITELIST,
     SERVER_ERROR_MESSAGE,
-    classify_access,
     extract_ip_suffix,
-    get_ai_thresholds,
-    get_policy_domain_sets,
+    judge_access,
     get_policy_states,
     logger,
 )
@@ -144,15 +142,13 @@ def _build_policy_map():
 def _policy_label(domain, policy_map):
     if domain in policy_map:
         return policy_map[domain]
-    return "시스템 기본 허용" if domain in DEFAULT_STATIC_WHITELIST else "미분류"
+    return "시스템 기본 허용" if domain in DEFAULT_STATIC_WHITELIST else "-"
 
 
 @api_view(["GET"])
 def get_domain_detail(request, domain):
     try:
         target = domain.strip().lower()
-        blocked_domains, suspect_domains = get_policy_domain_sets()
-
         counts = {"정상": 0, "의심": 0, "차단": 0}
         employees, logs = {}, []
         ai_score = None
@@ -161,9 +157,7 @@ def get_domain_detail(request, domain):
             .select_related("online_list_log__employee")
             .order_by("-access_time")
         ):
-            access_status = classify_access(
-                w.access_flag, w.target_url, blocked_domains, suspect_domains, w.ai_score
-            )
+            _, access_status = judge_access(w.ai_status_code, w.access_flag)
             counts[access_status] += 1
             if ai_score is None and w.ai_score is not None and w.ai_score >= 0:
                 ai_score = w.ai_score
@@ -248,22 +242,12 @@ def get_integrated_logs(request):
             )
             ip_str = f"192.168.2.{ip_val}" if ip_val else "-"
 
-            code = w.ai_status_code
-            
-            if code == 6: historical_policy = "AI 안전"
-            elif code == 5: historical_policy = "화이트 의심"
-            elif code == 4: historical_policy = "블랙 의심"
-            elif code == 3: historical_policy = "AI 차단"
-            elif code == 1: historical_policy = "수동 차단"
-            elif code == 2: historical_policy = "수동 허용"
-            else:
-                # 예외 처리 (수동 차단/허용인데 코드가 안 들어왔을 경우 방어 코드)
-                historical_policy = "수동 차단" if w.access_flag == "차단" else "수동 허용"
+            policy, category = judge_access(w.ai_status_code, w.access_flag)
 
             general_logs.append(
                 {
                     "type": w.access_flag,
-                    "status": historical_policy,
+                    "status": category,  # 집계 구분: 정상, 의심, 차단
                     "violator": f"{emp.name} ({emp.employee_id})"
                     if emp
                     else "내부 단말",
@@ -272,7 +256,7 @@ def get_integrated_logs(request):
                     if getattr(w.online_list_log, "online_mac_addr", None)
                     else "-",
                     "domain": getattr(w, "target_url", "-"),
-                    "policy": historical_policy,
+                    "policy": policy,  # 접속 시점의 판정 이름
                     "ai_score": w.ai_score,
                     "time": w.access_time.strftime("%Y-%m-%d %H:%M:%S")
                     if w.access_time

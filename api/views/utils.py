@@ -1,6 +1,7 @@
 import hashlib
 import json
 import logging
+import os
 import re
 import socket
 import threading
@@ -10,6 +11,7 @@ file_lock = threading.Lock()
 
 from django.core.cache import cache
 from django.db import connection, connections
+from django.db.models import Q
 
 from ..models import AiThresholdConfig, BlacklistAddr, OnlineList, WhitelistAddr
 
@@ -133,55 +135,50 @@ def get_policy_states():
     return states
 
 
-def get_policy_domain_sets():
-    blocked = set(
-        BlacklistAddr.objects.filter(
-            deleted_at__isnull=True, source__in=["USER", "AI"]
-        ).values_list("blacklist_domain", flat=True)
+# web_access_log.ai_status_code: 접속 시점의 판정 (이름, 집계 구분)
+ACCESS_JUDGEMENTS = {
+    1: ("수동 차단", "차단"),
+    2: ("수동 허용", "정상"),
+    3: ("AI 차단", "차단"),
+    4: ("블랙 의심", "의심"),
+    5: ("화이트 의심", "의심"),
+    6: ("AI 안전", "정상"),
+}
+
+
+def judge_access(status_code, access_flag):
+    """접속 시점의 판정 이름과 집계 구분을 돌려준다. 코드가 없으면 수동 정책 기록으로 본다."""
+    if status_code in ACCESS_JUDGEMENTS:
+        return ACCESS_JUDGEMENTS[status_code]
+    return ("수동 차단", "차단") if access_flag == "차단" else ("수동 허용", "정상")
+
+
+def access_category_q(category):
+    """judge_access와 같은 기준으로 DB에서 집계 구분을 거르는 조건을 돌려준다."""
+    codes = [c for c, (_, cat) in ACCESS_JUDGEMENTS.items() if cat == category]
+    query = Q(ai_status_code__in=codes)
+    no_code = ~Q(ai_status_code__in=list(ACCESS_JUDGEMENTS))
+    if category == "차단":
+        return query | (no_code & Q(access_flag="차단"))
+    if category == "정상":
+        return query | (no_code & ~Q(access_flag="차단"))
+    return query
+
+
+def get_threshold_config():
+    """판별 기준은 한 행만 쓴다."""
+    config = AiThresholdConfig.objects.order_by("config_id").first()
+    return config or AiThresholdConfig.objects.create(
+        white_doubt_limit=31, black_doubt_limit=51, black_limit=70
     )
-    suspect = set(
-        WhitelistAddr.objects.filter(
-            deleted_at__isnull=True, source="DOUBT"
-        ).values_list("whitelist_domain", flat=True)
-    ) | set(
-        BlacklistAddr.objects.filter(
-            deleted_at__isnull=True, source="DOUBT"
-        ).values_list("blacklist_domain", flat=True)
-    )
-    return blocked, suspect
 
 
-def get_ai_thresholds():
-    try:
-        config = AiThresholdConfig.objects.first()
-        if config:
-            return config.white_doubt_limit, config.black_doubt_limit, config.black_limit + 1
-    except Exception as e:
-        logger.error(f"임계값 DB 조회 실패: {e}")
-    return 31, 51, 71
-
-
-def classify_access(access_flag, domain, blocked_domains, suspect_domains, ai_score=None):
-    white_start, black_start, block_start = get_ai_thresholds()
-    
-    if ai_score is not None and ai_score >= 0:
-        if ai_score < white_start:
-            return "정상"
-        elif ai_score < block_start:
-            return "의심"
-        else:
-            return "차단"
-
-    if access_flag == "차단" or domain in blocked_domains:
-        return "차단"
-        
-    if access_flag == "정상":
-        return "정상"
-
-    if domain in suspect_domains:
-        return "의심"
-        
-    return "정상"
+def is_admin_ip_allowed(ip):
+    """ADMIN_ALLOWED_IPS가 비어 있으면 제한하지 않는다. 시연 전에 .env에 주소를 넣어 막는다."""
+    allowed = os.getenv("ADMIN_ALLOWED_IPS", "").strip()
+    if not allowed:
+        return True
+    return ip in {item.strip() for item in allowed.split(",")}
 
 
 def sync_pcap_json_files(sync_type="all"):
@@ -189,9 +186,7 @@ def sync_pcap_json_files(sync_type="all"):
         try:
             blacklists = [
                 p.blacklist_domain
-                for p in BlacklistAddr.objects.filter(deleted_at__isnull=True).exclude(
-                    source="DOUBT"
-                )
+                for p in BlacklistAddr.objects.filter(deleted_at__isnull=True)
             ]
 
             with open("blacklist_addr.json", "w", encoding="utf-8") as f:

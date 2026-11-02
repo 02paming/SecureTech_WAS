@@ -2,7 +2,6 @@ from datetime import timedelta
 
 from django.core.cache import cache
 from django.db import IntegrityError
-from django.db.models import Q
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.decorators import api_view
@@ -27,8 +26,7 @@ from .utils import (
     DUPLICATE_MEMBER_MESSAGE,
     SERVER_ERROR_MESSAGE,
     block_emp,
-    classify_access,
-    get_policy_domain_sets,
+    judge_access,
     is_emp_blocked,
     unblock_emp,
     format_jumin_and_birth,
@@ -340,7 +338,6 @@ def get_employee_security_detail(request, emp_id):
                 item["mismatch_mac"] = mismatch_map[item["log_id"]]
 
         recent_violations, violation_count, normal_access_count = [], 0, 0
-        blocked_domains, suspect_domains = get_policy_domain_sets()
         if log_ids:
             try:
                 # WebAccessLog에서 "차단" 이력만 추출
@@ -370,6 +367,7 @@ def get_employee_security_detail(request, emp_id):
                             "time": v_time,
                             "status": "차단",
                             "is_blocked": True,
+                            "category": judge_access(v.ai_status_code, v.access_flag)[1],
                         }
                     )
             except Exception as e:
@@ -383,10 +381,7 @@ def get_employee_security_detail(request, emp_id):
                 w_base = WebAccessLog.objects.filter(
                     online_list_log_id__in=log_ids, access_flag="정상"
                 )
-                # 통과했던 기록도 도메인이 지금 차단 정책이면 차단으로 집계한다
-                moved_to_block = w_base.filter(target_url__in=blocked_domains).count()
-                normal_access_count = w_base.count() - moved_to_block
-                violation_count += moved_to_block
+                normal_access_count = w_base.count()
                 w_qs = w_base.order_by("-access_time")
                 for w in w_qs:
                     w_time = (
@@ -396,9 +391,6 @@ def get_employee_security_detail(request, emp_id):
                     )
                     session_info = log_map.get(w.online_list_log_id, {})
                     target_domain = getattr(w, "target_url", "-") or "알 수 없는 목적지"
-                    access_status = classify_access(
-                        w.access_flag, target_domain, blocked_domains, suspect_domains
-                    )
                     web_access_list.append(
                         {
                             "ip": session_info.get(
@@ -410,9 +402,9 @@ def get_employee_security_detail(request, emp_id):
                             "mac": session_info.get("mac", "-"),
                             "domain": target_domain,
                             "time": w_time,
-                            "status": "차단" if access_status == "차단" else "허용",
-                            "is_blocked": access_status == "차단",
-                            "is_suspect": access_status == "의심",
+                            "status": "허용",
+                            "is_blocked": False,
+                            "category": judge_access(w.ai_status_code, w.access_flag)[1],
                         }
                     )
             except Exception as e:
@@ -429,17 +421,11 @@ def get_employee_security_detail(request, emp_id):
         recent_access = WebAccessLog.objects.filter(
             online_list_log_id__in=log_ids, access_time__gte=since
         )
-        recent_pass = recent_access.filter(access_flag="정상").exclude(
-            target_url__in=blocked_domains
-        )
+        recent_pass = recent_access.filter(access_flag="정상")
         recent_pass_count = recent_pass.count()
-        recent_block_count = recent_access.filter(
-            Q(access_flag="차단") | Q(target_url__in=blocked_domains)
-        ).count()
-        # 의심 도메인으로 통과한 접속은 건전성 점수에 일부 반영한다
-        recent_suspect_count = recent_pass.filter(
-            target_url__in=suspect_domains
-        ).count()
+        # 블랙 의심은 실제로 차단되므로 차단으로 계산하고, 화이트 의심 통과만 일부 반영한다
+        recent_block_count = recent_access.filter(access_flag="차단").count()
+        recent_suspect_count = recent_pass.filter(ai_status_code=5).count()
         recent_mismatch_count = OnlineIpMacMismatchLog.objects.filter(
             online_list_log_id__in=log_ids, insert_time__gte=since
         ).count()

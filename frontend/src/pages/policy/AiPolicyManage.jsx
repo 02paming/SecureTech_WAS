@@ -4,7 +4,7 @@ import AdminAuthDialog from "../../components/AdminAuthDialog";
 import DomainDetailDialog from "../../components/DomainDetailDialog";
 import PageHeader from "../../components/PageHeader";
 import PaginationBar from "../../components/PaginationBar";
-import { getAiScoreClass, hasAiScore } from "../../utils/aiScore";
+import { hasAiScore } from "../../utils/aiScore";
 import { padRows } from "../../utils/table";
 import { API_BASE_URL } from "../../api";
 
@@ -93,8 +93,9 @@ const AiPolicyManage = () => {
     return <span className="text-muted">-</span>;
   };
 
-  const renderScore = (score) => (
-    <span className={`fw-bold ${getAiScoreClass(score)}`}>{hasAiScore(score) ? `${score}점` : "-"}</span>
+  const SCORE_TONES = { "white-AI": "text-success", "white-DOUBT": "text-score-yellow", "black-DOUBT": "text-score-orange", "black-AI": "text-danger" };
+  const renderScore = (score, source, aiStatus) => (
+    <span className={`fw-bold ${SCORE_TONES[`${source}-${aiStatus}`] || "text-muted"}`}>{hasAiScore(score) ? `${score}점` : "-"}</span>
   );
 
   // 의심은 관리자가 허용/차단을 결정하고, AI가 확정한 안전/위험은 해제만 가능
@@ -183,7 +184,7 @@ const AiPolicyManage = () => {
                         <td className="cell-check"><input type="checkbox" checked={selectedWhite.includes(p.domain)} onChange={() => toggleSelect(p.domain, setSelectedWhite)} /></td>
                         <td>{renderBadge("white", p.ai_status)}</td>
                         <td className="cell-main cell-clickable" onClick={() => setDetailDomain(p.domain)}>{p.domain}</td>
-                        <td>{renderScore(p.ai_score)}</td>
+                        <td>{renderScore(p.ai_score, p.source, p.ai_status)}</td>
                         <td>{renderActions(p.domain, p.ai_status)}</td>
                       </>
                     )}
@@ -238,7 +239,7 @@ const AiPolicyManage = () => {
                         <td className="cell-check"><input type="checkbox" checked={selectedBlack.includes(p.domain)} onChange={() => toggleSelect(p.domain, setSelectedBlack)} /></td>
                         <td>{renderBadge("black", p.ai_status)}</td>
                         <td className="cell-main cell-clickable" onClick={() => setDetailDomain(p.domain)}>{p.domain}</td>
-                        <td>{renderScore(p.ai_score)}</td>
+                        <td>{renderScore(p.ai_score, p.source, p.ai_status)}</td>
                         <td>{renderActions(p.domain, p.ai_status)}</td>
                       </>
                     )}

@@ -237,7 +237,7 @@ const Dashboard = () => {
                   checked={showAi}
                   onChange={(e) => setShowAi(e.target.checked)}
                 />
-                AI 의심 통과
+                AI 의심
               </label>
               <select
                 value={timeInterval}
@@ -360,7 +360,7 @@ const Dashboard = () => {
                     <Area
                       type="monotone"
                       dataKey="AI의심"
-                      name="AI 의심 통과"
+                      name="AI 의심"
                       stroke="var(--chart-ai)"
                       strokeWidth={3}
                       fillOpacity={1}

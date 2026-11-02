@@ -103,6 +103,9 @@ function IpMacHistoryColumn({ logs }) {
   );
 }
 
+const ACTIVITY_ROW = { 의심: "row-warning", 차단: "row-danger" };
+const ACTIVITY_TEXT = { 정상: "text-success", 의심: "text-warning", 차단: "text-danger" };
+
 function ExternalAccessColumn({ externalLogs }) {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -114,9 +117,9 @@ function ExternalAccessColumn({ externalLogs }) {
     () =>
       externalLogs
         .filter((item) => {
-          if (statusFilter === "allowed" && (item.is_blocked || item.is_suspect)) return false;
-          if (statusFilter === "suspect" && !item.is_suspect) return false;
-          if (statusFilter === "blocked" && !item.is_blocked) return false;
+          if (statusFilter === "allowed" && item.category !== "정상") return false;
+          if (statusFilter === "suspect" && item.category !== "의심") return false;
+          if (statusFilter === "blocked" && item.category !== "차단") return false;
           return (
             !search ||
             (item.ip || "")
@@ -208,7 +211,7 @@ function ExternalAccessColumn({ externalLogs }) {
           </thead>
           <tbody>
             {currentItems.map((item, idx) => (
-              <tr key={idx} className={item.is_blocked ? "row-danger" : item.is_suspect ? "row-warning" : ""}>
+              <tr key={idx} className={ACTIVITY_ROW[item.category] || ""}>
                 {item.isEmpty ? (
                   <td colSpan="4" className="text-muted">
                     {idx === 0 && filteredLogs.length === 0 ? "활동 기록이 없습니다." : "\u00a0"}
@@ -216,12 +219,12 @@ function ExternalAccessColumn({ externalLogs }) {
                 ) : (
                   <>
                     <td>
-                      <span className={`tag ${item.is_blocked ? "text-danger" : item.is_suspect ? "text-warning" : "text-success"}`}>
-                        {item.is_blocked ? "차단" : item.is_suspect ? "의심" : "정상"}
+                      <span className={`tag ${ACTIVITY_TEXT[item.category] || "text-success"}`}>
+                        {item.category}
                       </span>
                     </td>
                     <td>{item.ip || "-"}</td>
-                    <td className={`cell-ellipsis fw-bold ${item.is_blocked ? "text-danger" : item.is_suspect ? "text-warning" : "text-primary"}`}>
+                    <td className={`cell-ellipsis fw-bold ${ACTIVITY_TEXT[item.category] || "text-primary"}`}>
                       {item.domain || "-"}
                     </td>
                     <td className="text-muted">{item.time || "-"}</td>
@@ -363,6 +366,7 @@ function SecurityDetailDialog({ security, onClose, onRefresh, refreshing }) {
                 time: v.time,
                 status: "차단",
                 is_blocked: true,
+                category: "차단",
               }))
             }
           />

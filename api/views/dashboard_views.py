@@ -3,16 +3,15 @@ import os
 from datetime import timedelta
 
 import requests
-from django.db.models import Count, Max, Q
+from django.db import transaction
+from django.db.models import Count, Max
 from django.db.models.functions import TruncHour, TruncMinute
 from django.utils import timezone
-from rest_framework import status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
 from ..models import (
     AiModelMetrics,
-    AiThresholdConfig,
     BlacklistAddr,
     EqpRunTime,
     OnlineListLog,
@@ -21,10 +20,15 @@ from ..models import (
 )
 from .audit import audited
 from .policy_history import is_watcher_alive
+from .policy_views import verify_admin_auth
 from .utils import (
     SERVER_ERROR_MESSAGE,
+    access_category_q,
+    get_threshold_config,
     logger,
 )
+
+AI_SERVER_URL = os.getenv("AI_SERVER_URL", "http://192.168.1.17")
 
 
 @api_view(["GET"])
@@ -126,40 +130,18 @@ def get_traffic_stats(request):
             access_time__gte=start_t, access_time__lte=end_t
         )
         
-        config = AiThresholdConfig.objects.order_by('-config_id').first()
-        white_start = config.white_doubt_limit if config else 31
-        black_start = config.black_doubt_limit if config else 51
-        block_start = (config.black_limit + 1) if config else 71
-
-        blocked_domains = set(WhitelistAddr.objects.filter(deleted_at__isnull=True).values_list("whitelist_domain", flat=True))
-
-        n_qs = (
-            base_qs.filter(
-                Q(ai_score__isnull=True) | Q(ai_score__lt=0) | Q(ai_score__gte=0, ai_score__lt=white_start),
-                access_flag="정상"
+        # 그래프는 로그 분석실과 같이 접속 시점의 판정으로 집계한다
+        def _count_by_time(category):
+            return (
+                base_qs.filter(access_category_q(category))
+                .annotate(time_bucket=t_func)
+                .values("time_bucket")
+                .annotate(c=Count("web_access_log_id"))
             )
-            .annotate(time_bucket=t_func)
-            .values("time_bucket")
-            .annotate(c=Count("web_access_log_id"))
-        )
 
-        b_qs = (
-            base_qs.filter(
-                (Q(access_flag="차단") & (Q(ai_score__isnull=True) | Q(ai_score__lt=0))) |
-                Q(ai_score__gte=block_start, ai_score__lte=100) |
-                Q(target_url__in=blocked_domains)
-            )
-            .annotate(time_bucket=t_func)
-            .values("time_bucket")
-            .annotate(c=Count("web_access_log_id"))
-        )
-
-        ai_qs = (
-            base_qs.filter(ai_score__gte=white_start, ai_score__lt=block_start)
-            .annotate(time_bucket=t_func)
-            .values("time_bucket")
-            .annotate(c=Count("web_access_log_id"))
-        )
+        n_qs = _count_by_time("정상")
+        b_qs = _count_by_time("차단")
+        ai_qs = _count_by_time("의심")
 
         def _build_dict(qs):
             return {
@@ -191,11 +173,7 @@ def get_traffic_stats(request):
         ]
 
         top_qs = (
-            base_qs.filter(
-                (Q(access_flag="차단") & (Q(ai_score__isnull=True) | Q(ai_score__lt=0))) |
-                Q(ai_score__gte=block_start, ai_score__lte=100) |
-                Q(target_url__in=blocked_domains)
-            )
+            WebAccessLog.objects.filter(access_category_q("차단"))
             .values("target_url")
             .annotate(c=Count("web_access_log_id"))
             .order_by("-c")[:10]
@@ -300,77 +278,107 @@ def manage_eqp_run_time(request):
         return Response({"status": "error", "message": SERVER_ERROR_MESSAGE}, status=500)
 
 
+def _send_to_ai_server(path, payload):
+    """AI 서버에 변경 내용을 보낸다. 전달 여부를 돌려준다."""
+    try:
+        return requests.post(f"{AI_SERVER_URL}{path}", json=payload, timeout=2).ok
+    except requests.RequestException as e:
+        logger.warning("AI 서버 전송 실패 (%s): %s", path, e)
+        return False
+
+
+def _with_delivery(message, delivered):
+    return message if delivered else f"{message} 다만 AI 서버에는 전달하지 못했습니다."
+
+
 @api_view(["GET", "POST"])
+@audited("AI 판별 기준 변경", "white_start", "black_start", "block_start", actor_key="employee_id")
 def manage_ai_thresholds(request):
     try:
+        config = get_threshold_config()
         if request.method == "GET":
-            config = AiThresholdConfig.objects.order_by('-config_id').first()
-            if not config:
-                config = AiThresholdConfig.objects.create(white_doubt_limit=31, black_doubt_limit=51, black_limit=70)
-            
-            return Response({
-                "status": "success",
-                "white_start": config.white_doubt_limit,
-                "black_start": config.black_doubt_limit,
-                "block_start": config.black_limit,
-                "white_doubt_limit": config.white_doubt_limit,
-                "black_doubt_limit": config.black_doubt_limit,
-                "black_limit": config.black_limit
-            })
-
-        if request.method == "POST":
-            w_start = int(request.data.get("white_start", 31))
-            b_start = int(request.data.get("black_start", 51))
-            block_start = int(request.data.get("block_start", 71))
-
-            new_config = AiThresholdConfig.objects.create(
-                white_doubt_limit=w_start,
-                black_doubt_limit=b_start,
-                black_limit=block_start
+            return Response(
+                {
+                    "status": "success",
+                    "white_start": config.white_doubt_limit,
+                    "black_start": config.black_doubt_limit,
+                    # DB에는 블랙 의심의 끝 점수를 저장하므로 차단 시작은 그다음 점수다
+                    "block_start": config.black_limit + 1,
+                }
             )
 
-            try:
-                payload = {
-                    "white_doubt_limit": new_config.white_doubt_limit,
-                    "black_doubt_limit": new_config.black_doubt_limit,
-                    "black_limit": new_config.black_limit
-                }
-                requests.post("http://192.168.1.17/api/update_ai_threshold", json=payload, timeout=2)
-            except Exception as e:
-                logger.warning(f"외부 AI 서버(192.168.1.17)로 임계값 전송 실패: {e}")
+        is_valid, error_msg = verify_admin_auth(
+            request, request.data.get("employee_id"), request.data.get("password")
+        )
+        if not is_valid:
+            return Response({"status": "error", "message": error_msg}, status=403)
 
-            return Response({"status": "success", "message": "새로운 기준이 업데이트되었습니다."})
-            
+        try:
+            white_start = int(request.data.get("white_start"))
+            black_start = int(request.data.get("black_start"))
+            block_start = int(request.data.get("block_start"))
+        except (TypeError, ValueError):
+            return Response({"status": "error", "message": "기준 점수는 숫자로 입력해 주세요."}, status=400)
+        if not 0 < white_start < black_start < block_start <= 100:
+            return Response(
+                {"status": "error", "message": "화이트 의심 < 블랙 의심 < 차단 순서로, 1~100 사이에서 입력해 주세요."},
+                status=400,
+            )
+
+        config.white_doubt_limit = white_start
+        config.black_doubt_limit = black_start
+        config.black_limit = block_start - 1
+        config.save()
+        delivered = _send_to_ai_server(
+            "/api/update_ai_threshold",
+            {
+                "white_doubt_limit": config.white_doubt_limit,
+                "black_doubt_limit": config.black_doubt_limit,
+                "black_limit": config.black_limit,
+            },
+        )
+        return Response(
+            {
+                "status": "success",
+                "ai_server_delivered": delivered,
+                "message": _with_delivery("판별 기준을 저장했습니다.", delivered),
+            }
+        )
     except Exception as e:
-        return Response({"status": "error", "message": str(e)}, status=500)
+        logger.error("AI 판별 기준 처리 오류: %s", e)
+        return Response({"status": "error", "message": SERVER_ERROR_MESSAGE}, status=500)
 
 
 @api_view(["POST"])
+@audited("AI 모델 가동 전환", "version_name", actor_key="employee_id")
 def activate_ai_model(request):
     try:
+        is_valid, error_msg = verify_admin_auth(
+            request, request.data.get("employee_id"), request.data.get("password")
+        )
+        if not is_valid:
+            return Response({"status": "error", "message": error_msg}, status=403)
+
         version_name = request.data.get("version_name")
         if not version_name:
             return Response({"status": "error", "message": "버전 이름이 필요합니다."}, status=400)
-
         target_model = AiModelMetrics.objects.filter(version_name=version_name).first()
         if not target_model:
             return Response({"status": "error", "message": "해당 모델 버전을 찾을 수 없습니다."}, status=404)
 
-        # 💡 1. DB의 is_active 컬럼 업데이트: 선택된 모델은 1(가동), 나머지는 0(미가동)
-        AiModelMetrics.objects.all().update(is_active=0)
-        target_model.is_active = 1
-        target_model.save()
-
-        # 💡 2. 외부 AI 서버(192.168.1.17)로 version_name만 전송
-        try:
-            payload = {
-                "model_version": target_model.version_name
+        with transaction.atomic():
+            AiModelMetrics.objects.update(is_active=False)
+            AiModelMetrics.objects.filter(pk=target_model.pk).update(is_active=True)
+        delivered = _send_to_ai_server(
+            "/api/update_ai_model", {"model_version": target_model.version_name}
+        )
+        return Response(
+            {
+                "status": "success",
+                "ai_server_delivered": delivered,
+                "message": _with_delivery(f"모델 [{version_name}]을(를) 가동 상태로 바꿨습니다.", delivered),
             }
-            requests.post("http://192.168.1.17/api/update_ai_model", json=payload, timeout=2)
-        except Exception as e:
-            logger.warning(f"외부 AI 서버(192.168.1.17) 모델 동기화 실패: {e}")
-
-        return Response({"status": "success", "message": f"모델 [{version_name}]이(가) 가동 시작되었습니다."})
+        )
     except Exception as e:
-        logger.error(f"AI 모델 가동 전환 오류: {e}")
+        logger.error("AI 모델 가동 전환 오류: %s", e)
         return Response({"status": "error", "message": SERVER_ERROR_MESSAGE}, status=500)

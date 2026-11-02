@@ -5,8 +5,8 @@ import DomainDetailDialog from "../../components/DomainDetailDialog";
 import PageHeader from "../../components/PageHeader";
 import PaginationBar from "../../components/PaginationBar";
 import SecurityDetailDialog from "../../components/SecurityDetailDialog";
-import { getAiScoreClass, hasAiScore } from "../../utils/aiScore";
-import { POLICY_TONES, getResultTone } from "../../utils/policyTone"; // getResultTone 필수 임포트 포함됨
+import { hasAiScore } from "../../utils/aiScore";
+import { POLICY_TONES, getResultTone } from "../../utils/policyTone";
 import { padRows, useResetPage } from "../../utils/table";
 
 const LogAnalysis = () => {
@@ -95,26 +95,29 @@ const LogAnalysis = () => {
   // 1. stat 계산 로직 수정
   const statTotal = baseFilteredData.length;
   // "안전"이나 "허용"이라는 글자가 포함되어 있으면 정상 통과로 집계
-  const statAllowed = baseFilteredData.filter((l) => l.status.includes("안전") || l.status.includes("허용")).length;
+  const statAllowed = baseFilteredData.filter((l) => l.status === "정상").length;
   // "차단"이라는 글자가 포함되어 있으면 차단으로 집계
-  const statBlocked = baseFilteredData.filter((l) => l.status.includes("차단")).length;
+  const statBlocked = baseFilteredData.filter((l) => l.status === "차단").length;
   // "의심"이라는 글자가 포함되어 있으면 의심으로 집계
-  const statAiSuspicious = baseFilteredData.filter((l) => l.status.includes("의심")).length;
+  const suspiciousLogs = baseFilteredData.filter((l) => l.status === "의심");
+  const statAiSuspicious = suspiciousLogs.length;
+  const statSuspiciousBlocked = suspiciousLogs.filter((l) => l.type === "차단").length;
 
  // 2. 하단 currentData(탭 클릭 시 필터링) 로직도 함께 수정
   const currentData = useMemo(() => {
     if (statusFilter === "all") return baseFilteredData;
-    if (statusFilter === "허용") return baseFilteredData.filter((l) => l.status.includes("안전") || l.status.includes("허용"));
-    if (statusFilter === "차단") return baseFilteredData.filter((l) => l.status.includes("차단"));
-    if (statusFilter === "의심") return baseFilteredData.filter((l) => l.status.includes("의심"));
+    if (statusFilter === "허용") return baseFilteredData.filter((l) => l.status === "정상");
+    if (statusFilter === "차단") return baseFilteredData.filter((l) => l.status === "차단");
+    if (statusFilter === "의심") return baseFilteredData.filter((l) => l.status === "의심");
     return baseFilteredData;
   }, [baseFilteredData, statusFilter]);
 
   const paginatedData = useMemo(() => padRows(currentData.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage), itemsPerPage), [currentData, currentPage]);
   const totalPages = Math.ceil(currentData.length / itemsPerPage) || 1;
 
-  // 실제 처리 결과(통과 또는 차단) 판별: 화이트 의심(31~50)은 통과, 블랙 의심(51~70)은 차단
-const getProcessingResult = (log) => {
+  // 처리 결과는 접속 시점의 실제 결과를 보여 준다
+  const getProcessingResult = (log) => {
+    if (log.status === "의심") return log.type === "차단" ? "AI 의심 차단" : "AI 의심 통과";
     return log.type === "차단" ? "차단" : "정상 통과";
   };
 
@@ -166,7 +169,10 @@ const getProcessingResult = (log) => {
           onClick={() => setStatusFilter("의심")}
           className={`stat-card tone-warning ${statusFilter === "의심" ? "is-active" : ""}`}
         >
-          <div className="stat-label">AI의심</div>
+          <div>
+            <div className="stat-label">AI 의심</div>
+            <div className="stat-sub">통과 {statAiSuspicious - statSuspiciousBlocked} / 차단 {statSuspiciousBlocked}</div>
+          </div>
           <div className="stat-value">{statAiSuspicious}<span className="stat-unit">건</span></div>
         </div>
         <div
@@ -234,17 +240,17 @@ const getProcessingResult = (log) => {
                           <td className="cell-mono">{log.ip || "-"}</td>
                           <td className="cell-mono">{log.mac || "-"}</td>
                           <td
-                            className={`cell-main cell-clickable ${log.status === "정상" && !POLICY_TONES[log.policy] ? "" : `text-${getResultTone(log.status, log.policy)}`}`}
+                            className={`cell-main cell-clickable text-${getResultTone(log.status, log.policy)}`}
                             onClick={() => setDetailDomain(log.domain)}
                           >
                             {log.domain}
                           </td>
                           <td className={`fw-bold text-${POLICY_TONES[log.policy] || "muted"}`}>{log.policy || "-"}</td>
-                          <td className={`fw-bold ${getAiScoreClass(log.ai_score)}`}>
+                          <td className={`fw-bold text-${POLICY_TONES[log.policy] || "muted"}`}>
                             {hasAiScore(log.ai_score) ? `${log.ai_score}점` : "-"}
                           </td>
                           <td>
-                            <span className={`status-badge badge-${isBlockedResult ? "danger" : "success"}`}>
+                            <span className={`status-badge badge-${log.status === "의심" ? POLICY_TONES[log.policy] : isBlockedResult ? "danger" : "success"}`}>
                               {resultText}
                             </span>
                           </td>

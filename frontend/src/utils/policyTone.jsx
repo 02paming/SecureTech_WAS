@@ -8,11 +8,12 @@ export const POLICY_TONES = {
   "블랙 의심": "score-orange",
   "수동 차단": "danger",
   "AI 위험": "danger",
+  "AI 차단": "danger",
 };
 
 export const STATUS_LABELS = {
   정상: "정상 통과",
-  의심: "AI 의심 통과",
+  의심: "AI 의심",
   차단: "차단",
 };
 

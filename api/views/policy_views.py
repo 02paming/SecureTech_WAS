@@ -20,6 +20,7 @@ from .audit import audited
 from .utils import (
     SERVER_ERROR_MESSAGE,
     get_client_ip,
+    is_admin_ip_allowed,
     logger,
     notify_pcap_delta,
     sync_pcap_json_files,
@@ -35,10 +36,8 @@ def sanitize_domain(raw_domain):
 
 
 def verify_admin_auth(request, emp_id, emp_pw):
-    client_ip = get_client_ip(request)
-    ALLOWED_IPS = ["192.168.3.23", "100.70.236.103", "100.80.205.72"]
-    if client_ip not in ALLOWED_IPS:
-        return False, f"접근 거부: 인가된 PC가 아닙니다. (현재 접속 IP: {client_ip})"
+    if not is_admin_ip_allowed(get_client_ip(request)):
+        return False, "접근 거부: 인가된 PC가 아닙니다."
     emp = Employees.objects.filter(
         employee_id=emp_id, is_manager=True, deleted_at__isnull=True
     ).first()

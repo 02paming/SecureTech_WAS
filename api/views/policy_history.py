@@ -10,7 +10,8 @@ from .utils import get_policy_states
 HISTORY_DIR = settings.BASE_DIR / "policy_history_data"
 HISTORY_FILE = HISTORY_DIR / "policy_history.jsonl"
 SNAPSHOT_FILE = HISTORY_DIR / "policy_snapshot.json"
-UNREGISTERED = "미분류"
+NO_POLICY_BEFORE = "-"
+NO_POLICY_AFTER = "정책 해제"
 HEARTBEAT_FILE = HISTORY_DIR / "watcher_heartbeat"
 HEARTBEAT_LIMIT_SECONDS = 60
 
@@ -53,8 +54,8 @@ def record_policy_changes():
     for domain in sorted(set(previous) | set(current)):
         before = previous.get(domain)
         after = current.get(domain)
-        before_label = before["label"] if before else UNREGISTERED
-        after_label = after["label"] if after else UNREGISTERED
+        before_label = before["label"] if before else NO_POLICY_BEFORE
+        after_label = after["label"] if after else NO_POLICY_AFTER
         if before_label != after_label:
             changes.append(
                 {
@@ -87,10 +88,11 @@ def read_policy_history(domain):
         except ValueError:
             continue
         if row.get("domain") == domain:
-            # 이름을 바꾸기 전에 남은 기록도 같은 이름으로 보여 준다
-            for key in ("before", "after"):
-                if row.get(key) == "미등록":
-                    row[key] = UNREGISTERED
+            # 예전 이름으로 남은 기록도 같은 표현으로 보여 준다
+            if row.get("before") in ("미등록", "미분류"):
+                row["before"] = NO_POLICY_BEFORE
+            if row.get("after") in ("미등록", "미분류"):
+                row["after"] = NO_POLICY_AFTER
             history.append(row)
     history.reverse()
     return history

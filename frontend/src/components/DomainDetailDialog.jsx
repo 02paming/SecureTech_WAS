@@ -1,13 +1,13 @@
 import axios from "axios";
 import { useCallback, useEffect, useState } from "react";
 import { API_BASE_URL } from "../api";
-import { getAiScoreClass, hasAiScore } from "../utils/aiScore";
+import { hasAiScore } from "../utils/aiScore";
 import { POLICY_TONES, STATUS_LABELS, getResultTone } from "../utils/policyTone";
 import { padRows } from "../utils/table";
 import PaginationBar from "./PaginationBar";
 import SecurityDetailDialog from "./SecurityDetailDialog";
 
-// 💡 10줄 페이징으로 수정
+// 10줄 페이징으로 수정
 const PER_PAGE = 10;
 
 function EmployeeColumn({ employees, onEmployeeClick }) {
@@ -22,7 +22,7 @@ function EmployeeColumn({ employees, onEmployeeClick }) {
       <div className="table-responsive table-fill">
         <table className="custom-table table-sm">
           <colgroup>
-            {/* 💡 이름 잘림 방지를 위해 다른 컬럼 가로폭 축소 */}
+            {/* 이름 잘림 방지를 위해 다른 컬럼 가로폭 축소 */}
             <col />
             <col style={{ width: "80px" }} />
             <col style={{ width: "45px" }} />
@@ -248,7 +248,7 @@ function DomainDetailDialog({ domain, onClose }) {
                   </div>
                   <div className="info-row is-compact">
                     <span className="info-label">최근 AI 위협 점수</span>
-                    <strong className={`info-value ${getAiScoreClass(detail.ai_score)}`}>
+                    <strong className={`info-value text-${POLICY_TONES[detail.policy] || "muted"}`}>
                       {hasAiScore(detail.ai_score) ? `${detail.ai_score}점` : "-"}
                     </strong>
                   </div>
@@ -270,7 +270,7 @@ function DomainDetailDialog({ domain, onClose }) {
                   ))}
                 </div>
                 <div className="info-box">
-                  {/* 💡 날짜 정렬 맞춤을 위해 인라인 블록 및 고정 너비 할당 */}
+                  {/* 날짜 정렬 맞춤을 위해 인라인 블록 및 고정 너비 할당 */}
                   <div className="info-row is-compact">
                     <span className="info-label" style={{ display: "inline-block", width: "65px" }}>첫 접속</span>
                     <span className="info-value" style={{ display: "inline-block", minWidth: "145px" }}>

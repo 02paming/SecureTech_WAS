@@ -101,7 +101,7 @@ class WebAccessLog(models.Model):
     access_flag = models.CharField(max_length=50)
     ai_score = models.FloatField(default=-1.0, blank=True, null=True)
     access_time = models.DateTimeField(default=timezone.now)
-    ai_status_code = models.IntegerField(default=0)
+    ai_status_code = models.IntegerField(default=0, blank=True, null=True)
 
     class Meta:
         managed = False

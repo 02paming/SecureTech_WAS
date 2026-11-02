@@ -537,7 +537,7 @@ const EmployeeManage = () => {
                     handleMouseDown={handleMouseDown}
                   />
                 )}
-                {/* 💡 수정됨: 일반 테이블 헤더와 동일하게 색상이 표출되도록 backgroundColor를 inherit(상속)으로 강제 적용 */}
+                {/* 수정됨: 일반 테이블 헤더와 동일하게 색상이 표출되도록 backgroundColor를 inherit(상속)으로 강제 적용 */}
                 <th
                   className="col-sticky-right"
                   style={{ width: colWidths.action, backgroundColor: "inherit" }}

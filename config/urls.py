@@ -147,7 +147,7 @@ urlpatterns = [
         dashboard_views.manage_ai_thresholds, 
         name="manage_ai_thresholds"
     ),
-    # 💡 [추가] AI 모델 가동 상태 변경 및 외부 서버 전송 라우트
+    # AI 모델 가동 상태 변경 및 외부 서버 전송 라우트
     path(
         "api/policies/ai/activate/",
         dashboard_views.activate_ai_model,

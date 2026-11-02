@@ -11,12 +11,13 @@ AUDIT_DIR = settings.BASE_DIR / "audit_data"
 AUDIT_FILE = AUDIT_DIR / "audit.jsonl"
 
 
-def write_audit(request, action, target, success, actor=None):
+def write_audit(request, action, target, status_code, actor=None):
     row = {
         "time": timezone.now().strftime("%Y-%m-%d %H:%M:%S"),
         "action": action,
         "target": target,
-        "result": "성공" if success else "실패",
+        "result": "성공" if status_code < 400 else "실패",
+        "status": status_code,
         "actor": actor or request.headers.get("X-User-Id") or "-",
         "ip": get_client_ip(request),
     }
@@ -42,7 +43,7 @@ def audited(action, *target_keys, actor_key=None):
                     request,
                     action,
                     target,
-                    response.status_code < 400,
+                    response.status_code,
                     request.data.get(actor_key) if actor_key else None,
                 )
             return response

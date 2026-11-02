@@ -10,11 +10,10 @@ const TEST_KINDS = {
   protected_allow: { label: "보호 허용", result: "정상 통과", tone: "success", blocked: false, message: "관리자가 보호로 지정한 주소입니다." },
   manual_allow: { label: "수동 허용", result: "정상 통과", tone: "success", blocked: false, message: "허용 목록에 등록된 주소입니다." },
   ai_safe: { label: "AI 안전", result: "정상 통과", tone: "success", blocked: false, message: "AI가 안전으로 판별한 주소입니다." },
-  white_suspect: { label: "화이트 의심", result: "AI 의심 통과", tone: "score-yellow", blocked: false, suspect: true, message: "AI가 화이트 의심으로 판별한 주소입니다. 표시 후 통과시킵니다." },
-  black_suspect: { label: "블랙 의심", result: "AI 의심 통과", tone: "score-orange", blocked: false, suspect: true, message: "AI가 블랙 의심으로 판별한 주소입니다. 관리자 판단 전까지 표시 후 통과시킵니다." },
+  white_suspect: { label: "화이트 의심", result: "AI 의심 통과", tone: "score-yellow", blocked: false, suspect: true, message: "AI가 화이트 의심으로 판별한 주소입니다. 통과시키고 AI 의심으로 집계합니다." },
+  black_suspect: { label: "블랙 의심", result: "AI 의심 차단", tone: "score-orange", blocked: true, suspect: true, message: "AI가 블랙 의심으로 판별한 주소입니다. 차단하고 AI 의심으로 집계합니다." },
   manual_block: { label: "수동 차단", result: "차단", tone: "danger", blocked: true, message: "차단 목록에 등록된 주소입니다." },
   ai_danger: { label: "AI 위험", result: "차단", tone: "danger", blocked: true, message: "AI가 위험으로 판별한 주소입니다." },
-  unregistered: { label: "미분류", result: "정상 통과", tone: "gray", blocked: false, message: "어느 정책에도 분류되지 않은 주소라 통과합니다." },
 };
 
 const DEFAULT_ADDRESSES = [
@@ -26,7 +25,6 @@ const DEFAULT_ADDRESSES = [
   { address: "test-black-suspect.local", kind: "black_suspect" },
   { address: "test-manual-block.local", kind: "manual_block" },
   { address: "test-ai-danger.local", kind: "ai_danger" },
-  { address: "test-unregistered.local", kind: "unregistered" },
 ];
 
 const loadAddresses = () => {
@@ -176,13 +174,13 @@ export default function TestLab() {
       return;
     }
 
-    // 목록에 없는 주소는 미분류로 보고 통과시킨다
+    // 수동 정책에 없는 주소는 AI가 접속 시점에 판정한다. 가상 화면에서는 안전으로 본다
     const registered = testAddresses.find((a) => a.address === domain);
-    const kind = TEST_KINDS[registered?.kind || "unregistered"];
+    const kind = TEST_KINDS[registered?.kind || "ai_safe"];
 
     if (kind.blocked) {
       addLog(`[정책] ${kind.label}: [${domain}] 차단`, "danger");
-      showSimulationResult(ip, domain, "blocked", kind.result, kind.message, kind.label);
+      showSimulationResult(ip, domain, "blocked", kind.result, kind.message, kind.label, kind.tone);
     } else {
       addLog(
         `[정책] ${kind.label}: [${domain}] ${kind.result}`,
@@ -260,7 +258,7 @@ export default function TestLab() {
               <strong>캡티브 인증:</strong> 미인증 단말은 인증 요구 (웹 로그인과 별개)
             </li>
             <li>
-              <strong>도메인 정책:</strong> 허용은 통과, 의심은 표시 후 통과, 차단은 차단
+              <strong>도메인 정책:</strong> 허용과 화이트 의심은 통과, 블랙 의심과 차단은 차단. 수동 정책이 없으면 AI가 접속 시점에 판정
             </li>
           </ol>
 

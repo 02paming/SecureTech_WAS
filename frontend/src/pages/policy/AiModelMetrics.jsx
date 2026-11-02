@@ -11,6 +11,7 @@ import {
   YAxis,
 } from "recharts";
 import { API_BASE_URL } from "../../api";
+import AdminAuthDialog from "../../components/AdminAuthDialog";
 import PageHeader from "../../components/PageHeader";
 import PaginationBar from "../../components/PaginationBar";
 import { padRows } from "../../utils/table";
@@ -54,6 +55,7 @@ const AiModelMetrics = () => {
   const [whiteStart, setWhiteStart] = useState(31);
   const [blackStart, setBlackStart] = useState(51);
   const [blockStart, setBlockStart] = useState(71);
+  const [authRequest, setAuthRequest] = useState(null);
 
   const baseUrl = API_BASE_URL;
 
@@ -83,34 +85,42 @@ const AiModelMetrics = () => {
     }
   }, [baseUrl]);
 
-  const saveThresholds = async () => {
-    try {
-      await axios.post(`${baseUrl}/api/policies/ai/thresholds/`, {
-        white_start: whiteStart,
-        black_start: blackStart,
-        block_start: blockStart,
-      });
-      alert("AI 판별 기준이 성공적으로 업데이트되었습니다.");
-    } catch (err) {
-      alert("기준 설정 저장에 실패했습니다.");
+  const openThresholdAuth = () => {
+    const white = Number(whiteStart);
+    const black = Number(blackStart);
+    const block = Number(blockStart);
+    if (!(white > 0 && white < black && black < block && block <= 100)) {
+      alert("화이트 의심 < 블랙 의심 < 차단 순서로, 1~100 사이에서 입력해 주세요.");
+      return;
     }
+    setAuthRequest({ type: "thresholds" });
   };
 
-  // 💡 [추가] 미가동 버튼 클릭 시 모델 가동 상태 변경 및 외부 서버 전송
-  const handleActivateModel = async (e, versionName) => {
+  const handleActivateModel = (e, versionName) => {
     e.stopPropagation(); // 행 선택 이벤트 버블링 방지
-    if (!window.confirm(`[${versionName}] 모델을 실서버에 가동하시겠습니까?`)) return;
+    setAuthRequest({ type: "model", versionName });
+  };
 
+  const submitAuth = async (credentials) => {
+    const isModel = authRequest.type === "model";
     try {
-      const res = await axios.post(`${baseUrl}/api/policies/ai/activate/`, {
-        version_name: versionName,
-      });
-      if (res.data.status === "success") {
-        alert(res.data.message);
-        fetchMetrics(); // 목록 새로고침
-      }
+      const res = isModel
+        ? await axios.post(`${baseUrl}/api/policies/ai/activate/`, {
+            version_name: authRequest.versionName,
+            ...credentials,
+          })
+        : await axios.post(`${baseUrl}/api/policies/ai/thresholds/`, {
+            white_start: Number(whiteStart),
+            black_start: Number(blackStart),
+            block_start: Number(blockStart),
+            ...credentials,
+          });
+      alert(res.data.message);
+      setAuthRequest(null);
+      if (isModel) fetchMetrics();
+      else fetchThresholds();
     } catch (err) {
-      alert(err.response?.data?.message || "모델 가동 전환 중 오류가 발생했습니다.");
+      alert(err.response?.data?.message || "처리에 실패했습니다.");
     }
   };
 
@@ -146,6 +156,14 @@ const AiModelMetrics = () => {
 
   return (
     <div className="page-container admin-page">
+      {authRequest && (
+        <AdminAuthDialog
+          title={authRequest.type === "model" ? "AI 모델 가동 전환 인증" : "AI 판별 기준 변경 인증"}
+          target={authRequest.type === "model" ? authRequest.versionName : "AI 판별 기준"}
+          onSubmit={submitAuth}
+          onCancel={() => setAuthRequest(null)}
+        />
+      )}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "16px", marginBottom: "24px" }}>
 
         <div style={{ flex: 1, minWidth: "250px" }}>
@@ -167,20 +185,20 @@ const AiModelMetrics = () => {
             border: "1px solid var(--border-color, #334155)",
             boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)",
           }}>
-            <span style={{ color: "#10b981", fontWeight: "600", fontSize: "13px" }}>화이트 의심 (이상)</span>
+            <span style={{ color: "var(--color-score-yellow)", fontWeight: "600", fontSize: "13px" }}>화이트 의심 (이상)</span>
             <input
               type="number"
               value={whiteStart}
               onChange={(e) => setWhiteStart(e.target.value)}
-              style={{ width: "50px", background: "var(--bg-input, #0f172a)", border: "1px solid var(--border-color, #334155)", color: "white", padding: "6px", borderRadius: "6px", fontSize: "14px", outline: "none", textAlign: "center" }}
+              style={{ width: "50px", background: "var(--bg-card)", border: "1px solid var(--border-color)", color: "var(--text-main)", padding: "6px", borderRadius: "6px", fontSize: "14px", outline: "none", textAlign: "center" }}
             />
 
-            <span style={{ color: "#f59e0b", fontWeight: "600", fontSize: "13px", marginLeft: "8px" }}>블랙 의심 (이상)</span>
+            <span style={{ color: "var(--color-score-orange)", fontWeight: "600", fontSize: "13px", marginLeft: "8px" }}>블랙 의심 (이상)</span>
             <input
               type="number"
               value={blackStart}
               onChange={(e) => setBlackStart(e.target.value)}
-              style={{ width: "50px", background: "var(--bg-input, #0f172a)", border: "1px solid var(--border-color, #334155)", color: "white", padding: "6px", borderRadius: "6px", fontSize: "14px", outline: "none", textAlign: "center" }}
+              style={{ width: "50px", background: "var(--bg-card)", border: "1px solid var(--border-color)", color: "var(--text-main)", padding: "6px", borderRadius: "6px", fontSize: "14px", outline: "none", textAlign: "center" }}
             />
 
             <span style={{ color: "#ef4444", fontWeight: "600", fontSize: "13px", marginLeft: "8px" }}>차단 (이상)</span>
@@ -188,11 +206,11 @@ const AiModelMetrics = () => {
               type="number"
               value={blockStart}
               onChange={(e) => setBlockStart(e.target.value)}
-              style={{ width: "50px", background: "var(--bg-input, #0f172a)", border: "1px solid var(--border-color, #334155)", color: "white", padding: "6px", borderRadius: "6px", fontSize: "14px", outline: "none", textAlign: "center" }}
+              style={{ width: "50px", background: "var(--bg-card)", border: "1px solid var(--border-color)", color: "var(--text-main)", padding: "6px", borderRadius: "6px", fontSize: "14px", outline: "none", textAlign: "center" }}
             />
 
             <button
-              onClick={saveThresholds}
+              onClick={openThresholdAuth}
               className="btn-action btn-primary"
               style={{ marginLeft: "12px", padding: "6px 14px", fontSize: "14px", fontWeight: "bold", borderRadius: "6px" }}
             >
@@ -311,7 +329,7 @@ const AiModelMetrics = () => {
                           {m.is_active ? (
                             <span className="status-badge badge-success">가동 중</span>
                           ) : (
-                            // 💡 [수정] 미가동 버튼 클릭 시 handleActivateModel 호출
+                            // 미가동 버튼 클릭 시 handleActivateModel 호출
                             <button
                               onClick={(e) => handleActivateModel(e, m.version_name)}
                               className="status-badge badge-gray"

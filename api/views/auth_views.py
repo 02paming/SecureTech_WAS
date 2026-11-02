@@ -1,5 +1,4 @@
 import hmac
-import os
 import re
 import secrets
 
@@ -22,6 +21,7 @@ from .utils import (
     extract_ip_suffix,
     format_jumin_and_birth,
     get_client_ip,
+    is_admin_ip_allowed,
     is_emp_blocked,
     logger,
     save_online_session,
@@ -176,21 +176,11 @@ def login(request):
 
         # [분기 1] 관리자일 경우 OTP 인증 프로세스 진행
         if employee.is_manager:
-            if not (
-                client_ip in {"127.0.0.1", "localhost", "::1", "192.168.3.50", "192.168.1.23", "121.139.165.163"}  # 💡 실제 인식된 IP 추가
-                or client_ip.startswith(
-                    (
-                        os.getenv("ADMIN_ALLOWED_IP_PREFIX", "192.168.3."),
-                        "100.",
-                        "192.168.1.",
-                        "121.139.",  # 💡 해당 공인 IP 대역 전체 허용 (선택 사항)
-                    )
-                )
-            ):
+            if not is_admin_ip_allowed(client_ip):
                 return Response(
                     {
                         "status": "error",
-                        "message": f"접근 거부: 관리자 전용 PC에서만 로그인 가능합니다. (인식된 IP: {client_ip})",
+                        "message": "접근 거부: 관리자 전용 PC에서만 로그인 가능합니다.",
                     },
                     status=status.HTTP_403_FORBIDDEN,
                 )
