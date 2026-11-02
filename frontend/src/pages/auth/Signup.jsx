@@ -1,6 +1,6 @@
-import { useState } from "react";
 import axios from "axios";
-import { useNavigate, Link } from "react-router-dom";
+import { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { API_BASE_URL } from "../../api";
 
 const FieldMessage = ({ success, error }) => (
@@ -214,8 +214,8 @@ const Signup = () => {
     } catch (err) {
       alert(
         err.response?.data?.message ||
-          err.response?.data?.error ||
-          "가입 신청 중 오류가 발생했습니다.",
+        err.response?.data?.error ||
+        "가입 신청 중 오류가 발생했습니다.",
       );
     } finally {
       setLoading(false);
@@ -259,18 +259,18 @@ const Signup = () => {
           </div>
 
           <div className="form-group">
-              <label className="form-label">
-                비밀번호 <span className="text-danger">*</span>
-              </label>
-              <input
-                type="password"
-                name="password"
-                value={formData.password}
-                onChange={handleChange}
-                required
-                placeholder="비밀번호 입력"
-                className="custom-input"
-              />
+            <label className="form-label">
+              비밀번호 <span className="text-danger">*</span>
+            </label>
+            <input
+              type="password"
+              name="password"
+              value={formData.password}
+              onChange={handleChange}
+              required
+              placeholder="비밀번호 입력"
+              className="custom-input"
+            />
           </div>
 
           <div className="form-row">
@@ -341,18 +341,18 @@ const Signup = () => {
           </div>
 
           <div className="form-group">
-              <label className="form-label">
-                주소 <span className="text-danger">*</span>
-              </label>
-              <input
-                type="text"
-                name="address"
-                value={formData.address}
-                onChange={handleChange}
-                required
-                placeholder="주소 입력"
-                className="custom-input"
-              />
+            <label className="form-label">
+              주소 <span className="text-danger">*</span>
+            </label>
+            <input
+              type="text"
+              name="address"
+              value={formData.address}
+              onChange={handleChange}
+              required
+              placeholder="주소 입력"
+              className="custom-input"
+            />
           </div>
 
           <div className="notice-box tone-primary">

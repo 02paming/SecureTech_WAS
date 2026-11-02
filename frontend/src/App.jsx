@@ -1,3 +1,8 @@
+import "@fontsource/jetbrains-mono/400.css";
+import "@fontsource/jetbrains-mono/700.css";
+import "@fontsource/pretendard/400.css";
+import "@fontsource/pretendard/600.css";
+import "@fontsource/pretendard/700.css";
 import { lazy, memo, Suspense, useEffect, useState } from "react";
 import {
   BrowserRouter,
@@ -9,11 +14,6 @@ import {
   useLocation,
   useNavigate,
 } from "react-router-dom";
-import "@fontsource/pretendard/400.css";
-import "@fontsource/pretendard/600.css";
-import "@fontsource/pretendard/700.css";
-import "@fontsource/jetbrains-mono/400.css";
-import "@fontsource/jetbrains-mono/700.css";
 import "./App.css";
 import api from "./api";
 import BrandIcon from "./components/BrandIcon";
@@ -167,7 +167,7 @@ const NavigationBar = memo(function NavigationBar({
               onClick={() => setIsSettingsOpen(!isSettingsOpen)}
               title="화면 설정"
             >
-              설정
+              화면 설정
             </button>
             {isSettingsOpen && (
               <div className="settings-dropdown">

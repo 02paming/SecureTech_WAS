@@ -75,7 +75,6 @@ urlpatterns = [
         policy_views.delete_whitelist,
         name="delete_whitelist",
     ),
-    # 관리자 ID/PW 인증 및 IP 제한(192.168.3.23) 기반 보호 도메인 제어 라우팅
     path(
         "api/policies/whitelist/upgrade/",
         policy_views.upgrade_whitelist,
@@ -142,5 +141,16 @@ urlpatterns = [
         "api/policies/ai/metrics/",
         policy_views.get_ai_model_metrics,
         name="get_ai_model_metrics",
+    ),
+    path(
+        "api/policies/ai/thresholds/", 
+        dashboard_views.manage_ai_thresholds, 
+        name="manage_ai_thresholds"
+    ),
+    # 💡 [추가] AI 모델 가동 상태 변경 및 외부 서버 전송 라우트
+    path(
+        "api/policies/ai/activate/",
+        dashboard_views.activate_ai_model,
+        name="activate_ai_model",
     ),
 ]

@@ -11,11 +11,10 @@ file_lock = threading.Lock()
 from django.core.cache import cache
 from django.db import connection, connections
 
-from ..models import BlacklistAddr, OnlineList, WhitelistAddr
+from ..models import AiThresholdConfig, BlacklistAddr, OnlineList, WhitelistAddr
 
 logger = logging.getLogger(__name__)
 RESTRICTED_IDS = {"admin", "root", "manager", "test", "guest"}
-# 완전 삭제한 사원의 자리표시 아이디. 가입에 쓸 수 없다
 ANONYMIZED_ID_PREFIX = "deleted_"
 DEFAULT_STATIC_WHITELIST = {
     "localhost",
@@ -25,7 +24,6 @@ DEFAULT_STATIC_WHITELIST = {
     "gw.st.co.kr",
 }
 
-# DB 오류 원문에는 개인정보가 섞일 수 있으므로 화면에는 이 문구만 보낸다
 SERVER_ERROR_MESSAGE = "요청을 처리하지 못했습니다. 잠시 후 다시 시도해 주세요."
 DUPLICATE_MEMBER_MESSAGE = "이미 등록된 아이디, 이메일, 전화번호 또는 주민등록번호입니다."
 
@@ -46,11 +44,9 @@ LOCAL_PROXIES = {"127.0.0.1", "::1"}
 
 
 def get_client_ip(request):
-    """요청 IP를 돌려준다. X-Forwarded-For는 위조할 수 있어 같은 서버의 nginx를 거칠 때만 믿는다."""
     remote = request.META.get("REMOTE_ADDR", "127.0.0.1")
     if remote not in LOCAL_PROXIES:
         return remote
-    # nginx가 맨 뒤에 붙인 값이 실제 접속 주소다
     forwarded = [
         ip.strip()
         for ip in request.META.get("HTTP_X_FORWARDED_FOR", "").split(",")
@@ -90,7 +86,6 @@ def save_online_session(emp, sfx, now):
 
 
 def _blocked_key(emp_id):
-    # 입력값을 그대로 키로 쓰지 않도록 해시로 고정 길이 키를 만든다
     return "blocked_emp:" + hashlib.sha256(str(emp_id).encode()).hexdigest()
 
 
@@ -107,7 +102,6 @@ def unblock_emp(emp_id):
 
 
 def resolve_domain_ip(domain):
-    # DNS 조회가 안 되는 도메인 하나 때문에 전체 동기화가 실패하지 않도록 한다
     try:
         return socket.gethostbyname(domain) if domain else "0.0.0.0"
     except OSError:
@@ -119,7 +113,6 @@ BLACK_POLICY_LABELS = {"USER": "수동 차단", "AI": "AI 위험", "DOUBT": "블
 
 
 def get_policy_states():
-    """활성 정책의 도메인별 정책 판단 이름과 출처를 돌려준다."""
     states = {}
     for domain, source, is_protected in WhitelistAddr.objects.filter(
         deleted_at__isnull=True
@@ -141,7 +134,6 @@ def get_policy_states():
 
 
 def get_policy_domain_sets():
-    """현재 정책 기준의 차단 도메인과 의심 도메인을 돌려준다."""
     blocked = set(
         BlacklistAddr.objects.filter(
             deleted_at__isnull=True, source__in=["USER", "AI"]
@@ -159,25 +151,44 @@ def get_policy_domain_sets():
     return blocked, suspect
 
 
-def classify_access(access_flag, domain, blocked_domains, suspect_domains):
-    """접속 기록을 정상·의심·차단 중 하나로 나눈다.
+def get_ai_thresholds():
+    try:
+        config = AiThresholdConfig.objects.first()
+        if config:
+            return config.white_doubt_limit, config.black_doubt_limit, config.black_limit + 1
+    except Exception as e:
+        logger.error(f"임계값 DB 조회 실패: {e}")
+    return 31, 51, 71
 
-    로그 원본은 고치지 않고, 통과했던 기록도 도메인이 지금 차단 정책이면 차단으로 집계한다.
-    """
+
+def classify_access(access_flag, domain, blocked_domains, suspect_domains, ai_score=None):
+    white_start, black_start, block_start = get_ai_thresholds()
+    
+    if ai_score is not None and ai_score >= 0:
+        if ai_score < white_start:
+            return "정상"
+        elif ai_score < block_start:
+            return "의심"
+        else:
+            return "차단"
+
     if access_flag == "차단" or domain in blocked_domains:
         return "차단"
+        
+    if access_flag == "정상":
+        return "정상"
+
     if domain in suspect_domains:
         return "의심"
+        
     return "정상"
 
 
 def sync_pcap_json_files(sync_type="all"):
     with file_lock:
         try:
-            # 통합 BlacklistAddr만 조회
             blacklists = [
                 p.blacklist_domain
-                # 블랙 의심은 관리자 판단 전까지 차단하지 않으므로 엔진 목록에서 제외
                 for p in BlacklistAddr.objects.filter(deleted_at__isnull=True).exclude(
                     source="DOUBT"
                 )
@@ -195,7 +206,6 @@ def sync_pcap_json_files(sync_type="all"):
                     f,
                 )
 
-            # 통합 WhitelistAddr만 조회
             whitelists = [
                 w.whitelist_domain
                 for w in WhitelistAddr.objects.filter(deleted_at__isnull=True)
@@ -267,7 +277,6 @@ def sync_pcap_json_files_in_background():
         try:
             sync_pcap_json_files()
         finally:
-            # 스레드가 연 DB 연결은 자동으로 재사용되지 않으므로 바로 닫는다
             connections.close_all()
 
     threading.Thread(target=run).start()

@@ -10,10 +10,10 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { API_BASE_URL } from "../../api";
 import PageHeader from "../../components/PageHeader";
 import PaginationBar from "../../components/PaginationBar";
 import { padRows } from "../../utils/table";
-import { API_BASE_URL } from "../../api";
 
 const SERIES = [
   { key: "accuracy", label: "정확도", color: "var(--series-1)" },
@@ -24,7 +24,6 @@ const SERIES = [
 const formatPercent = (value) =>
   value === null || value === undefined ? "-" : `${Number(value).toFixed(2)}%`;
 
-// 재현율은 DB에 없으므로 TP / (TP + FN)으로 계산
 const getRecall = (m) => {
   const total = m.tp_count + m.fn_count;
   return total > 0 ? (m.tp_count / total) * 100 : null;
@@ -52,6 +51,10 @@ const AiModelMetrics = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 3;
 
+  const [whiteStart, setWhiteStart] = useState(31);
+  const [blackStart, setBlackStart] = useState(51);
+  const [blockStart, setBlockStart] = useState(71);
+
   const baseUrl = API_BASE_URL;
 
   const fetchMetrics = useCallback(async () => {
@@ -67,11 +70,55 @@ const AiModelMetrics = () => {
     }
   }, [baseUrl]);
 
+  const fetchThresholds = useCallback(async () => {
+    try {
+      const res = await axios.get(`${baseUrl}/api/policies/ai/thresholds/`);
+      if (res.data.status === "success") {
+        setWhiteStart(res.data.white_start);
+        setBlackStart(res.data.black_start);
+        setBlockStart(res.data.block_start);
+      }
+    } catch (err) {
+      console.error("기준 점수 로드 실패:", err);
+    }
+  }, [baseUrl]);
+
+  const saveThresholds = async () => {
+    try {
+      await axios.post(`${baseUrl}/api/policies/ai/thresholds/`, {
+        white_start: whiteStart,
+        black_start: blackStart,
+        block_start: blockStart,
+      });
+      alert("AI 판별 기준이 성공적으로 업데이트되었습니다.");
+    } catch (err) {
+      alert("기준 설정 저장에 실패했습니다.");
+    }
+  };
+
+  // 💡 [추가] 미가동 버튼 클릭 시 모델 가동 상태 변경 및 외부 서버 전송
+  const handleActivateModel = async (e, versionName) => {
+    e.stopPropagation(); // 행 선택 이벤트 버블링 방지
+    if (!window.confirm(`[${versionName}] 모델을 실서버에 가동하시겠습니까?`)) return;
+
+    try {
+      const res = await axios.post(`${baseUrl}/api/policies/ai/activate/`, {
+        version_name: versionName,
+      });
+      if (res.data.status === "success") {
+        alert(res.data.message);
+        fetchMetrics(); // 목록 새로고침
+      }
+    } catch (err) {
+      alert(err.response?.data?.message || "모델 가동 전환 중 오류가 발생했습니다.");
+    }
+  };
+
   useEffect(() => {
     fetchMetrics();
-  }, [fetchMetrics]);
+    fetchThresholds();
+  }, [fetchMetrics, fetchThresholds]);
 
-  // 선택 전에는 운영 중인 모델, 없으면 가장 최근 모델을 보여줌
   const current =
     metrics.find((m) => m.version_name === selectedVersion) ||
     metrics.find((m) => m.is_active) ||
@@ -99,13 +146,76 @@ const AiModelMetrics = () => {
 
   return (
     <div className="page-container admin-page">
-      <PageHeader
-        title="AI 모델 성능 현황"
-        subtitle="학습된 탐지 모델의 버전별 성능 지표와 판별 결과를 확인합니다."
-        lastUpdated={lastUpdated}
-        onRefresh={fetchMetrics}
-        refreshing={loading}
-      />
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "16px", marginBottom: "24px" }}>
+
+        <div style={{ flex: 1, minWidth: "250px" }}>
+          <PageHeader
+            title="AI 모델 성능 현황"
+            subtitle="학습된 탐지 모델의 버전별 성능 지표와 판별 결과를 확인합니다."
+          />
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", gap: "24px", flexWrap: "wrap" }}>
+
+          <div style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "12px",
+            backgroundColor: "var(--bg-card, #1e293b)",
+            padding: "8px 16px",
+            borderRadius: "8px",
+            border: "1px solid var(--border-color, #334155)",
+            boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)",
+          }}>
+            <span style={{ color: "#10b981", fontWeight: "600", fontSize: "13px" }}>화이트 의심 (이상)</span>
+            <input
+              type="number"
+              value={whiteStart}
+              onChange={(e) => setWhiteStart(e.target.value)}
+              style={{ width: "50px", background: "var(--bg-input, #0f172a)", border: "1px solid var(--border-color, #334155)", color: "white", padding: "6px", borderRadius: "6px", fontSize: "14px", outline: "none", textAlign: "center" }}
+            />
+
+            <span style={{ color: "#f59e0b", fontWeight: "600", fontSize: "13px", marginLeft: "8px" }}>블랙 의심 (이상)</span>
+            <input
+              type="number"
+              value={blackStart}
+              onChange={(e) => setBlackStart(e.target.value)}
+              style={{ width: "50px", background: "var(--bg-input, #0f172a)", border: "1px solid var(--border-color, #334155)", color: "white", padding: "6px", borderRadius: "6px", fontSize: "14px", outline: "none", textAlign: "center" }}
+            />
+
+            <span style={{ color: "#ef4444", fontWeight: "600", fontSize: "13px", marginLeft: "8px" }}>차단 (이상)</span>
+            <input
+              type="number"
+              value={blockStart}
+              onChange={(e) => setBlockStart(e.target.value)}
+              style={{ width: "50px", background: "var(--bg-input, #0f172a)", border: "1px solid var(--border-color, #334155)", color: "white", padding: "6px", borderRadius: "6px", fontSize: "14px", outline: "none", textAlign: "center" }}
+            />
+
+            <button
+              onClick={saveThresholds}
+              className="btn-action btn-primary"
+              style={{ marginLeft: "12px", padding: "6px 14px", fontSize: "14px", fontWeight: "bold", borderRadius: "6px" }}
+            >
+              적용
+            </button>
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+            <span style={{ fontSize: "13px", color: "var(--text-muted, #94a3b8)", whiteSpace: "nowrap" }}>
+              최종 갱신: {lastUpdated || "-"}
+            </span>
+            <button
+              onClick={fetchMetrics}
+              className={`btn-action btn-primary ${loading ? 'is-loading' : ''}`}
+              style={{ padding: "8px 20px", fontSize: "14px", fontWeight: "bold", borderRadius: "6px" }}
+              disabled={loading}
+            >
+              {loading ? '갱신 중...' : '새로고침'}
+            </button>
+          </div>
+
+        </div>
+      </div>
 
       <div className="stat-row">
         <div className="stat-card is-static">
@@ -141,61 +251,20 @@ const AiModelMetrics = () => {
                     data={metrics}
                     margin={{ top: 8, right: 24, left: -8, bottom: 0 }}
                   >
-                    <CartesianGrid
-                      strokeDasharray="3 3"
-                      stroke="rgba(148, 163, 184, 0.2)"
-                      vertical={false}
-                    />
-                    <XAxis
-                      dataKey="version_name"
-                      stroke="var(--text-muted)"
-                      fontSize={12}
-                      tickLine={false}
-                      axisLine={false}
-                    />
-                    <YAxis
-                      stroke="var(--text-muted)"
-                      fontSize={12}
-                      tickLine={false}
-                      axisLine={false}
-                      domain={[yMin, 100]}
-                      unit="%"
-                    />
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(148, 163, 184, 0.2)" vertical={false} />
+                    <XAxis dataKey="version_name" stroke="var(--text-muted)" fontSize={12} tickLine={false} axisLine={false} />
+                    <YAxis stroke="var(--text-muted)" fontSize={12} tickLine={false} axisLine={false} domain={[yMin, 100]} unit="%" />
                     <RechartsTooltip
                       formatter={(value) => formatPercent(value)}
-                      contentStyle={{
-                        background: "var(--bg-card)",
-                        borderRadius: "8px",
-                        border: "1px solid var(--border-color)",
-                        color: "var(--text-main)",
-                      }}
+                      contentStyle={{ background: "var(--bg-card)", borderRadius: "8px", border: "1px solid var(--border-color)", color: "var(--text-main)" }}
                       itemStyle={{ color: "var(--text-main)" }}
                     />
-                    <Legend
-                      wrapperStyle={{ fontSize: "12px" }}
-                      formatter={(value) => (
-                        <span className="text-main">{value}</span>
-                      )}
-                    />
+                    <Legend wrapperStyle={{ fontSize: "12px" }} formatter={(value) => <span className="text-main">{value}</span>} />
                     {SERIES.map((s) => (
                       <Line
-                        key={s.key}
-                        type="monotone"
-                        dataKey={s.key}
-                        name={s.label}
-                        stroke={s.color}
-                        strokeWidth={2}
-                        dot={{
-                          r: 4,
-                          fill: s.color,
-                          stroke: "var(--bg-card)",
-                          strokeWidth: 2,
-                        }}
-                        activeDot={{
-                          r: 6,
-                          stroke: "var(--bg-card)",
-                          strokeWidth: 2,
-                        }}
+                        key={s.key} type="monotone" dataKey={s.key} name={s.label} stroke={s.color} strokeWidth={2}
+                        dot={{ r: 4, fill: s.color, stroke: "var(--bg-card)", strokeWidth: 2 }}
+                        activeDot={{ r: 6, stroke: "var(--bg-card)", strokeWidth: 2 }}
                       />
                     ))}
                   </LineChart>
@@ -209,9 +278,7 @@ const AiModelMetrics = () => {
           <div className="card dashboard-card card-fill card-auto">
             <div className="card-header">
               <h3 className="card-title">모델 버전 목록</h3>
-              <span className="count-badge badge-primary">
-                총 {metrics.length}건
-              </span>
+              <span className="count-badge badge-primary">총 {metrics.length}건</span>
             </div>
             <div className="table-responsive table-fill">
               <table className="custom-table table-sm">
@@ -228,9 +295,7 @@ const AiModelMetrics = () => {
                 <tbody>
                   {tableRows.map((m, idx) =>
                     m.isEmpty ? (
-                      <tr key={`empty-${idx}`}>
-                        <td colSpan="6">&nbsp;</td>
-                      </tr>
+                      <tr key={`empty-${idx}`}><td colSpan="6">&nbsp;</td></tr>
                     ) : (
                       <tr
                         key={m.version_name}
@@ -243,23 +308,27 @@ const AiModelMetrics = () => {
                         <td>{formatPercent(m.precision)}</td>
                         <td>{formatPercent(m.f1_score)}</td>
                         <td>
-                          <span
-                            className={`status-badge ${m.is_active ? "badge-success" : "badge-gray"}`}
-                          >
-                            {m.is_active ? "가동 중" : "미가동"}
-                          </span>
+                          {m.is_active ? (
+                            <span className="status-badge badge-success">가동 중</span>
+                          ) : (
+                            // 💡 [수정] 미가동 버튼 클릭 시 handleActivateModel 호출
+                            <button
+                              onClick={(e) => handleActivateModel(e, m.version_name)}
+                              className="status-badge badge-gray"
+                              style={{ border: "none", cursor: "pointer", padding: "4px 8px", borderRadius: "4px" }}
+                              title="클릭하여 해당 모델 가동"
+                            >
+                              미가동
+                            </button>
+                          )}
                         </td>
                       </tr>
-                    ),
+                    )
                   )}
                 </tbody>
               </table>
             </div>
-            <PaginationBar
-              page={currentPage}
-              totalPages={totalPages}
-              onPageChange={setCurrentPage}
-            />
+            <PaginationBar page={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} />
           </div>
         </div>
 
@@ -267,41 +336,17 @@ const AiModelMetrics = () => {
           <div className="card dashboard-card card-fill">
             <div className="card-header">
               <h3 className="card-title">판별 결과 (혼동 행렬)</h3>
-              <span className="tag tag-primary">
-                {current?.version_name || "-"}
-              </span>
+              <span className="tag tag-primary">{current?.version_name || "-"}</span>
             </div>
             {current ? (
               <div className="matrix-grid">
-                <span />
-                <span className="matrix-head">예측: 성공</span>
-                <span className="matrix-head">예측: 실패</span>
+                <span /><span className="matrix-head">예측: 성공</span><span className="matrix-head">예측: 실패</span>
                 <span className="matrix-head">실제: 성공</span>
-                <MatrixCell
-                  code="TP"
-                  label="정답"
-                  value={current.tp_count}
-                  total={matrixTotal}
-                />
-                <MatrixCell
-                  code="FN"
-                  label="오답"
-                  value={current.fn_count}
-                  total={matrixTotal}
-                />
+                <MatrixCell code="TP" label="정답" value={current.tp_count} total={matrixTotal} />
+                <MatrixCell code="FN" label="오답" value={current.fn_count} total={matrixTotal} />
                 <span className="matrix-head">실제: 실패</span>
-                <MatrixCell
-                  code="FP"
-                  label="오답"
-                  value={current.fp_count}
-                  total={matrixTotal}
-                />
-                <MatrixCell
-                  code="TN"
-                  label="정답"
-                  value={current.tn_count}
-                  total={matrixTotal}
-                />
+                <MatrixCell code="FP" label="오답" value={current.fp_count} total={matrixTotal} />
+                <MatrixCell code="TN" label="정답" value={current.tn_count} total={matrixTotal} />
               </div>
             ) : (
               <div className="empty-state">표시할 자료가 없습니다.</div>
@@ -312,40 +357,19 @@ const AiModelMetrics = () => {
             <div className="card-header has-divider">
               <h3 className="card-title">모델 정보</h3>
               {current && (
-                <span
-                  className={`status-badge ${current.is_active ? "badge-success" : "badge-gray"}`}
-                >
+                <span className={`status-badge ${current.is_active ? "badge-success" : "badge-gray"}`}>
                   {current.is_active ? "실서버 가동 중" : "실서버 미가동"}
                 </span>
               )}
             </div>
             <div className="card-body-scroll">
-              <div className="info-row is-compact">
-                <span className="info-label">알고리즘</span>
-                <span className="info-value">
-                  {current?.model_algorithm || "-"}
-                </span>
-              </div>
-              <div className="info-row is-compact">
-                <span className="info-label">학습 일시</span>
-                <span className="info-value">{current?.trained_at || "-"}</span>
-              </div>
-              <div className="info-row is-compact">
-                <span className="info-label">검증 건수</span>
-                <span className="info-value">
-                  {matrixTotal.toLocaleString()}건
-                </span>
-              </div>
+              <div className="info-row is-compact"><span className="info-label">알고리즘</span><span className="info-value">{current?.model_algorithm || "-"}</span></div>
+              <div className="info-row is-compact"><span className="info-label">학습 일시</span><span className="info-value">{current?.trained_at || "-"}</span></div>
+              <div className="info-row is-compact"><span className="info-label">검증 건수</span><span className="info-value">{matrixTotal.toLocaleString()}건</span></div>
               <div className="info-row is-compact">
                 <span className="info-label">튜닝 설정값</span>
                 <div className="tag-list">
-                  {hyperparameters.length > 0
-                    ? hyperparameters.map(([key, value]) => (
-                        <span key={key} className="tag tag-mono">
-                          {key}: {String(value)}
-                        </span>
-                      ))
-                    : "-"}
+                  {hyperparameters.length > 0 ? hyperparameters.map(([key, value]) => (<span key={key} className="tag tag-mono">{key}: {String(value)}</span>)) : "-"}
                 </div>
               </div>
             </div>

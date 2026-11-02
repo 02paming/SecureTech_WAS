@@ -1,14 +1,18 @@
 import datetime
+import os
 from datetime import timedelta
 
 import requests
 from django.db.models import Count, Max, Q
 from django.db.models.functions import TruncHour, TruncMinute
 from django.utils import timezone
+from rest_framework import status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
 from ..models import (
+    AiModelMetrics,
+    AiThresholdConfig,
     BlacklistAddr,
     EqpRunTime,
     OnlineListLog,
@@ -17,7 +21,10 @@ from ..models import (
 )
 from .audit import audited
 from .policy_history import is_watcher_alive
-from .utils import SERVER_ERROR_MESSAGE, get_policy_domain_sets, logger
+from .utils import (
+    SERVER_ERROR_MESSAGE,
+    logger,
+)
 
 
 @api_view(["GET"])
@@ -79,7 +86,6 @@ def get_external_access_logs(request):
 
 
 def _monitoring_status():
-    """관제가 살아 있는지 판단할 수 있도록 마지막 로그 시각과 감시 프로그램 상태를 돌려준다."""
     last_log = WebAccessLog.objects.aggregate(m=Max("access_time"))["m"]
     return {
         "last_log_time": last_log.strftime("%Y-%m-%d %H:%M") if last_log else None,
@@ -119,28 +125,37 @@ def get_traffic_stats(request):
         base_qs = WebAccessLog.objects.filter(
             access_time__gte=start_t, access_time__lte=end_t
         )
-        # 차트 기준: 등록된 도메인의 접속 수를 정책 종류별로 집계
-        #    정상 통과 = 허용(수동) + AI 안전 / 위협 차단 = 차단(수동) + AI 위험 / AI 의심 통과 = 화이트 의심 + 블랙 의심
-        allowed_domains = WhitelistAddr.objects.filter(
-            deleted_at__isnull=True, source__in=["USER", "AI"]
-        ).values_list("whitelist_domain", flat=True)
-        blocked_domains, suspect_domains = get_policy_domain_sets()
+        
+        config = AiThresholdConfig.objects.order_by('-config_id').first()
+        white_start = config.white_doubt_limit if config else 31
+        black_start = config.black_doubt_limit if config else 51
+        block_start = (config.black_limit + 1) if config else 71
+
+        blocked_domains = set(WhitelistAddr.objects.filter(deleted_at__isnull=True).values_list("whitelist_domain", flat=True))
 
         n_qs = (
-            base_qs.filter(access_flag="정상", target_url__in=list(allowed_domains))
+            base_qs.filter(
+                Q(ai_score__isnull=True) | Q(ai_score__lt=0) | Q(ai_score__gte=0, ai_score__lt=white_start),
+                access_flag="정상"
+            )
             .annotate(time_bucket=t_func)
             .values("time_bucket")
             .annotate(c=Count("web_access_log_id"))
         )
+
         b_qs = (
-            base_qs.filter(Q(access_flag="차단") | Q(target_url__in=blocked_domains))
+            base_qs.filter(
+                (Q(access_flag="차단") & (Q(ai_score__isnull=True) | Q(ai_score__lt=0))) |
+                Q(ai_score__gte=block_start, ai_score__lte=100) |
+                Q(target_url__in=blocked_domains)
+            )
             .annotate(time_bucket=t_func)
             .values("time_bucket")
             .annotate(c=Count("web_access_log_id"))
         )
 
         ai_qs = (
-            base_qs.filter(access_flag="정상", target_url__in=suspect_domains)
+            base_qs.filter(ai_score__gte=white_start, ai_score__lt=block_start)
             .annotate(time_bucket=t_func)
             .values("time_bucket")
             .annotate(c=Count("web_access_log_id"))
@@ -175,10 +190,11 @@ def get_traffic_stats(request):
             for i in range(total_pts)
         ]
 
-        # 우측 상단: 정식 위협 차단 누적 트래픽 도메인 Top 5
         top_qs = (
-            WebAccessLog.objects.filter(
-                Q(access_flag="차단") | Q(target_url__in=blocked_domains)
+            base_qs.filter(
+                (Q(access_flag="차단") & (Q(ai_score__isnull=True) | Q(ai_score__lt=0))) |
+                Q(ai_score__gte=block_start, ai_score__lte=100) |
+                Q(target_url__in=blocked_domains)
             )
             .values("target_url")
             .annotate(c=Count("web_access_log_id"))
@@ -195,7 +211,6 @@ def get_traffic_stats(request):
             for k, v in sorted(top_map.items(), key=lambda i: i[1], reverse=True)[:5]
         ]
 
-        # 우측 하단: AI 탐지 기반 대기열 (위험/의심) - 정책 테이블에서 직접 로드
         ai_suspicious_list = []
         for b in BlacklistAddr.objects.filter(
             deleted_at__isnull=True, source__in=["AI", "DOUBT"]
@@ -282,4 +297,80 @@ def manage_eqp_run_time(request):
             }
         )
     except Exception as e:
+        return Response({"status": "error", "message": SERVER_ERROR_MESSAGE}, status=500)
+
+
+@api_view(["GET", "POST"])
+def manage_ai_thresholds(request):
+    try:
+        if request.method == "GET":
+            config = AiThresholdConfig.objects.order_by('-config_id').first()
+            if not config:
+                config = AiThresholdConfig.objects.create(white_doubt_limit=31, black_doubt_limit=51, black_limit=70)
+            
+            return Response({
+                "status": "success",
+                "white_start": config.white_doubt_limit,
+                "black_start": config.black_doubt_limit,
+                "block_start": config.black_limit,
+                "white_doubt_limit": config.white_doubt_limit,
+                "black_doubt_limit": config.black_doubt_limit,
+                "black_limit": config.black_limit
+            })
+
+        if request.method == "POST":
+            w_start = int(request.data.get("white_start", 31))
+            b_start = int(request.data.get("black_start", 51))
+            block_start = int(request.data.get("block_start", 71))
+
+            new_config = AiThresholdConfig.objects.create(
+                white_doubt_limit=w_start,
+                black_doubt_limit=b_start,
+                black_limit=block_start
+            )
+
+            try:
+                payload = {
+                    "white_doubt_limit": new_config.white_doubt_limit,
+                    "black_doubt_limit": new_config.black_doubt_limit,
+                    "black_limit": new_config.black_limit
+                }
+                requests.post("http://192.168.1.17/api/update_ai_threshold", json=payload, timeout=2)
+            except Exception as e:
+                logger.warning(f"외부 AI 서버(192.168.1.17)로 임계값 전송 실패: {e}")
+
+            return Response({"status": "success", "message": "새로운 기준이 업데이트되었습니다."})
+            
+    except Exception as e:
+        return Response({"status": "error", "message": str(e)}, status=500)
+
+
+@api_view(["POST"])
+def activate_ai_model(request):
+    try:
+        version_name = request.data.get("version_name")
+        if not version_name:
+            return Response({"status": "error", "message": "버전 이름이 필요합니다."}, status=400)
+
+        target_model = AiModelMetrics.objects.filter(version_name=version_name).first()
+        if not target_model:
+            return Response({"status": "error", "message": "해당 모델 버전을 찾을 수 없습니다."}, status=404)
+
+        # 💡 1. DB의 is_active 컬럼 업데이트: 선택된 모델은 1(가동), 나머지는 0(미가동)
+        AiModelMetrics.objects.all().update(is_active=0)
+        target_model.is_active = 1
+        target_model.save()
+
+        # 💡 2. 외부 AI 서버(192.168.1.17)로 version_name만 전송
+        try:
+            payload = {
+                "model_version": target_model.version_name
+            }
+            requests.post("http://192.168.1.17/api/update_ai_model", json=payload, timeout=2)
+        except Exception as e:
+            logger.warning(f"외부 AI 서버(192.168.1.17) 모델 동기화 실패: {e}")
+
+        return Response({"status": "success", "message": f"모델 [{version_name}]이(가) 가동 시작되었습니다."})
+    except Exception as e:
+        logger.error(f"AI 모델 가동 전환 오류: {e}")
         return Response({"status": "error", "message": SERVER_ERROR_MESSAGE}, status=500)

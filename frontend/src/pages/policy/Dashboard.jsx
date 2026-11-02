@@ -252,7 +252,7 @@ const Dashboard = () => {
               <button
                 type="button"
                 onClick={() => setShowConfigModal(true)}
-                className="btn-action btn-neutral btn-w-md btn-header"
+                className="btn-action btn-neutral btn-w-auto btn-header"
               >
                 인증 정책 설정
               </button>

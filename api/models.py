@@ -101,6 +101,7 @@ class WebAccessLog(models.Model):
     access_flag = models.CharField(max_length=50)
     ai_score = models.FloatField(default=-1.0, blank=True, null=True)
     access_time = models.DateTimeField(default=timezone.now)
+    ai_status_code = models.IntegerField(default=0)
 
     class Meta:
         managed = False
@@ -165,3 +166,15 @@ class AiModelMetrics(models.Model):
     class Meta:
         managed = False
         db_table = "AI_model_metrics"
+
+
+class AiThresholdConfig(models.Model):
+    config_id = models.AutoField(primary_key=True)
+    black_limit = models.IntegerField(default=70)          
+    black_doubt_limit = models.IntegerField(default=51)    
+    white_doubt_limit = models.IntegerField(default=31)    
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        managed = False
+        db_table = "ai_threshold_config"

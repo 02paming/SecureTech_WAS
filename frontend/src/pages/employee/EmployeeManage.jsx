@@ -1,9 +1,9 @@
 import axios from "axios";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { API_BASE_URL } from "../../api";
 import PageHeader from "../../components/PageHeader";
 import PaginationBar from "../../components/PaginationBar";
 import { padRows, useResetPage } from "../../utils/table";
-import { API_BASE_URL } from "../../api";
 
 function useDebounce(value, delay) {
   const [debouncedValue, setDebouncedValue] = useState(value);
@@ -170,7 +170,6 @@ const EmployeeManage = () => {
         return;
       }
     } catch (err) {
-      // 상세 조회에 실패하면 아래 기본 정보로 창을 연다
       console.error("사원 상세 정보 조회 실패:", err);
     }
     setSelectedEmpDetail({
@@ -538,7 +537,11 @@ const EmployeeManage = () => {
                     handleMouseDown={handleMouseDown}
                   />
                 )}
-                <th className="col-sticky-right" style={{ width: colWidths.action }}>
+                {/* 💡 수정됨: 일반 테이블 헤더와 동일하게 색상이 표출되도록 backgroundColor를 inherit(상속)으로 강제 적용 */}
+                <th
+                  className="col-sticky-right"
+                  style={{ width: colWidths.action, backgroundColor: "inherit" }}
+                >
                   관리
                 </th>
               </tr>

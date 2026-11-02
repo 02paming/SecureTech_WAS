@@ -13,6 +13,7 @@ from .utils import (
     SERVER_ERROR_MESSAGE,
     classify_access,
     extract_ip_suffix,
+    get_ai_thresholds,
     get_policy_domain_sets,
     get_policy_states,
     logger,
@@ -66,7 +67,6 @@ def report_violation(request):
             online_log = OnlineListLog.objects.order_by("-login_time").first()
 
         try:
-            # WebAccessLog에 "차단" 플래그로 저장
             WebAccessLog.objects.create(
                 online_list_log=online_log,
                 target_url=clean_target,
@@ -97,7 +97,6 @@ def report_violation(request):
 def get_threat_logs(request):
     try:
         combined_logs = []
-        # WebAccessLog에서 "차단" 이력만 로드
         bl_logs = (
             WebAccessLog.objects.filter(access_flag="차단")
             .select_related("online_list_log__employee")
@@ -139,7 +138,6 @@ def get_threat_logs(request):
 
 
 def _build_policy_map():
-    """도메인별 정책 판단 이름을 돌려준다."""
     return {domain: state["label"] for domain, state in get_policy_states().items()}
 
 
@@ -151,7 +149,6 @@ def _policy_label(domain, policy_map):
 
 @api_view(["GET"])
 def get_domain_detail(request, domain):
-    """도메인 상세 창: 정책 판단, 접속 통계, 접속 사원, 접속 기록을 돌려준다."""
     try:
         target = domain.strip().lower()
         blocked_domains, suspect_domains = get_policy_domain_sets()
@@ -165,7 +162,7 @@ def get_domain_detail(request, domain):
             .order_by("-access_time")
         ):
             access_status = classify_access(
-                w.access_flag, w.target_url, blocked_domains, suspect_domains
+                w.access_flag, w.target_url, blocked_domains, suspect_domains, w.ai_score
             )
             counts[access_status] += 1
             if ai_score is None and w.ai_score is not None and w.ai_score >= 0:
@@ -182,7 +179,6 @@ def get_domain_detail(request, domain):
                     "name": emp.name if emp else "내부 단말",
                     "employee_id": emp.employee_id if emp else None,
                     "ip": f"192.168.2.{session.online_ip}" if session else "-",
-                    # 이 창은 접속 당시의 실제 결과를 보여 준다 (통계는 현재 정책 기준)
                     "result": w.access_flag,
                 }
             )
@@ -195,7 +191,6 @@ def get_domain_detail(request, domain):
                     "employee_id": key,
                     "access_count": 0,
                     "blocked_count": 0,
-                    # 최신순으로 순회하므로 처음 만난 시간이 최근 접속이다
                     "last_access": time_str,
                 },
             )
@@ -237,11 +232,7 @@ def get_domain_detail(request, domain):
 def get_integrated_logs(request):
     try:
         general_logs, ai_data = [], []
-        blocked_domains, suspect_domains = get_policy_domain_sets()
 
-        policy_map = _build_policy_map()
-
-        # 통합된 단일 WebAccessLog를 순회하여 처리
         for w in WebAccessLog.objects.select_related(
             "online_list_log__employee"
         ).order_by("-access_time"):
@@ -257,21 +248,31 @@ def get_integrated_logs(request):
             )
             ip_str = f"192.168.2.{ip_val}" if ip_val else "-"
 
+            code = w.ai_status_code
+            
+            if code == 6: historical_policy = "AI 안전"
+            elif code == 5: historical_policy = "화이트 의심"
+            elif code == 4: historical_policy = "블랙 의심"
+            elif code == 3: historical_policy = "AI 차단"
+            elif code == 1: historical_policy = "수동 차단"
+            elif code == 2: historical_policy = "수동 허용"
+            else:
+                # 예외 처리 (수동 차단/허용인데 코드가 안 들어왔을 경우 방어 코드)
+                historical_policy = "수동 차단" if w.access_flag == "차단" else "수동 허용"
+
             general_logs.append(
                 {
-                    "type": w.access_flag,  # 로그 원본 값
-                    "status": classify_access(
-                        w.access_flag, w.target_url, blocked_domains, suspect_domains
-                    ),  # 화면 집계 기준: 정상, 의심, 차단
+                    "type": w.access_flag,
+                    "status": historical_policy,
                     "violator": f"{emp.name} ({emp.employee_id})"
                     if emp
                     else "내부 단말",
                     "ip": ip_str,
                     "mac": getattr(w.online_list_log, "online_mac_addr", None) or "-"
-                    if getattr(w, "online_list_log", None)
+                    if getattr(w.online_list_log, "online_mac_addr", None)
                     else "-",
                     "domain": getattr(w, "target_url", "-"),
-                    "policy": _policy_label(w.target_url, policy_map),
+                    "policy": historical_policy,
                     "ai_score": w.ai_score,
                     "time": w.access_time.strftime("%Y-%m-%d %H:%M:%S")
                     if w.access_time
