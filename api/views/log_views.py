@@ -11,9 +11,10 @@ from .policy_history import read_policy_history
 from .utils import (
     DEFAULT_STATIC_WHITELIST,
     SERVER_ERROR_MESSAGE,
+    employee_ip,
     extract_ip_suffix,
-    judge_access,
     get_policy_states,
+    judge_access,
     logger,
 )
 
@@ -172,7 +173,7 @@ def get_domain_detail(request, domain):
                     "time": time_str,
                     "name": emp.name if emp else "내부 단말",
                     "employee_id": emp.employee_id if emp else None,
-                    "ip": f"192.168.2.{session.online_ip}" if session else "-",
+                    "ip": employee_ip(session.online_ip) if session else "-",
                     "result": w.access_flag,
                 }
             )
@@ -240,7 +241,7 @@ def get_integrated_logs(request):
                 if getattr(w, "online_list_log", None)
                 else None
             )
-            ip_str = f"192.168.2.{ip_val}" if ip_val else "-"
+            ip_str = employee_ip(ip_val) if ip_val else "-"
 
             policy, category = judge_access(w.ai_status_code, w.access_flag)
 
@@ -284,7 +285,8 @@ def get_integrated_logs(request):
         return Response(
             {"status": "success", "general_logs": general_logs, "ai_data": ai_data}
         )
-    except Exception:
+    except Exception as e:
+        logger.error(f"통합 로그 조회 오류: {e}")
         return Response(
             {"status": "error", "message": SERVER_ERROR_MESSAGE}, status=500
         )

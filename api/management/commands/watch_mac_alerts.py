@@ -9,7 +9,7 @@ from django.db.models import Max
 from api.models import OnlineIpMacMismatchLog
 from api.views.alert_services import send_mac_mismatch_alert
 from api.views.policy_history import record_policy_changes, touch_heartbeat
-from api.views.utils import logger
+from api.views.utils import employee_ip, logger
 
 POLL_SECONDS = 10
 BATCH_SIZE = 50
@@ -51,7 +51,7 @@ def process_new_alerts():
       employee = log.employee
       ok = send_mac_mismatch_alert(
         f"{employee.name} ({employee.employee_id})" if employee else "내부 단말",
-        f"192.168.2.{log.online_ip}",
+        employee_ip(log.online_ip),
         log.online_mac_addr,
         row.mismatch_mac_addr,
         row.insert_time.strftime("%Y-%m-%d %H:%M:%S"),

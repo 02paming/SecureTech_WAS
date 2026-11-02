@@ -4,15 +4,7 @@ import { API_BASE_URL } from "../../api";
 import PageHeader from "../../components/PageHeader";
 import PaginationBar from "../../components/PaginationBar";
 import { padRows, useResetPage } from "../../utils/table";
-
-function useDebounce(value, delay) {
-  const [debouncedValue, setDebouncedValue] = useState(value);
-  useEffect(() => {
-    const handler = setTimeout(() => setDebouncedValue(value), delay);
-    return () => clearTimeout(handler);
-  }, [value, delay]);
-  return debouncedValue;
-}
+import useDebounce from "../../utils/useDebounce";
 
 const ResizableTh = ({
   colKey,

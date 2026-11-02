@@ -18,6 +18,7 @@ from .utils import (
     DUPLICATE_MEMBER_MESSAGE,
     RESTRICTED_IDS,
     SERVER_ERROR_MESSAGE,
+    employee_ip,
     extract_ip_suffix,
     format_jumin_and_birth,
     get_client_ip,
@@ -469,7 +470,7 @@ def get_my_info(request):
                 "status": "success",
                 "data": {
                     "network_authenticated": bool(session),
-                    "network_ip": f"192.168.2.{session.online_ip}" if session else None,
+                    "network_ip": employee_ip(session.online_ip) if session else None,
                     "network_auth_time": session.login_time.strftime(
                         "%Y-%m-%d %H:%M:%S"
                     )

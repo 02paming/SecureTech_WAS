@@ -1,0 +1,4 @@
+# API 함수의 마지막 except Exception은 서버가 죽지 않고 500으로 응답하기 위한 것이라 경고에서 뺀다
+[lint.per-file-ignores]
+"api/views/*.py" = ["BLE001"]
+"api/management/commands/*.py" = ["BLE001"]

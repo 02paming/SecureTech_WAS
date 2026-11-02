@@ -1,5 +1,6 @@
 import axios from "axios";
 import { useCallback, useEffect, useState } from "react";
+import BlockedEmployeesDialog from "../../components/BlockedEmployeesDialog";
 import PageHeader from "../../components/PageHeader";
 import PaginationBar from "../../components/PaginationBar";
 import SecurityDetailDialog from "../../components/SecurityDetailDialog";
@@ -8,6 +9,8 @@ import { API_BASE_URL, MONITOR_REFRESH_MS } from "../../api";
 
 const EmployeeAuth = () => {
   const [onlineUsers, setOnlineUsers] = useState([]);
+  const [blockedUsers, setBlockedUsers] = useState([]);
+  const [isBlockedOpen, setIsBlockedOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
   const [lastUpdated, setLastUpdated] = useState("");
@@ -24,14 +27,16 @@ const EmployeeAuth = () => {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await axios.get(
-        `${baseUrl}/api/dashboard/employee-auth-status/`,
-      );
+      const [res, blockedRes] = await Promise.all([
+        axios.get(`${baseUrl}/api/dashboard/employee-auth-status/`),
+        axios.get(`${baseUrl}/api/dashboard/blocked-employees/`),
+      ]);
       setOnlineUsers(
         (res.data || []).filter(
           (u) => u.is_active && !u.is_blocked && u.external_status !== "차단됨",
         ),
       );
+      setBlockedUsers(blockedRes.data || []);
       setLastUpdated(new Date().toLocaleTimeString("ko-KR", { hour12: false }));
     } catch (err) {
       console.error("사원 인증 현황 조회 실패:", err);
@@ -90,7 +95,7 @@ const EmployeeAuth = () => {
         kick_host_id: user.ip?.split(".").pop(),
       });
       alert("차단되었습니다.");
-      setOnlineUsers((p) => p.filter((u) => u.emp_id !== user.emp_id));
+      await fetchData();
     } catch (err) {
       console.error("단말 차단 실패:", err);
       alert("차단에 실패했습니다.");
@@ -156,9 +161,18 @@ const EmployeeAuth = () => {
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
-          <span className="count-badge badge-primary">
-            인증 사원 {onlineUsers.length}명
-          </span>
+          <div className="btn-group">
+            <button
+              type="button"
+              className="btn-action btn-neutral btn-w-lg btn-header"
+              onClick={() => setIsBlockedOpen(true)}
+            >
+              차단된 사원 {blockedUsers.length}명
+            </button>
+            <span className="count-badge badge-primary">
+              인증 사원 {onlineUsers.length}명
+            </span>
+          </div>
         </div>
         <div className="table-responsive table-fill">
           <table className="custom-table">
@@ -228,6 +242,14 @@ const EmployeeAuth = () => {
           onPageChange={setCurrentPage}
         />
       </div>
+
+      {isBlockedOpen && (
+        <BlockedEmployeesDialog
+          employees={blockedUsers}
+          onChanged={fetchData}
+          onClose={() => setIsBlockedOpen(false)}
+        />
+      )}
 
       {isModalOpen && selectedSecurity && (
         <SecurityDetailDialog

@@ -23,8 +23,10 @@ from .audit import audited
 from .policy_history import is_watcher_alive
 from .policy_views import verify_admin_auth
 from .utils import (
+    PCAP_BACKEND_URL,
     SERVER_ERROR_MESSAGE,
     access_category_q,
+    employee_ip,
     get_threshold_config,
     logger,
 )
@@ -41,7 +43,7 @@ def get_online_users(request):
                     "id": idx,
                     "emp_name": log.employee.name if log.employee else "알 수 없음",
                     "emp_id": log.employee.employee_id if log.employee else "-",
-                    "ip": f"192.168.2.{log.online_ip}",
+                    "ip": employee_ip(log.online_ip),
                     "is_online": True,
                     "status_text": "접속 중",
                     "login_time": log.login_time.strftime("%Y-%m-%d %H:%M:%S")
@@ -75,7 +77,7 @@ def get_external_access_logs(request):
                         "id": idx,
                         "emp_name": log.employee.name if log.employee else "알 수 없음",
                         "emp_id": log.employee.employee_id if log.employee else "-",
-                        "ip": f"192.168.2.{log.online_ip}",
+                        "ip": employee_ip(log.online_ip),
                         "access_time": log.login_time.strftime("%Y-%m-%d %H:%M:%S")
                         if log.login_time
                         else "-",
@@ -259,9 +261,9 @@ def manage_eqp_run_time(request):
                 config.waiting_time = datetime.time(h, m)
             config.save()
             try:
-                requests.post("http://127.0.0.1:8080/api/sync_policy", timeout=2)
-            except:
-                pass
+                requests.post(f"{PCAP_BACKEND_URL}/api/sync_policy", timeout=2)
+            except requests.RequestException as e:
+                logger.warning("설비 구동 시간 전달 실패: %s", e)
             return Response(
                 {"status": "success", "message": "설비 구동 시간이 업데이트되었습니다."}
             )
@@ -276,6 +278,7 @@ def manage_eqp_run_time(request):
             }
         )
     except Exception as e:
+        logger.error("설비 구동 시간 처리 오류: %s", e)
         return Response({"status": "error", "message": SERVER_ERROR_MESSAGE}, status=500)
 
 

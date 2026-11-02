@@ -7,15 +7,16 @@ import socket
 import threading
 import urllib.request
 
-file_lock = threading.Lock()
-
 from django.core.cache import cache
-from django.db import connection, connections
+from django.db import DatabaseError, connection, connections
 from django.db.models import Q
 
 from ..models import AiThresholdConfig, BlacklistAddr, OnlineList, WhitelistAddr
 
+file_lock = threading.Lock()
 logger = logging.getLogger(__name__)
+PCAP_BACKEND_URL = os.getenv("PCAP_BACKEND_URL", "http://127.0.0.1:8080")
+EMPLOYEE_IP_PREFIX = "192.168.2."
 RESTRICTED_IDS = {"admin", "root", "manager", "test", "guest"}
 ANONYMIZED_ID_PREFIX = "deleted_"
 DEFAULT_STATIC_WHITELIST = {
@@ -60,6 +61,11 @@ def get_client_ip(request):
     return remote
 
 
+def employee_ip(suffix):
+    """DB에는 사원 단말 IP의 마지막 자리만 저장한다."""
+    return f"{EMPLOYEE_IP_PREFIX}{suffix}"
+
+
 def extract_ip_suffix(ip_str):
     t = str(ip_str).split(".")[-1].strip()
     return int(t) if t.isdigit() else 1
@@ -80,7 +86,7 @@ def save_online_session(emp, sfx, now):
                     f"INSERT INTO {t} (employee_id,online_ip,online_mac_addr,login_time) VALUES (%s,%s,%s,%s)",
                     [emp.employee_number, sfx, mac, now],
                 )
-            except:
+            except DatabaseError:
                 c.execute(
                     f"INSERT INTO {t} (employee_id,online_ip,login_time) VALUES (%s,%s,%s)",
                     [emp.employee_number, sfx, now],
@@ -169,7 +175,7 @@ def get_threshold_config():
     """판별 기준은 한 행만 쓴다."""
     config = AiThresholdConfig.objects.order_by("config_id").first()
     return config or AiThresholdConfig.objects.create(
-        white_doubt_limit=31, black_doubt_limit=51, black_limit=70
+        white_doubt_limit=31, black_doubt_limit=51, black_limit=71
     )
 
 
@@ -227,7 +233,7 @@ def sync_pcap_json_files(sync_type="all"):
             try:
                 data = json.dumps({"sync_type": sync_type}).encode("utf-8")
                 req = urllib.request.Request(
-                    "http://127.0.0.1:8080/api/sync_domains",
+                    f"{PCAP_BACKEND_URL}/api/sync_domains",
                     data=data,
                     headers={"Content-Type": "application/json"},
                     method="POST",
@@ -254,7 +260,7 @@ def sync_expire_to_pcap(emp_id, kick_ip):
             )
         urllib.request.urlopen(
             urllib.request.Request(
-                "http://127.0.0.1:8080/api/expire_user",
+                f"{PCAP_BACKEND_URL}/api/expire_user",
                 data=json.dumps({"emp_id": emp_id, "kick_host_id": kick_ip}).encode(
                     "utf-8"
                 ),
@@ -284,14 +290,12 @@ def notify_pcap_delta(sync_type, action, domain):
         ).encode("utf-8")
 
         req = urllib.request.Request(
-            "http://127.0.0.1:8080/api/sync_domains",
+            f"{PCAP_BACKEND_URL}/api/sync_domains",
             data=data,
             headers={"Content-Type": "application/json"},
             method="POST",
         )
         urllib.request.urlopen(req, timeout=3)
-        print(
-            f"  [웹 백엔드 -> 멍텅구리] {sync_type.upper()} 단건 통보 완료: {action} {domain}"
-        )
-    except Exception as e:
-        print(f"  [웹 백엔드 -> 멍텅구리] 단건 통보 실패: {e}")
+        logger.info("PCAP 단건 통보 완료: %s %s %s", sync_type, action, domain)
+    except OSError as e:
+        logger.warning("PCAP 단건 통보 실패: %s", e)

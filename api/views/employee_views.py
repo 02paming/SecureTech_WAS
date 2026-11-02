@@ -16,6 +16,7 @@ from ..models import (
     WebAccessLog,
 )
 from .audit import audited
+from .policy_views import verify_admin_auth
 from .security_services import (
     SCORE_WINDOW_DAYS,
     calculate_security_score,
@@ -26,13 +27,14 @@ from .utils import (
     DUPLICATE_MEMBER_MESSAGE,
     SERVER_ERROR_MESSAGE,
     block_emp,
-    judge_access,
-    is_emp_blocked,
-    unblock_emp,
+    employee_ip,
     format_jumin_and_birth,
+    is_emp_blocked,
+    judge_access,
     logger,
     sync_expire_to_pcap,
     sync_pcap_json_files,
+    unblock_emp,
 )
 
 
@@ -242,7 +244,7 @@ def get_employee_auth_status(request):
                     else "-",
                     "emp_name": emp.name,
                     "emp_id": emp.employee_id,
-                    "ip": f"192.168.2.{session.online_ip}"
+                    "ip": employee_ip(session.online_ip)
                     if session.online_ip
                     else "-",
                     "mac": getattr(session, "online_mac_addr", None) or "-",
@@ -290,7 +292,7 @@ def get_employee_security_detail(request, emp_id):
         log_map, recent_logs = {}, []
         for log in online_logs_qs:
             ip_str = (
-                f"192.168.2.{log.online_ip}"
+                employee_ip(log.online_ip)
                 if getattr(log, "online_ip", None) is not None
                 else "-"
             )
@@ -358,7 +360,7 @@ def get_employee_security_detail(request, emp_id):
                         {
                             "ip": session_info.get(
                                 "ip",
-                                f"192.168.2.{online_session.online_ip}"
+                                employee_ip(online_session.online_ip)
                                 if online_session
                                 else "-",
                             ),
@@ -395,7 +397,7 @@ def get_employee_security_detail(request, emp_id):
                         {
                             "ip": session_info.get(
                                 "ip",
-                                f"192.168.2.{online_session.online_ip}"
+                                employee_ip(online_session.online_ip)
                                 if online_session
                                 else "-",
                             ),
@@ -470,7 +472,7 @@ def get_employee_security_detail(request, emp_id):
                     else "-",
                     "is_manager": bool(employee.is_manager),
                     "security_score": security_score,
-                    "current_ip": f"192.168.2.{online_session.online_ip}"
+                    "current_ip": employee_ip(online_session.online_ip)
                     if online_session
                     else "미접속 (오프라인)",
                     "current_mac": current_mac,
@@ -520,10 +522,42 @@ def block_employee(request):
         return Response({"error": SERVER_ERROR_MESSAGE}, status=500)
 
 
+@api_view(["GET"])
+def get_blocked_employees(request):
+    try:
+        data = []
+        for emp in Employees.objects.filter(deleted_at__isnull=True).exclude(
+            employee_id__startswith=ANONYMIZED_ID_PREFIX
+        ):
+            if is_emp_blocked(emp.employee_id):
+                current_ym = (
+                    emp.hire_date.strftime("%Y%m") if emp.hire_date else "202610"
+                )
+                data.append(
+                    {
+                        "emp_no": f"ST{current_ym}{emp.employee_number:02d}"
+                        if emp.employee_number
+                        else "-",
+                        "emp_name": emp.name,
+                        "emp_id": emp.employee_id,
+                    }
+                )
+        return Response(data)
+    except Exception as e:
+        logger.error("차단 사원 목록 조회 실패: %s", e)
+        return Response({"error": SERVER_ERROR_MESSAGE}, status=500)
+
+
 @api_view(["POST"])
-@audited("사원 차단 해제", "employee_id")
+@audited("사원 차단 해제", "employee_id", actor_key="admin_id")
 def unblock_employee(request):
     try:
+        is_valid, error_msg = verify_admin_auth(
+            request, request.data.get("admin_id"), request.data.get("password")
+        )
+        if not is_valid:
+            return Response({"error": error_msg}, status=403)
+
         emp_id = request.data.get("employee_id")
         if not emp_id:
             return Response({"error": "사원 ID 필수"}, status=400)

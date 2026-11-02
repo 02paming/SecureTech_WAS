@@ -59,6 +59,11 @@ urlpatterns = [
         name="block_employee",
     ),
     path(
+        "api/dashboard/blocked-employees/",
+        employee_views.get_blocked_employees,
+        name="get_blocked_employees",
+    ),
+    path(
         "api/dashboard/unblock-employee/",
         employee_views.unblock_employee,
         name="unblock_employee",

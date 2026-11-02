@@ -2713,7 +2713,8 @@ textarea.custom-input {
 }
 
 /* DARK MODE */
-.dark-mode .custom-table th {
+.dark-mode .custom-table th,
+.dark-mode .table-fill .custom-table th.col-sticky-right {
   background-color: var(--bg-header);
 }
 
