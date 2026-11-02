@@ -303,8 +303,8 @@ def manage_ai_thresholds(request):
                     "status": "success",
                     "white_start": config.white_doubt_limit,
                     "black_start": config.black_doubt_limit,
-                    # DB에는 블랙 의심의 끝 점수를 저장하므로 차단 시작은 그다음 점수다
-                    "block_start": config.black_limit + 1,
+                    # AI 엔진은 점수 >= black_limit이면 차단한다
+                    "block_start": config.black_limit,
                 }
             )
 
@@ -330,7 +330,7 @@ def manage_ai_thresholds(request):
         AiThresholdConfig.objects.update(
             white_doubt_limit=white_start,
             black_doubt_limit=black_start,
-            black_limit=block_start - 1,
+            black_limit=block_start,
             updated_at=timezone.now(),
         )
         delivered = _send_to_ai_server(
@@ -338,7 +338,7 @@ def manage_ai_thresholds(request):
             {
                 "white_doubt_limit": white_start,
                 "black_doubt_limit": black_start,
-                "black_limit": block_start - 1,
+                "black_limit": block_start,
             },
         )
         return Response(
