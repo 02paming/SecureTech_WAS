@@ -9,6 +9,11 @@ backend/node_modules/
 # 2. 운영체제 및 에디터 환경 설정 파일 (macOS 찌꺼기 파일 등)
 .DS_Store
 .vscode/
+.idea/
+
+# 파이썬 캐시 (실행할 때마다 생기고 매번 git status에 잡혀서 소음이 됨)
+__pycache__/
+*.pyc
 
 # 3. 환경변수 파일 (데이터베이스 비밀번호, API 키 등 보안 정보가 들어감)
 .env
