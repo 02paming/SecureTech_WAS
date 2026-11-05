@@ -14,6 +14,7 @@ import { API_BASE_URL } from "../../api";
 import AdminAuthDialog from "../../components/AdminAuthDialog";
 import PageHeader from "../../components/PageHeader";
 import PaginationBar from "../../components/PaginationBar";
+import { LEVEL_TONES } from "../../utils/levelTone";
 import { padRows } from "../../utils/table";
 
 const SERIES = [
@@ -52,9 +53,9 @@ const AiModelMetrics = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 3;
 
-  const [whiteStart, setWhiteStart] = useState(31);
-  const [blackStart, setBlackStart] = useState(51);
-  const [blockStart, setBlockStart] = useState(71);
+  const [levels, setLevels] = useState([]);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editLevels, setEditLevels] = useState([]);
   const [authRequest, setAuthRequest] = useState(null);
 
   const baseUrl = API_BASE_URL;
@@ -76,24 +77,55 @@ const AiModelMetrics = () => {
     try {
       const res = await axios.get(`${baseUrl}/api/policies/ai/thresholds/`);
       if (res.data.status === "success") {
-        setWhiteStart(res.data.white_start);
-        setBlackStart(res.data.black_start);
-        setBlockStart(res.data.block_start);
+        setLevels(res.data.levels || []);
       }
     } catch (err) {
       console.error("기준 점수 로드 실패:", err);
     }
   }, [baseUrl]);
 
-  const openThresholdAuth = () => {
-    const white = Number(whiteStart);
-    const black = Number(blackStart);
-    const block = Number(blockStart);
+  const requestApplyLevel = (lv) => {
+    const white = Number(lv.white_start);
+    const black = Number(lv.black_start);
+    const block = Number(lv.block_start);
     if (!(white > 0 && white < black && black < block && block <= 100)) {
       alert("화이트 의심 < 블랙 의심 < 차단 순서로, 1~100 사이에서 입력해 주세요.");
       return;
     }
-    setAuthRequest({ type: "thresholds" });
+
+    // 레벨은 엄격->완화 순(config_id 순)이므로 차단 점수도 그 순서를 지켜야 레벨 구분이 의미가 있다
+    const source = editOpen ? editLevels : levels;
+    const ordered = [...source].sort((a, b) => a.config_id - b.config_id);
+    const idx = ordered.findIndex((x) => x.config_id === lv.config_id);
+    const prev = ordered[idx - 1];
+    const next = ordered[idx + 1];
+    if (prev && block <= Number(prev.block_start)) {
+      alert(`차단 점수가 더 엄격한 '${prev.level}' 레벨(${prev.block_start}점)과 겹칩니다. 더 높은 값을 입력해 주세요.`);
+      return;
+    }
+    if (next && block >= Number(next.block_start)) {
+      alert(`차단 점수가 더 완화된 '${next.level}' 레벨(${next.block_start}점)과 겹칩니다. 더 낮은 값을 입력해 주세요.`);
+      return;
+    }
+
+    setAuthRequest({
+      type: "thresholds",
+      configId: lv.config_id,
+      whiteStart: white,
+      blackStart: black,
+      blockStart: block,
+    });
+  };
+
+  const openEditModal = () => {
+    setEditLevels(levels.map((lv) => ({ ...lv })));
+    setEditOpen(true);
+  };
+
+  const updateEditField = (configId, field, value) => {
+    setEditLevels((prev) =>
+      prev.map((lv) => (lv.config_id === configId ? { ...lv, [field]: value } : lv)),
+    );
   };
 
   const handleActivateModel = (e, versionName) => {
@@ -106,17 +138,19 @@ const AiModelMetrics = () => {
     try {
       const res = isModel
         ? await axios.post(`${baseUrl}/api/policies/ai/activate/`, {
-            version_name: authRequest.versionName,
-            ...credentials,
-          })
+          version_name: authRequest.versionName,
+          ...credentials,
+        })
         : await axios.post(`${baseUrl}/api/policies/ai/thresholds/`, {
-            white_start: Number(whiteStart),
-            black_start: Number(blackStart),
-            block_start: Number(blockStart),
-            ...credentials,
-          });
+          config_id: authRequest.configId,
+          white_start: authRequest.whiteStart,
+          black_start: authRequest.blackStart,
+          block_start: authRequest.blockStart,
+          ...credentials,
+        });
       alert(res.data.message);
       setAuthRequest(null);
+      setEditOpen(false);
       if (isModel) fetchMetrics();
       else fetchThresholds();
     } catch (err) {
@@ -156,6 +190,84 @@ const AiModelMetrics = () => {
 
   return (
     <div className="page-container admin-page">
+      <PageHeader
+        title="AI 모델 성능 현황"
+        subtitle="학습된 탐지 모델의 버전별 성능 지표와 판별 결과를 확인합니다."
+        lastUpdated={lastUpdated}
+        onRefresh={fetchMetrics}
+        refreshing={loading}
+        center={
+          <div className="threshold-level-group">
+            {levels.map((lv) => (
+              <button
+                key={lv.config_id}
+                type="button"
+                onClick={() => requestApplyLevel(lv)}
+                disabled={lv.active}
+                title={`화이트 의심 ${lv.white_start} · 블랙 의심 ${lv.black_start} · 차단 ${lv.block_start}`}
+                className={`level-btn level-btn-${LEVEL_TONES[lv.level] || "neutral"} ${lv.active ? "is-active" : ""}`}
+              >
+                {lv.level}
+              </button>
+            ))}
+            <button type="button" onClick={openEditModal} className="btn-action btn-neutral btn-w-md btn-header">
+              기준 수정
+            </button>
+          </div>
+        }
+      />
+
+      {editOpen && (
+        <div className="dialog-overlay">
+          <div className="dialog-box level-edit-box">
+            <h3 className="dialog-title">판별 기준 레벨 수정</h3>
+            <p className="dialog-desc">레벨별 점수를 바꾼 뒤 줄마다 저장 버튼으로 적용합니다.</p>
+            <div className="level-edit-list">
+              {editLevels.map((lv) => (
+                <div key={lv.config_id} className={`level-edit-row ${lv.active ? "is-active" : ""}`}>
+                  <span className={`level-edit-name text-${LEVEL_TONES[lv.level] || "muted"}`}>
+                    {lv.level}
+                    {lv.active && <span className="count-badge badge-primary level-active-badge">적용중</span>}
+                  </span>
+                  <label>
+                    화이트 의심
+                    <input
+                      type="number" min="1" max="100" className="custom-input"
+                      value={lv.white_start}
+                      onChange={(e) => updateEditField(lv.config_id, "white_start", e.target.value)}
+                    />
+                  </label>
+                  <label>
+                    블랙 의심
+                    <input
+                      type="number" min="1" max="100" className="custom-input"
+                      value={lv.black_start}
+                      onChange={(e) => updateEditField(lv.config_id, "black_start", e.target.value)}
+                    />
+                  </label>
+                  <label>
+                    차단
+                    <input
+                      type="number" min="1" max="100" className="custom-input"
+                      value={lv.block_start}
+                      onChange={(e) => updateEditField(lv.config_id, "block_start", e.target.value)}
+                    />
+                  </label>
+                  <button type="button" onClick={() => requestApplyLevel(lv)} className="btn-action btn-primary btn-w-sm btn-header">
+                    저장
+                  </button>
+                </div>
+              ))}
+            </div>
+            <div className="dialog-actions">
+              <button type="button" onClick={() => setEditOpen(false)} className="btn-action btn-neutral btn-w-md btn-header">
+                닫기
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {authRequest && (
         <AdminAuthDialog
           title={authRequest.type === "model" ? "AI 모델 가동 전환 인증" : "AI 판별 기준 변경 인증"}
@@ -164,31 +276,6 @@ const AiModelMetrics = () => {
           onCancel={() => setAuthRequest(null)}
         />
       )}
-
-      <PageHeader
-        title="AI 모델 성능 현황"
-        subtitle="학습된 탐지 모델의 버전별 성능 지표와 판별 결과를 확인합니다."
-        lastUpdated={lastUpdated}
-        onRefresh={fetchMetrics}
-        refreshing={loading}
-        center={
-            <div className="threshold-form">
-              <label className="text-score-yellow">
-                화이트 의심 (이상)
-                <input type="number" min="1" max="100" className="custom-input" value={whiteStart} onChange={(e) => setWhiteStart(e.target.value)} />
-              </label>
-              <label className="text-score-orange">
-                블랙 의심 (이상)
-                <input type="number" min="1" max="100" className="custom-input" value={blackStart} onChange={(e) => setBlackStart(e.target.value)} />
-              </label>
-              <label className="text-danger">
-                차단 (이상)
-                <input type="number" min="1" max="100" className="custom-input" value={blockStart} onChange={(e) => setBlockStart(e.target.value)} />
-              </label>
-              <button type="button" onClick={openThresholdAuth} className="btn-action btn-success btn-w-sm btn-header">적용</button>
-            </div>
-        }
-      />
 
       <div className="stat-row">
         <div className="stat-card is-static">
@@ -238,6 +325,7 @@ const AiModelMetrics = () => {
                         key={s.key} type="monotone" dataKey={s.key} name={s.label} stroke={s.color} strokeWidth={2}
                         dot={{ r: 4, fill: s.color, stroke: "var(--bg-card)", strokeWidth: 2 }}
                         activeDot={{ r: 6, stroke: "var(--bg-card)", strokeWidth: 2 }}
+                        isAnimationActive={false} // 애니메이션 끄기 추가
                       />
                     ))}
                   </LineChart>

@@ -9,6 +9,7 @@ export const POLICY_TONES = {
   "수동 차단": "danger",
   "AI 위험": "danger",
   "AI 차단": "danger",
+  "MAC 스푸핑": "danger",
 };
 
 export const STATUS_LABELS = {

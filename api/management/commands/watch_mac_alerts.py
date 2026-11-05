@@ -9,6 +9,7 @@ from django.db.models import Max
 from api.models import OnlineIpMacMismatchLog
 from api.views.alert_services import send_mac_mismatch_alert
 from api.views.policy_history import record_policy_changes, touch_heartbeat
+from api.views.threshold_history import record_threshold_changes
 from api.views.utils import employee_ip, logger
 
 POLL_SECONDS = 10
@@ -81,4 +82,8 @@ class Command(BaseCommand):
         record_policy_changes()
       except Exception as e:
         logger.error("정책 이력 기록 오류: %s", e)
+      try:
+        record_threshold_changes()
+      except Exception as e:
+        logger.error("판별 기준 레벨 이력 기록 오류: %s", e)
       time.sleep(POLL_SECONDS)

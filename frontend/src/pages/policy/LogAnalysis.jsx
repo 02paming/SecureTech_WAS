@@ -1,55 +1,100 @@
 import axios from "axios";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { API_BASE_URL, MONITOR_REFRESH_MS } from "../../api";
+import AdminAuthDialog from "../../components/AdminAuthDialog";
 import DomainDetailDialog from "../../components/DomainDetailDialog";
 import PageHeader from "../../components/PageHeader";
 import PaginationBar from "../../components/PaginationBar";
 import SecurityDetailDialog from "../../components/SecurityDetailDialog";
 import { hasAiScore } from "../../utils/aiScore";
+import { LEVEL_TONES } from "../../utils/levelTone";
 import { POLICY_TONES, getResultTone } from "../../utils/policyTone";
 import { padRows, useResetPage } from "../../utils/table";
+
+const itemsPerPage = 10;
 
 const LogAnalysis = () => {
   const [detailDomain, setDetailDomain] = useState(null);
   const [logs, setLogs] = useState([]);
+  const [stats, setStats] = useState({ total: 0, allowed: 0, blocked: 0, ai_suspicious: 0, suspicious_blocked: 0 });
   const [loadingAction, setLoadingAction] = useState(false);
   const [lastUpdated, setLastUpdated] = useState("");
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [subFilter, setSubFilter] = useState("all");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 10;
+  const [totalPages, setTotalPages] = useState(1);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedSecurity, setSelectedSecurity] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [releaseRequest, setReleaseRequest] = useState(null);
 
   const baseUrl = API_BASE_URL;
+  const isFetchingRef = useRef(false);
+  const fetchTimeoutRef = useRef(null);
 
   const fetchData = useCallback(async () => {
+    if (isFetchingRef.current) return;
+    isFetchingRef.current = true;
     setLoadingAction(true);
     try {
-      const res = await axios.get(`${baseUrl}/api/dashboard/integrated-logs/`);
-      setLogs(res.data.general_logs || []);
-      setLastUpdated(new Date().toLocaleTimeString("ko-KR", { hour12: false }));
+      const res = await axios.get(`${baseUrl}/api/dashboard/integrated-logs/`, {
+        params: {
+          page: currentPage,
+          limit: itemsPerPage,
+          search,
+          statusFilter,
+          subFilter,
+          startDate,
+          endDate,
+        },
+      });
+      if (res.data?.status === "success") {
+        setLogs(res.data.general_logs || []);
+        if (res.data.stats) setStats(res.data.stats);
+        if (res.data.total_pages) setTotalPages(res.data.total_pages);
+        setLastUpdated(new Date().toLocaleTimeString("ko-KR", { hour12: false }));
+      }
     } catch (err) {
       console.error("로그 데이터 갱신 오류:", err);
     } finally {
       setLoadingAction(false);
+      isFetchingRef.current = false;
     }
-  }, [baseUrl]);
+  }, [baseUrl, currentPage, search, statusFilter, subFilter, startDate, endDate]);
+
+  // 검색/필터 변경 시 페이지를 1로 초기화 (fetchData 재생성을 유도)
+  useResetPage([search, statusFilter, subFilter, startDate, endDate], () => setCurrentPage(1));
 
   useEffect(() => {
     fetchData();
-    const t = setInterval(fetchData, MONITOR_REFRESH_MS);
-    return () => clearInterval(t);
-  }, [fetchData]);
 
-  useResetPage([search, statusFilter, startDate, endDate], () => setCurrentPage(1));
+    const loopFetch = () => {
+      fetchTimeoutRef.current = setTimeout(async () => {
+        await fetchData();
+        loopFetch();
+      }, MONITOR_REFRESH_MS);
+    };
 
-  const handleEmpClick = async (violatorStr) => {
+    loopFetch();
+
+    return () => {
+      if (fetchTimeoutRef.current) {
+        clearTimeout(fetchTimeoutRef.current);
+      }
+    };
+  }, [fetchData]); // fetchData에 모든 의존성이 연결되어 있으므로 안전함
+
+  const selectStatusFilter = useCallback((value) => {
+    setStatusFilter(value);
+    setSubFilter("all");
+  }, []);
+
+  const handleEmpClick = useCallback(async (violatorStr) => {
     const match = violatorStr.match(/\((.*?)\)/);
     if (!match) return;
     const empId = match[1];
@@ -66,9 +111,9 @@ const LogAnalysis = () => {
     } finally {
       setDetailLoading(false);
     }
-  };
+  }, [baseUrl]);
 
-  const handleRefreshDetail = async () => {
+  const handleRefreshDetail = useCallback(async () => {
     if (!selectedSecurity) return;
     setDetailLoading(true);
     try {
@@ -79,69 +124,75 @@ const LogAnalysis = () => {
     } finally {
       setDetailLoading(false);
     }
-  };
+  }, [baseUrl, selectedSecurity]);
 
-  const baseFilteredData = useMemo(() => {
-    let filtered = logs;
-    if (startDate) filtered = filtered.filter((l) => l.time && l.time.substring(0, 10) >= startDate);
-    if (endDate) filtered = filtered.filter((l) => l.time && l.time.substring(0, 10) <= endDate);
-    if (search.trim()) {
-      const s = search.toLowerCase();
-      filtered = filtered.filter((l) => (l.violator || "").toLowerCase().includes(s) || (l.domain || "").toLowerCase().includes(s) || (l.ip || "").toLowerCase().includes(s));
+  const submitReleaseMismatch = useCallback(async (credentials) => {
+    try {
+      const res = await axios.post(`${baseUrl}/api/dashboard/mac-mismatch/release/`, {
+        mismatch_id: releaseRequest.mismatchId,
+        ...credentials,
+      });
+      alert(res.data.message);
+      setReleaseRequest(null);
+      fetchData();
+    } catch (err) {
+      alert(err.response?.data?.message || "해제 처리에 실패했습니다.");
     }
-    return filtered;
-  }, [logs, startDate, endDate, search]);
+  }, [baseUrl, releaseRequest, fetchData]);
 
-  // 1. stat 계산 로직 수정
-  const statTotal = baseFilteredData.length;
-  // "안전"이나 "허용"이라는 글자가 포함되어 있으면 정상 통과로 집계
-  const statAllowed = baseFilteredData.filter((l) => l.status === "정상").length;
-  // "차단"이라는 글자가 포함되어 있으면 차단으로 집계
-  const statBlocked = baseFilteredData.filter((l) => l.status === "차단").length;
-  // "의심"이라는 글자가 포함되어 있으면 의심으로 집계
-  const suspiciousLogs = baseFilteredData.filter((l) => l.status === "의심");
-  const statAiSuspicious = suspiciousLogs.length;
-  const statSuspiciousBlocked = suspiciousLogs.filter((l) => l.type === "차단").length;
+  // CSV 다운로드는 현재 필터 조건에 해당하는 전체 데이터를 서버에 임시 요청하여 처리
+  const exportToCSV = useCallback(async () => {
+    try {
+      const res = await axios.get(`${baseUrl}/api/dashboard/integrated-logs/`, {
+        params: { limit: 100000, search, statusFilter, subFilter, startDate, endDate }
+      });
+      const allData = res.data?.general_logs || [];
+      const headers = ["접속 시간", "이름(아이디)", "출발지 IP", "MAC 주소", "도메인", "AI 레벨", "정책 판단", "AI 위협 점수", "처리 결과"];
+      const csvRows = [headers.join(",")];
 
- // 2. 하단 currentData(탭 클릭 시 필터링) 로직도 함께 수정
-  const currentData = useMemo(() => {
-    if (statusFilter === "all") return baseFilteredData;
-    if (statusFilter === "허용") return baseFilteredData.filter((l) => l.status === "정상");
-    if (statusFilter === "차단") return baseFilteredData.filter((l) => l.status === "차단");
-    if (statusFilter === "의심") return baseFilteredData.filter((l) => l.status === "의심");
-    return baseFilteredData;
-  }, [baseFilteredData, statusFilter]);
+      allData.forEach((r) => {
+        let resultText = "정상 통과";
+        if (r.is_mismatch) resultText = "MAC 스푸핑 차단";
+        else if (r.status === "의심") resultText = r.type === "차단" ? "AI 의심 차단" : "AI 의심 통과";
+        else if (r.type === "차단") resultText = "차단";
 
-  const paginatedData = useMemo(() => padRows(currentData.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage), itemsPerPage), [currentData, currentPage]);
-  const totalPages = Math.ceil(currentData.length / itemsPerPage) || 1;
+        csvRows.push(`"${r.time}","${r.violator}","${r.ip || "-"}","${r.mac || "-"}","${r.domain}","${r.ai_level || "-"}","${r.policy || "-"}","${hasAiScore(r.ai_score) ? r.ai_score : "-"}","${resultText}"`);
+      });
 
-  // 처리 결과는 접속 시점의 실제 결과를 보여 준다
-  const getProcessingResult = (log) => {
-    if (log.status === "의심") return log.type === "차단" ? "AI 의심 차단" : "AI 의심 통과";
-    return log.type === "차단" ? "차단" : "정상 통과";
-  };
+      const bom = "\uFEFF";
+      const blob = new Blob([bom + csvRows.join("\n")], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `SecureTech_Access_Logs_${new Date().getTime()}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      alert("CSV 다운로드에 실패했습니다.");
+    }
+  }, [baseUrl, search, statusFilter, subFilter, startDate, endDate]);
 
-  const exportToCSV = useCallback(() => {
-    const headers = ["접속 시간", "이름(아이디)", "출발지 IP", "MAC 주소", "도메인", "정책 판단", "AI 위협 점수", "처리 결과"];
-    const csvRows = [headers.join(",")];
-    currentData.forEach((r) => {
-      const resultText = getProcessingResult(r);
-      csvRows.push(`"${r.time}","${r.violator}","${r.ip || "-"}","${r.mac || "-"}","${r.domain}","${r.policy || "-"}","${hasAiScore(r.ai_score) ? r.ai_score : "-"}","${resultText}"`);
-    });
-    const bom = "\uFEFF";
-    const blob = new Blob([bom + csvRows.join("\n")], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `SecureTech_Access_Logs_${new Date().getTime()}.csv`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-  }, [currentData]);
+  const displayLogs = useMemo(() => padRows(logs, itemsPerPage), [logs]);
+
+  const subFilterOptions = useMemo(() => {
+    if (statusFilter === "의심") return ["화이트 의심", "블랙 의심"];
+    if (statusFilter === "차단" || statusFilter === "all") return ["수동", "AI", "MAC 스푸핑"];
+    return ["수동", "AI"];
+  }, [statusFilter]);
 
   return (
     <div className="page-container admin-page">
+      {releaseRequest && (
+        <AdminAuthDialog
+          title="MAC 스푸핑 해제 인증"
+          target="MAC 스푸핑 건"
+          onSubmit={submitReleaseMismatch}
+          onCancel={() => setReleaseRequest(null)}
+        />
+      )}
+
       <PageHeader
         title="로그 분석실"
         subtitle="임직원의 네트워크 접속 기록을 조회하고 추적합니다."
@@ -151,36 +202,24 @@ const LogAnalysis = () => {
       />
 
       <div className="stat-row">
-        <div
-          onClick={() => setStatusFilter("all")}
-          className={`stat-card tone-primary ${statusFilter === "all" ? "is-active" : ""}`}
-        >
+        <div onClick={() => selectStatusFilter("all")} className={`stat-card tone-primary ${statusFilter === "all" ? "is-active" : ""}`}>
           <div className="stat-label">전체 접속</div>
-          <div className="stat-value">{statTotal}<span className="stat-unit">건</span></div>
+          <div className="stat-value">{stats.total}<span className="stat-unit">건</span></div>
         </div>
-        <div
-          onClick={() => setStatusFilter("허용")}
-          className={`stat-card tone-success ${statusFilter === "허용" ? "is-active" : ""}`}
-        >
+        <div onClick={() => selectStatusFilter("허용")} className={`stat-card tone-success ${statusFilter === "허용" ? "is-active" : ""}`}>
           <div className="stat-label">정상 통과</div>
-          <div className="stat-value">{statAllowed}<span className="stat-unit">건</span></div>
+          <div className="stat-value">{stats.allowed}<span className="stat-unit">건</span></div>
         </div>
-        <div
-          onClick={() => setStatusFilter("의심")}
-          className={`stat-card tone-warning ${statusFilter === "의심" ? "is-active" : ""}`}
-        >
+        <div onClick={() => selectStatusFilter("의심")} className={`stat-card tone-warning ${statusFilter === "의심" ? "is-active" : ""}`}>
           <div>
             <div className="stat-label">AI 의심</div>
-            <div className="stat-sub">통과 {statAiSuspicious - statSuspiciousBlocked} / 차단 {statSuspiciousBlocked}</div>
+            <div className="stat-sub">통과 {stats.ai_suspicious - stats.suspicious_blocked} / 차단 {stats.suspicious_blocked}</div>
           </div>
-          <div className="stat-value">{statAiSuspicious}<span className="stat-unit">건</span></div>
+          <div className="stat-value">{stats.ai_suspicious}<span className="stat-unit">건</span></div>
         </div>
-        <div
-          onClick={() => setStatusFilter("차단")}
-          className={`stat-card tone-danger ${statusFilter === "차단" ? "is-active" : ""}`}
-        >
+        <div onClick={() => selectStatusFilter("차단")} className={`stat-card tone-danger ${statusFilter === "차단" ? "is-active" : ""}`}>
           <div className="stat-label">차단</div>
-          <div className="stat-value">{statBlocked}<span className="stat-unit">건</span></div>
+          <div className="stat-value">{stats.blocked}<span className="stat-unit">건</span></div>
         </div>
       </div>
 
@@ -193,18 +232,31 @@ const LogAnalysis = () => {
               <span className="text-muted fw-bold">~</span>
               <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="custom-input date-input" />
             </div>
-            <button type="button" onClick={exportToCSV} className="btn-action btn-neutral btn-w-auto btn-form">CSV 다운로드</button>
+            <div className="toolbar-group">
+              {subFilterOptions.map((opt) => (
+                <button
+                  key={opt}
+                  type="button"
+                  onClick={() => setSubFilter(subFilter === opt ? "all" : opt)}
+                  className={`btn-action btn-w-md btn-form ${subFilter === opt ? "btn-primary" : "btn-neutral"}`}
+                >
+                  {opt}
+                </button>
+              ))}
+              <button type="button" onClick={exportToCSV} className="btn-action btn-neutral btn-w-auto btn-form">CSV 다운로드</button>
+            </div>
           </div>
 
           <div className="table-responsive table-fill">
             <table className="custom-table">
               <colgroup>
-                <col style={{ width: "14%" }} />
-                <col style={{ width: "14%" }} />
+                <col style={{ width: "13%" }} />
+                <col style={{ width: "13%" }} />
+                <col style={{ width: "9%" }} />
+                <col style={{ width: "12%" }} />
+                <col style={{ width: "15%" }} />
+                <col style={{ width: "9%" }} />
                 <col style={{ width: "10%" }} />
-                <col style={{ width: "14%" }} />
-                <col style={{ width: "18%" }} />
-                <col style={{ width: "11%" }} />
                 <col style={{ width: "8%" }} />
                 <col style={{ width: "11%" }} />
               </colgroup>
@@ -215,44 +267,55 @@ const LogAnalysis = () => {
                   <th>출발지 IP</th>
                   <th>MAC 주소</th>
                   <th>도메인</th>
+                  <th>AI 레벨</th>
                   <th>정책 판단</th>
                   <th>AI 위협 점수</th>
                   <th>처리 결과</th>
                 </tr>
               </thead>
               <tbody>
-                {paginatedData.map((log, idx) => {
-                  const resultText = getProcessingResult(log);
-                  const isBlockedResult = resultText === "차단";
+                {displayLogs.map((log, idx) => {
+                  let resultText = "정상 통과";
+                  if (log.is_mismatch) resultText = "MAC 스푸핑 차단";
+                  else if (log.status === "의심") resultText = log.type === "차단" ? "AI 의심 차단" : "AI 의심 통과";
+                  else if (log.type === "차단") resultText = "차단";
+
+                  const isBlockedResult = resultText.includes("차단");
+
                   return (
-                    <tr key={log.isEmpty ? `empty-${idx}` : `${log.domain}-${log.time || idx}`}>
+                    <tr key={log.isEmpty ? `empty-${idx}` : log.mismatch_id ? `mismatch-${log.mismatch_id}` : `log-${log.log_id}`}>
                       {log.isEmpty ? (
-                        <td colSpan="8">&nbsp;</td>
+                        <td colSpan="9">&nbsp;</td>
                       ) : (
                         <>
                           <td className="cell-time">{log.time}</td>
-                          <td
-                            className={log.violator !== "내부 단말" ? "cell-link" : "text-primary fw-bold"}
-                            onClick={() => handleEmpClick(log.violator)}
-                          >
+                          <td className={log.violator !== "내부 단말" ? "cell-link" : "text-primary fw-bold"} onClick={() => handleEmpClick(log.violator)}>
                             {log.violator}
                           </td>
                           <td className="cell-mono">{log.ip || "-"}</td>
                           <td className="cell-mono">{log.mac || "-"}</td>
-                          <td
-                            className={`cell-main cell-clickable text-${getResultTone(log.status, log.policy)}`}
-                            onClick={() => setDetailDomain(log.domain)}
-                          >
-                            {log.domain}
-                          </td>
+                          {log.is_mismatch ? (
+                            <td className="cell-main text-danger">{log.domain}</td>
+                          ) : (
+                            <td className={`cell-main cell-clickable text-${getResultTone(log.status, log.policy)}`} onClick={() => setDetailDomain(log.domain)}>
+                              {log.domain}
+                            </td>
+                          )}
+                          <td className={`fw-bold text-${LEVEL_TONES[log.ai_level] || "muted"}`}>{log.ai_level || "-"}</td>
                           <td className={`fw-bold text-${POLICY_TONES[log.policy] || "muted"}`}>{log.policy || "-"}</td>
                           <td className={`fw-bold text-${POLICY_TONES[log.policy] || "muted"}`}>
                             {hasAiScore(log.ai_score) ? `${log.ai_score}점` : "-"}
                           </td>
                           <td>
-                            <span className={`status-badge badge-${log.status === "의심" ? POLICY_TONES[log.policy] : isBlockedResult ? "danger" : "success"}`}>
-                              {resultText}
-                            </span>
+                            {log.is_mismatch ? (
+                              <button type="button" onClick={() => setReleaseRequest({ mismatchId: log.mismatch_id })} className="btn-action btn-neutral btn-w-sm btn-header">
+                                해제
+                              </button>
+                            ) : (
+                              <span className={`status-badge badge-${log.status === "의심" ? POLICY_TONES[log.policy] : isBlockedResult ? "danger" : "success"}`}>
+                                {resultText}
+                              </span>
+                            )}
                           </td>
                         </>
                       )}
@@ -269,12 +332,7 @@ const LogAnalysis = () => {
       {detailDomain && <DomainDetailDialog domain={detailDomain} onClose={() => setDetailDomain(null)} />}
 
       {isModalOpen && selectedSecurity && (
-        <SecurityDetailDialog
-          security={selectedSecurity}
-          onClose={() => setIsModalOpen(false)}
-          onRefresh={handleRefreshDetail}
-          refreshing={detailLoading}
-        />
+        <SecurityDetailDialog security={selectedSecurity} onClose={() => setIsModalOpen(false)} onRefresh={handleRefreshDetail} refreshing={detailLoading} />
       )}
     </div>
   );

@@ -1,7 +1,6 @@
 import axios from "axios";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import PageHeader from "../../components/PageHeader";
 import {
   Area,
   CartesianGrid,
@@ -16,6 +15,7 @@ import {
   YAxis,
 } from "recharts";
 import { API_BASE_URL, MONITOR_REFRESH_MS } from "../../api";
+import PageHeader from "../../components/PageHeader";
 
 const LOG_DELAY_WARNING_MINUTES = 30;
 
@@ -24,7 +24,7 @@ const Dashboard = () => {
   const chartWrapperRef = useRef(null);
   const fetchSeq = useRef(0);
 
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState("");
   const [chartData, setChartData] = useState([]);
   const [topDomains, setTopDomains] = useState([]);
@@ -155,14 +155,14 @@ const Dashboard = () => {
   const { yMax, yTicks } = useMemo(() => {
     const maxVal = visibleData.length
       ? Math.max(
-          ...visibleData.map((d) =>
-            Math.max(
-              showNormal ? d.정상접속 || 0 : 0,
-              showThreat ? d.위협차단 || 0 : 0,
-              showAi ? d.AI의심 || 0 : 0,
-            ),
+        ...visibleData.map((d) =>
+          Math.max(
+            showNormal ? d.정상접속 || 0 : 0,
+            showThreat ? d.위협차단 || 0 : 0,
+            showAi ? d.AI의심 || 0 : 0,
           ),
-        )
+        ),
+      )
       : 0;
     const max =
       maxVal === 0 ? 4 : maxVal + Math.max(1, Math.floor(maxVal * 0.1));
@@ -261,7 +261,9 @@ const Dashboard = () => {
 
 
           <div className="chart-area" ref={chartWrapperRef}>
-            {visibleData.length > 0 ? (
+            {loading && chartData.length === 0 ? (
+              <div className="empty-state">데이터를 불러오는 중입니다...</div>
+            ) : visibleData.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
                 <ComposedChart
                   data={visibleData}
@@ -354,6 +356,7 @@ const Dashboard = () => {
                       fillOpacity={1}
                       fill="url(#colorNormal)"
                       activeDot={{ r: 6 }}
+                      isAnimationActive={false} // 애니메이션 끄기
                     />
                   )}
                   {showAi && (
@@ -366,6 +369,7 @@ const Dashboard = () => {
                       fillOpacity={1}
                       fill="url(#colorAi)"
                       activeDot={{ r: 6 }}
+                      isAnimationActive={false} // 애니메이션 끄기
                     />
                   )}
                   {showThreat && (
@@ -378,6 +382,7 @@ const Dashboard = () => {
                       fillOpacity={1}
                       fill="url(#colorThreat)"
                       activeDot={{ r: 6 }}
+                      isAnimationActive={false} // 애니메이션 끄기
                     />
                   )}
                 </ComposedChart>
@@ -424,6 +429,7 @@ const Dashboard = () => {
                       paddingAngle={3}
                       dataKey="value"
                       stroke="none"
+                      isAnimationActive={false} // 애니메이션 끄기 속성 추가
                     >
                       {topDomains.map((_, i) => (
                         <Cell

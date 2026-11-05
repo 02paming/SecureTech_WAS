@@ -1,5 +1,4 @@
 import datetime
-import os
 from datetime import timedelta
 
 import requests
@@ -22,16 +21,14 @@ from ..models import (
 from .audit import audited
 from .policy_history import is_watcher_alive
 from .policy_views import verify_admin_auth
+from .threshold_history import get_threshold_levels
 from .utils import (
     PCAP_BACKEND_URL,
     SERVER_ERROR_MESSAGE,
     access_category_q,
     employee_ip,
-    get_threshold_config,
     logger,
 )
-
-AI_SERVER_URL = os.getenv("AI_SERVER_URL", "http://192.168.1.17")
 
 
 @api_view(["GET"])
@@ -282,34 +279,26 @@ def manage_eqp_run_time(request):
         return Response({"status": "error", "message": SERVER_ERROR_MESSAGE}, status=500)
 
 
-def _send_to_ai_server(path, payload):
-    """DB에 저장한 값을 AI 서버에 바로 알린다. 전달 여부를 돌려준다."""
+def _send_to_pcap_for_ai(path, payload):
+    """DB에 저장한 값을 PCAP 백엔드(8080)로 보내서 AI 서버까지 경유 전달하게 한다."""
     try:
-        return requests.post(f"{AI_SERVER_URL}{path}", json=payload, timeout=2).ok
+        # PCAP_BACKEND_URL (예: http://127.0.0.1:8080) 로 요청을 보냅니다.
+        return requests.post(f"{PCAP_BACKEND_URL}{path}", json=payload, timeout=2).ok
     except requests.RequestException as e:
-        logger.warning("AI 서버 전송 실패 (%s): %s", path, e)
+        logger.warning("PCAP 백엔드 경유 AI 서버 전송 실패 (%s): %s", path, e)
         return False
 
 
 def _with_delivery(message, delivered):
-    return message if delivered else f"{message} 다만 AI 서버에는 전달하지 못했습니다."
+    return message if delivered else f"{message} 다만 동기화 서버(PCAP)로 전달하지 못했습니다."
 
 
 @api_view(["GET", "POST"])
-@audited("AI 판별 기준 변경", "white_start", "black_start", "block_start", actor_key="employee_id")
+@audited("AI 판별 기준 변경", "config_id", "white_start", "black_start", "block_start", actor_key="employee_id")
 def manage_ai_thresholds(request):
     try:
-        config = get_threshold_config()
         if request.method == "GET":
-            return Response(
-                {
-                    "status": "success",
-                    "white_start": config.white_doubt_limit,
-                    "black_start": config.black_doubt_limit,
-                    # AI 엔진은 점수 >= black_limit이면 차단한다
-                    "block_start": config.black_limit,
-                }
-            )
+            return Response({"status": "success", "levels": get_threshold_levels()})
 
         is_valid, error_msg = verify_admin_auth(
             request, request.data.get("employee_id"), request.data.get("password")
@@ -318,25 +307,49 @@ def manage_ai_thresholds(request):
             return Response({"status": "error", "message": error_msg}, status=403)
 
         try:
+            config_id = int(request.data.get("config_id"))
             white_start = int(request.data.get("white_start"))
             black_start = int(request.data.get("black_start"))
             block_start = int(request.data.get("block_start"))
         except (TypeError, ValueError):
-            return Response({"status": "error", "message": "기준 점수는 숫자로 입력해 주세요."}, status=400)
+            return Response({"status": "error", "message": "레벨과 기준 점수는 숫자로 입력해 주세요."}, status=400)
         if not 0 < white_start < black_start < block_start <= 100:
             return Response(
                 {"status": "error", "message": "화이트 의심 < 블랙 의심 < 차단 순서로, 1~100 사이에서 입력해 주세요."},
                 status=400,
             )
 
-        # 어느 행을 읽어도 같도록 모든 행을 맞춘다
-        AiThresholdConfig.objects.update(
+        # 레벨(config_id)은 엄격→완화 순서이므로, 차단 점수도 그 순서를 지켜야 레벨 구분이 의미가 있다
+        other_ids = sorted(
+            AiThresholdConfig.objects.exclude(pk=config_id).values_list("pk", flat=True)
+        )
+        all_ids = sorted(other_ids + [config_id])
+        idx = all_ids.index(config_id)
+        if idx > 0:
+            prev = AiThresholdConfig.objects.get(pk=all_ids[idx - 1])
+            if block_start <= prev.black_limit:
+                return Response(
+                    {"status": "error", "message": f"차단 점수가 더 엄격한 레벨({prev.black_limit}점)과 겹칩니다. 더 높은 값을 입력해 주세요."},
+                    status=400,
+                )
+        if idx < len(all_ids) - 1:
+            nxt = AiThresholdConfig.objects.get(pk=all_ids[idx + 1])
+            if block_start >= nxt.black_limit:
+                return Response(
+                    {"status": "error", "message": f"차단 점수가 더 완화된 레벨({nxt.black_limit}점)과 겹칩니다. 더 낮은 값을 입력해 주세요."},
+                    status=400,
+                )
+
+        updated = AiThresholdConfig.objects.filter(pk=config_id).update(
             white_doubt_limit=white_start,
             black_doubt_limit=black_start,
             black_limit=block_start,
             updated_at=timezone.now(),
         )
-        delivered = _send_to_ai_server(
+        if not updated:
+            return Response({"status": "error", "message": "해당 레벨을 찾을 수 없습니다."}, status=404)
+
+        delivered = _send_to_pcap_for_ai(
             "/api/update_ai_threshold",
             {
                 "white_doubt_limit": white_start,
@@ -349,6 +362,7 @@ def manage_ai_thresholds(request):
                 "status": "success",
                 "ai_server_delivered": delivered,
                 "message": _with_delivery("판별 기준을 저장했습니다.", delivered),
+                "levels": get_threshold_levels(),
             }
         )
     except Exception as e:
@@ -376,7 +390,8 @@ def activate_ai_model(request):
         with transaction.atomic():
             AiModelMetrics.objects.update(is_active=False)
             AiModelMetrics.objects.filter(pk=target_model.pk).update(is_active=True)
-        delivered = _send_to_ai_server(
+
+        delivered = _send_to_pcap_for_ai(
             "/api/update_ai_model", {"model_version": target_model.version_name}
         )
         return Response(

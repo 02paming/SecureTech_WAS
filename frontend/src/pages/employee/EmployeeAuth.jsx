@@ -1,6 +1,5 @@
 import axios from "axios";
 import { useCallback, useEffect, useState } from "react";
-import BlockedEmployeesDialog from "../../components/BlockedEmployeesDialog";
 import PageHeader from "../../components/PageHeader";
 import PaginationBar from "../../components/PaginationBar";
 import SecurityDetailDialog from "../../components/SecurityDetailDialog";
@@ -9,8 +8,6 @@ import { API_BASE_URL, MONITOR_REFRESH_MS } from "../../api";
 
 const EmployeeAuth = () => {
   const [onlineUsers, setOnlineUsers] = useState([]);
-  const [blockedUsers, setBlockedUsers] = useState([]);
-  const [isBlockedOpen, setIsBlockedOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
   const [lastUpdated, setLastUpdated] = useState("");
@@ -27,16 +24,8 @@ const EmployeeAuth = () => {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [res, blockedRes] = await Promise.all([
-        axios.get(`${baseUrl}/api/dashboard/employee-auth-status/`),
-        axios.get(`${baseUrl}/api/dashboard/blocked-employees/`),
-      ]);
-      setOnlineUsers(
-        (res.data || []).filter(
-          (u) => u.is_active && !u.is_blocked && u.external_status !== "차단됨",
-        ),
-      );
-      setBlockedUsers(blockedRes.data || []);
+      const res = await axios.get(`${baseUrl}/api/dashboard/employee-auth-status/`);
+      setOnlineUsers(res.data || []);
       setLastUpdated(new Date().toLocaleTimeString("ko-KR", { hour12: false }));
     } catch (err) {
       console.error("사원 인증 현황 조회 실패:", err);
@@ -80,21 +69,22 @@ const EmployeeAuth = () => {
       );
       if (res.data?.status === "success") setSelectedSecurity(res.data.data);
     } catch (err) {
-      console.error("보안 상세 현황 갱신 실패:", err);
+      console.error("상세 보안 현황 갱신 실패:", err);
     } finally {
       setDetailLoading(false);
     }
   };
 
+  // 접속만 끊는다(킥). 이 사원은 다시 인증하면 바로 접속할 수 있다
   const handleBlockUser = async (user) => {
-    if (!window.confirm(`${user.emp_name} 단말을 차단하시겠습니까?`)) return;
+    if (!window.confirm(`${user.emp_name} 단말 접속을 차단하시겠습니까?`)) return;
     setLoading(true);
     try {
       await axios.post(`${baseUrl}/api/dashboard/block-employee/`, {
         employee_id: user.emp_id,
         kick_host_id: user.ip?.split(".").pop(),
       });
-      alert("차단되었습니다.");
+      alert("접속이 차단되었습니다.");
       await fetchData();
     } catch (err) {
       console.error("단말 차단 실패:", err);
@@ -161,18 +151,9 @@ const EmployeeAuth = () => {
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
-          <div className="btn-group">
-            <button
-              type="button"
-              className="btn-action btn-neutral btn-w-lg btn-header"
-              onClick={() => setIsBlockedOpen(true)}
-            >
-              차단된 사원 {blockedUsers.length}명
-            </button>
-            <span className="count-badge badge-primary">
-              인증 사원 {onlineUsers.length}명
-            </span>
-          </div>
+          <span className="count-badge badge-primary">
+            인증 사원 {onlineUsers.length}명
+          </span>
         </div>
         <div className="table-responsive table-fill">
           <table className="custom-table">
@@ -200,7 +181,7 @@ const EmployeeAuth = () => {
                     );
                   }}
                 >
-                  로그인 시간 {loginTimeSortOrder === "desc" ? "▼" : "▲"}
+                  인증 시간 {loginTimeSortOrder === "desc" ? "▼" : "▲"}
                 </th>
               </tr>
             </thead>
@@ -242,14 +223,6 @@ const EmployeeAuth = () => {
           onPageChange={setCurrentPage}
         />
       </div>
-
-      {isBlockedOpen && (
-        <BlockedEmployeesDialog
-          employees={blockedUsers}
-          onChanged={fetchData}
-          onClose={() => setIsBlockedOpen(false)}
-        />
-      )}
 
       {isModalOpen && selectedSecurity && (
         <SecurityDetailDialog

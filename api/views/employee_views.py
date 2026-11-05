@@ -16,7 +16,6 @@ from ..models import (
     WebAccessLog,
 )
 from .audit import audited
-from .policy_views import verify_admin_auth
 from .security_services import (
     SCORE_WINDOW_DAYS,
     calculate_security_score,
@@ -26,15 +25,12 @@ from .utils import (
     ANONYMIZED_ID_PREFIX,
     DUPLICATE_MEMBER_MESSAGE,
     SERVER_ERROR_MESSAGE,
-    block_emp,
     employee_ip,
     format_jumin_and_birth,
-    is_emp_blocked,
     judge_access,
     logger,
     sync_expire_to_pcap,
     sync_pcap_json_files,
-    unblock_emp,
 )
 
 
@@ -230,7 +226,6 @@ def get_employee_auth_status(request):
             if not emp or emp.deleted_at or emp.employee_id in seen_emps:
                 continue
             seen_emps.add(emp.employee_id)
-            is_blocked = is_emp_blocked(emp.employee_id)
             current_ym = (
                 emp.hire_date.strftime("%Y%m")
                 if getattr(emp, "hire_date", None)
@@ -248,10 +243,6 @@ def get_employee_auth_status(request):
                     if session.online_ip
                     else "-",
                     "mac": getattr(session, "online_mac_addr", None) or "-",
-                    "login_status": "차단됨" if is_blocked else "접속 중",
-                    "is_active": not is_blocked,
-                    "is_blocked": is_blocked,
-                    "external_status": "차단됨" if is_blocked else "인증 완료",
                     "login_time": session.login_time.strftime("%Y-%m-%d %H:%M:%S")
                     if (session.login_time and hasattr(session.login_time, "strftime"))
                     else str(session.login_time or "-"),
@@ -502,8 +493,9 @@ def get_employee_security_detail(request, emp_id):
 
 
 @api_view(["POST"])
-@audited("사원 차단", "employee_id")
+@audited("사원 접속 차단", "employee_id")
 def block_employee(request):
+    """지금 접속만 끊는다(킥). 다시 인증하면 바로 접속할 수 있다."""
     try:
         emp_id, kick_ip = (
             request.data.get("employee_id"),
@@ -511,59 +503,11 @@ def block_employee(request):
         )
         if not emp_id:
             return Response({"error": "사원 ID 필수"}, status=400)
-        block_emp(emp_id)
         OnlineList.objects.filter(employee__employee_id=emp_id).delete()
         sync_expire_to_pcap(emp_id, kick_ip)
         return Response(
-            {"status": "success", "message": f"사원({emp_id}) 차단 및 킥 완료"}
+            {"status": "success", "message": f"사원({emp_id}) 접속 차단 완료"}
         )
-    except Exception as e:
-        logger.error("사원 차단 처리 실패: %s", e)
-        return Response({"error": SERVER_ERROR_MESSAGE}, status=500)
-
-
-@api_view(["GET"])
-def get_blocked_employees(request):
-    try:
-        data = []
-        for emp in Employees.objects.filter(deleted_at__isnull=True).exclude(
-            employee_id__startswith=ANONYMIZED_ID_PREFIX
-        ):
-            if is_emp_blocked(emp.employee_id):
-                current_ym = (
-                    emp.hire_date.strftime("%Y%m") if emp.hire_date else "202610"
-                )
-                data.append(
-                    {
-                        "emp_no": f"ST{current_ym}{emp.employee_number:02d}"
-                        if emp.employee_number
-                        else "-",
-                        "emp_name": emp.name,
-                        "emp_id": emp.employee_id,
-                    }
-                )
-        return Response(data)
-    except Exception as e:
-        logger.error("차단 사원 목록 조회 실패: %s", e)
-        return Response({"error": SERVER_ERROR_MESSAGE}, status=500)
-
-
-@api_view(["POST"])
-@audited("사원 차단 해제", "employee_id", actor_key="admin_id")
-def unblock_employee(request):
-    try:
-        is_valid, error_msg = verify_admin_auth(
-            request, request.data.get("admin_id"), request.data.get("password")
-        )
-        if not is_valid:
-            return Response({"error": error_msg}, status=403)
-
-        emp_id = request.data.get("employee_id")
-        if not emp_id:
-            return Response({"error": "사원 ID 필수"}, status=400)
-        unblock_emp(emp_id)
-        sync_pcap_json_files("all")
-        return Response({"status": "success", "message": "차단 해제 완료"})
     except Exception as e:
         logger.error("사원 차단 처리 실패: %s", e)
         return Response({"error": SERVER_ERROR_MESSAGE}, status=500)

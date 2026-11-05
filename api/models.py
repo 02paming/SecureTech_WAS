@@ -53,6 +53,7 @@ class WhitelistAddr(models.Model):
     whitelist_domain = models.CharField(max_length=255)
     deleted_at = models.DateField(blank=True, null=True)
     is_protected = models.BooleanField(default=False)
+    ai_score = models.FloatField(default=-1.0, blank=True, null=True)
     source = models.CharField(max_length=50)
 
     class Meta:
@@ -64,6 +65,7 @@ class BlacklistAddr(models.Model):
     blacklist_id = models.AutoField(primary_key=True)
     blacklist_domain = models.CharField(max_length=255)
     deleted_at = models.DateField(blank=True, null=True)
+    ai_score = models.FloatField(default=-1.0, blank=True, null=True)
     source = models.CharField(max_length=50)
 
     class Meta:

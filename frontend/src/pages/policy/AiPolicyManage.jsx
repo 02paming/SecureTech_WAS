@@ -1,18 +1,22 @@
 import axios from "axios";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { API_BASE_URL } from "../../api";
 import AdminAuthDialog from "../../components/AdminAuthDialog";
 import DomainDetailDialog from "../../components/DomainDetailDialog";
 import PageHeader from "../../components/PageHeader";
 import PaginationBar from "../../components/PaginationBar";
 import { hasAiScore } from "../../utils/aiScore";
 import { padRows } from "../../utils/table";
-import { API_BASE_URL } from "../../api";
 
 const AiPolicyManage = () => {
   const [aiData, setAiData] = useState([]);
   const [lastUpdated, setLastUpdated] = useState("");
   const [detailDomain, setDetailDomain] = useState(null);
+
+  // 검색 디바운스를 위한 상태 및 Ref 분리
+  const [searchInput, setSearchInput] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
+  const searchTimeoutRef = useRef(null);
 
   const [whitePage, setWhitePage] = useState(1);
   const [blackPage, setBlackPage] = useState(1);
@@ -46,10 +50,18 @@ const AiPolicyManage = () => {
     return () => clearInterval(interval);
   }, [fetchAiPolicies]);
 
+  // 컴포넌트 언마운트 시 작동 중인 타이머 안전하게 해제
+  useEffect(() => {
+    return () => {
+      if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+    };
+  }, []);
+
   const openAuthModal = (domains, action) => {
     if (domains.length === 0) return;
     setAuthModal({ isOpen: true, domains, action });
   };
+
   const closeAuthModal = () => {
     setAuthModal({ isOpen: false, domains: [], action: "" });
   };
@@ -67,6 +79,18 @@ const AiPolicyManage = () => {
     }
   };
 
+  // 검색어 입력 시 0.5초 대기 후 필터링을 한 번만 실행 (메인 스레드 연산 최소화)
+  const handleSearchChange = useCallback((e) => {
+    setSearchInput(e.target.value);
+    if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+
+    searchTimeoutRef.current = setTimeout(() => {
+      setSearchTerm(e.target.value);
+      setWhitePage(1);
+      setBlackPage(1);
+    }, 500);
+  }, []);
+
   const filteredData = useMemo(() => aiData.filter((d) => (d.domain || "").toLowerCase().includes(searchTerm.toLowerCase())), [aiData, searchTerm]);
 
   const whiteListAll = useMemo(() => filteredData.filter((d) => d.source === "white" && (!whiteSuspiciousOnly || d.ai_status === "DOUBT")), [filteredData, whiteSuspiciousOnly]);
@@ -78,6 +102,7 @@ const AiPolicyManage = () => {
   const toggleSelect = (domain, setSelectedList) => {
     setSelectedList((prev) => prev.includes(domain) ? prev.filter((d) => d !== domain) : [...prev, domain]);
   };
+
   const toggleSelectAll = (paginatedData, selectedList, setSelectedList) => {
     const currentDomains = paginatedData.filter((p) => !p.isEmpty).map((p) => p.domain);
     const allSelected = currentDomains.length > 0 && currentDomains.every((d) => selectedList.includes(d));
@@ -94,11 +119,11 @@ const AiPolicyManage = () => {
   };
 
   const SCORE_TONES = { "white-AI": "text-success", "white-DOUBT": "text-score-yellow", "black-DOUBT": "text-score-orange", "black-AI": "text-danger" };
+
   const renderScore = (score, source, aiStatus) => (
     <span className={`fw-bold ${SCORE_TONES[`${source}-${aiStatus}`] || "text-muted"}`}>{hasAiScore(score) ? `${score}점` : "-"}</span>
   );
 
-  // 의심은 관리자가 허용/차단을 결정하고, AI가 확정한 안전/위험은 해제만 가능
   const renderActions = (domain, aiStatus) => {
     if (aiStatus === "DOUBT") {
       return (
@@ -137,7 +162,13 @@ const AiPolicyManage = () => {
         lastUpdated={lastUpdated}
         onRefresh={fetchAiPolicies}
       >
-        <input type="text" placeholder="도메인 검색..." value={searchTerm} onChange={(e) => { setSearchTerm(e.target.value); setWhitePage(1); setBlackPage(1); }} className="custom-input search-input" />
+        <input
+          type="text"
+          placeholder="도메인 검색..."
+          value={searchInput}
+          onChange={handleSearchChange}
+          className="custom-input search-input"
+        />
       </PageHeader>
 
       <div className="panel-row">

@@ -3,7 +3,7 @@ import re
 
 from django.contrib.auth.hashers import check_password
 from django.db import transaction
-from django.db.models import Count, Max, OuterRef, Subquery
+from django.db.models import Count, Max
 from django.utils import timezone
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
@@ -261,7 +261,7 @@ def force_delete_whitelist(request):
     WhitelistAddr.objects.filter(
         whitelist_domain=domain, deleted_at__isnull=True, source="USER"
     ).update(is_protected=False)
-    sync_pcap_json_files("white")
+
     return Response(
         {
             "status": "success",
@@ -365,24 +365,13 @@ def promote_ai_policy(request):
         return Response({"error": SERVER_ERROR_MESSAGE}, status=500)
 
 
-def _latest_ai_score(domain_field):
-    """도메인의 가장 최근 AI 점수. 점수 없는 기록(-1)은 제외한다."""
-    return Subquery(
-        WebAccessLog.objects.filter(
-            target_url=OuterRef(domain_field), ai_score__gte=0
-        )
-        .order_by("-access_time")
-        .values("ai_score")[:1]
-    )
-
-
 @api_view(["GET"])
 def get_ai_policies(request):
     try:
         data = []
         for w in WhitelistAddr.objects.filter(
             deleted_at__isnull=True, source__in=["AI", "DOUBT"]
-        ).annotate(ai_score=_latest_ai_score("whitelist_domain")):
+        ):
             time_val = getattr(w, "insert_time", getattr(w, "created_at", None))
             time_str = time_val.strftime("%Y-%m-%d %H:%M:%S") if time_val else "-"
             data.append({
@@ -395,7 +384,7 @@ def get_ai_policies(request):
 
         for b in BlacklistAddr.objects.filter(
             deleted_at__isnull=True, source__in=["AI", "DOUBT"]
-        ).annotate(ai_score=_latest_ai_score("blacklist_domain")):
+        ):
             time_val = getattr(b, "insert_time", getattr(b, "created_at", None))
             time_str = time_val.strftime("%Y-%m-%d %H:%M:%S") if time_val else "-"
             data.append({

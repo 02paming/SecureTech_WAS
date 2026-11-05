@@ -58,16 +58,6 @@ urlpatterns = [
         employee_views.block_employee,
         name="block_employee",
     ),
-    path(
-        "api/dashboard/blocked-employees/",
-        employee_views.get_blocked_employees,
-        name="get_blocked_employees",
-    ),
-    path(
-        "api/dashboard/unblock-employee/",
-        employee_views.unblock_employee,
-        name="unblock_employee",
-    ),
     path("api/policies/blocklist/", policy_views.get_blocklist, name="get_blocklist"),
     path("api/policies/add/", policy_views.add_policy, name="add_policy"),
     path("api/policies/delete/", policy_views.delete_policy, name="delete_policy"),
@@ -135,6 +125,11 @@ urlpatterns = [
         "api/dashboard/integrated-logs/",
         log_views.get_integrated_logs,
         name="get_integrated_logs",
+    ),
+    path(
+        "api/dashboard/mac-mismatch/release/",
+        log_views.release_mac_mismatch,
+        name="release_mac_mismatch",
     ),
     path(
         "api/policies/promote/",

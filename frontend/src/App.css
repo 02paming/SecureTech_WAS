@@ -1191,24 +1191,118 @@ body.dark-mode .auth-admin {
   }
 }
 
-.threshold-form {
+.threshold-level-group {
   display: flex;
   align-items: center;
-  gap: 12px;
-  font-size: 12px;
-  font-weight: 700;
+  gap: 8px;
 }
 
-.threshold-form label {
-  display: flex;
-  align-items: center;
-  gap: 6px;
+.level-btn {
+  height: 32px;
+  padding: 0 16px;
+  font-size: 13px;
+  font-weight: 700;
+  border-radius: var(--radius-btn);
+  cursor: pointer;
+  transition: 0.2s;
+  background-color: transparent;
   white-space: nowrap;
 }
 
-.threshold-form .custom-input {
-  width: 58px;
-  height: 32px;
+.level-btn:disabled {
+  cursor: default;
+}
+
+.level-btn-danger {
+  border: 1px solid var(--color-danger);
+  color: var(--color-danger);
+}
+
+.level-btn-warning {
+  border: 1px solid var(--color-warning);
+  color: var(--color-warning);
+}
+
+.level-btn-success {
+  border: 1px solid var(--color-success);
+  color: var(--color-success);
+}
+
+.level-btn-neutral {
+  border: 1px solid var(--border-input);
+  color: var(--text-main);
+}
+
+.level-btn-danger.is-active {
+  background-color: var(--color-danger);
+  color: #fff;
+}
+
+.level-btn-warning.is-active {
+  background-color: var(--color-warning);
+  color: #fff;
+}
+
+.level-btn-success.is-active {
+  background-color: var(--color-success);
+  color: #fff;
+}
+
+.level-btn:not(:disabled):hover {
+  filter: brightness(0.95);
+}
+
+.level-edit-box {
+  width: 560px;
+}
+
+.level-edit-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.level-edit-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-card);
+}
+
+.level-edit-row.is-active {
+  border-color: var(--color-primary);
+}
+
+.level-edit-name {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  width: 44px;
+  font-weight: 700;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.level-active-badge {
+  font-size: 10px;
+  padding: 2px 6px;
+}
+
+.level-edit-row label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.level-edit-row .custom-input {
+  width: 52px;
+  height: 30px;
   padding: 4px 6px;
   text-align: center;
 }

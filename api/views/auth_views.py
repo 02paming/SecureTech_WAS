@@ -18,12 +18,13 @@ from .utils import (
     DUPLICATE_MEMBER_MESSAGE,
     RESTRICTED_IDS,
     SERVER_ERROR_MESSAGE,
+    decrypt_otp_secret,
     employee_ip,
+    encrypt_otp_secret,
     extract_ip_suffix,
     format_jumin_and_birth,
     get_client_ip,
     is_admin_ip_allowed,
-    is_emp_blocked,
     logger,
     save_online_session,
     sync_pcap_json_files_in_background,
@@ -152,11 +153,6 @@ def check_duplicate(request):
 @audited("로그인", "employee_id", "member_id", actor_key="employee_id")
 def login(request):
     emp_id = request.data.get("employee_id") or request.data.get("member_id")
-    if is_emp_blocked(emp_id):
-        return Response(
-            {"status": "error", "message": "관리자에 의해 접근이 제한된 계정입니다."},
-            status=status.HTTP_403_FORBIDDEN,
-        )
     if _is_locked("login", emp_id):
         return _locked_response()
 
@@ -186,12 +182,13 @@ def login(request):
                     status=status.HTTP_403_FORBIDDEN,
                 )
 
-            current_secret = getattr(employee, "otp_secret", None)
+            stored_secret = getattr(employee, "otp_secret", None)
+            current_secret = decrypt_otp_secret(stored_secret) if stored_secret else None
 
             if not current_secret:
                 new_secret = pyotp.random_base32()
                 Employees.objects.filter(employee_id=employee.employee_id).update(
-                    otp_secret=new_secret
+                    otp_secret=encrypt_otp_secret(new_secret)
                 )
 
                 totp = pyotp.TOTP(new_secret)
@@ -271,9 +268,9 @@ def verify_otp(request):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    current_secret = getattr(employee, "otp_secret", None)
+    stored_secret = getattr(employee, "otp_secret", None)
 
-    if not current_secret:
+    if not stored_secret:
         return Response(
             {
                 "status": "error",
@@ -281,6 +278,8 @@ def verify_otp(request):
             },
             status=status.HTTP_400_BAD_REQUEST,
         )
+
+    current_secret = decrypt_otp_secret(stored_secret)
 
     totp = pyotp.TOTP(current_secret)
     if totp.verify(otp_code):
@@ -317,14 +316,6 @@ def captive_login(request):
     emp_id = request.data.get("employee_id")
     is_test = request.data.get("is_test", False)  # 테스트 플래그 확인
 
-    if is_emp_blocked(emp_id):
-        return Response(
-            {
-                "status": "error",
-                "message": "접근 거부: 네트워크 접근이 차단된 사원입니다.",
-            },
-            status=status.HTTP_403_FORBIDDEN,
-        )
     if _is_locked("captive", emp_id):
         return _locked_response()
 

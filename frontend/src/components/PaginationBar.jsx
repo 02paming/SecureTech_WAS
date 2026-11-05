@@ -1,4 +1,4 @@
-// 모든 표 하단의 페이지 번호: 이전 / 번호 최대 5개 / 다음
+// 모든 표 하단의 페이지 번호: 처음 / 이전 / 번호 최대 5개 / 다음 / 마지막
 function PaginationBar({ page, totalPages, onPageChange }) {
   const getPageNumbers = () => {
     const pages = [];
@@ -11,6 +11,14 @@ function PaginationBar({ page, totalPages, onPageChange }) {
 
   return (
     <div className="pagination-bar">
+      <button
+        type="button"
+        onClick={() => onPageChange(1)}
+        disabled={page === 1}
+        className="btn-page"
+      >
+        처음
+      </button>
       <button
         type="button"
         onClick={() => onPageChange(Math.max(page - 1, 1))}
@@ -36,6 +44,14 @@ function PaginationBar({ page, totalPages, onPageChange }) {
         className="btn-page"
       >
         다음
+      </button>
+      <button
+        type="button"
+        onClick={() => onPageChange(totalPages)}
+        disabled={page === totalPages}
+        className="btn-page"
+      >
+        마지막
       </button>
     </div>
   );

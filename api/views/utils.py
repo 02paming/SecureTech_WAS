@@ -1,4 +1,3 @@
-import hashlib
 import json
 import logging
 import os
@@ -7,15 +6,31 @@ import socket
 import threading
 import urllib.request
 
+from cryptography.fernet import Fernet, InvalidToken
 from django.core.cache import cache
 from django.db import DatabaseError, connection, connections
 from django.db.models import Q
 
-from ..models import AiThresholdConfig, BlacklistAddr, OnlineList, WhitelistAddr
+from ..models import BlacklistAddr, OnlineList, WhitelistAddr
 
 file_lock = threading.Lock()
 logger = logging.getLogger(__name__)
 PCAP_BACKEND_URL = os.getenv("PCAP_BACKEND_URL", "http://127.0.0.1:8080")
+_otp_fernet = Fernet(os.environ["OTP_SECRET_KEY"].encode())
+
+
+def encrypt_otp_secret(raw_secret):
+    return _otp_fernet.encrypt(raw_secret.encode()).decode()
+
+
+def decrypt_otp_secret(stored_value):
+    """DB에 평문으로 남아 있던 기존 값도 그대로 쓸 수 있게 복호화 실패 시 원문을 돌려준다."""
+    try:
+        return _otp_fernet.decrypt(stored_value.encode()).decode()
+    except (InvalidToken, UnicodeDecodeError, ValueError):
+        return stored_value
+
+
 EMPLOYEE_IP_PREFIX = "192.168.2."
 RESTRICTED_IDS = {"admin", "root", "manager", "test", "guest"}
 ANONYMIZED_ID_PREFIX = "deleted_"
@@ -93,22 +108,6 @@ def save_online_session(emp, sfx, now):
                 )
 
 
-def _blocked_key(emp_id):
-    return "blocked_emp:" + hashlib.sha256(str(emp_id).encode()).hexdigest()
-
-
-def is_emp_blocked(emp_id):
-    return cache.get(_blocked_key(emp_id)) is not None
-
-
-def block_emp(emp_id):
-    cache.set(_blocked_key(emp_id), True, timeout=None)
-
-
-def unblock_emp(emp_id):
-    cache.delete(_blocked_key(emp_id))
-
-
 def resolve_domain_ip(domain):
     try:
         return socket.gethostbyname(domain) if domain else "0.0.0.0"
@@ -169,14 +168,6 @@ def access_category_q(category):
     if category == "정상":
         return query | (no_code & ~Q(access_flag="차단"))
     return query
-
-
-def get_threshold_config():
-    """판별 기준은 한 행만 쓴다."""
-    config = AiThresholdConfig.objects.order_by("config_id").first()
-    return config or AiThresholdConfig.objects.create(
-        white_doubt_limit=31, black_doubt_limit=51, black_limit=71
-    )
 
 
 def is_admin_ip_allowed(ip):
