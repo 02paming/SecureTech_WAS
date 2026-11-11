@@ -1,3 +1,5 @@
+# 블랙리스트/화이트리스트 보안 정책 등록, 해제 및 AI 정책 이관을 처리하는 백엔드 API 뷰
+
 import hashlib
 import re
 
@@ -23,7 +25,6 @@ from .utils import (
     is_admin_ip_allowed,
     logger,
     notify_pcap_delta,
-    sync_pcap_json_files,
 )
 
 
@@ -56,7 +57,6 @@ def verify_admin_auth(request, emp_id, emp_pw):
 
 
 def _domain_access_stats(domains):
-    """도메인별 접속 수와 최근 접속 시간을 돌려준다."""
     rows = (
         WebAccessLog.objects.filter(target_url__in=domains)
         .values("target_url")
@@ -77,7 +77,9 @@ NO_ACCESS_STATS = {"access_count": 0, "last_access": None}
 @api_view(["GET"])
 def get_blocklist(request):
     results = []
-    policies = list(BlacklistAddr.objects.filter(deleted_at__isnull=True, source="USER"))
+    policies = list(
+        BlacklistAddr.objects.filter(deleted_at__isnull=True, source="USER")
+    )
     stats = _domain_access_stats([p.blacklist_domain for p in policies])
     for p in policies:
         results.append(
@@ -96,10 +98,12 @@ def add_policy(request):
     domain = sanitize_domain(
         request.data.get("blacklist_domain") or request.data.get("no_access_domain", "")
     )
+    description = request.data.get("description", "")
+    added_by_emp_id = request.data.get("added_by_emp_id")
+
     if not domain:
         return Response({"error": "차단할 도메인 주소를 입력해주세요."}, status=400)
 
-    # 화이트리스트에 이미 존재하는지 엄격히 검사
     if WhitelistAddr.objects.filter(
         whitelist_domain=domain, deleted_at__isnull=True
     ).exists():
@@ -110,18 +114,31 @@ def add_policy(request):
             status=400,
         )
 
+    # 💡 [핵심 수정 부분] ST2026... 같은 문자열 사번을 완벽히 인식합니다.
+    emp = None
+    if added_by_emp_id:
+        if str(added_by_emp_id).isdigit():
+            emp = Employees.objects.filter(employee_number=int(added_by_emp_id)).first()
+        else:
+            emp = Employees.objects.filter(employee_id=str(added_by_emp_id)).first()
+
     p = BlacklistAddr.objects.filter(blacklist_domain=domain).first()
     if p:
         if p.deleted_at is None and p.source == "USER":
             return Response({"error": "이미 활성화된 차단 도메인입니다."}, status=400)
-        
-        # 이미 존재한다면 (AI 등록 or 과거 삭제건), USER 소스로 변경하고 부활시킴 (중복 insert 방지)
+
         p.deleted_at = None
         p.source = "USER"
+        p.description = description
+        p.added_by_emp = emp
         p.save()
     else:
-        # DB에 아예 없던 도메인일 경우에만 새로 생성
-        BlacklistAddr.objects.create(blacklist_domain=domain, source="USER")
+        BlacklistAddr.objects.create(
+            blacklist_domain=domain,
+            source="USER",
+            description=description,
+            added_by_emp=emp,
+        )
 
     notify_pcap_delta("black", "add", domain)
     return Response(
@@ -176,10 +193,12 @@ def get_whitelist(request):
 @audited("허용 정책 등록", "domain")
 def add_whitelist(request):
     domain = sanitize_domain(request.data.get("domain", ""))
+    description = request.data.get("description", "")
+    added_by_emp_id = request.data.get("added_by_emp_id")
+
     if not domain:
         return Response({"error": "도메인을 입력해주세요."}, status=400)
 
-    # 블랙리스트에 이미 존재하는지 엄격히 검사
     if BlacklistAddr.objects.filter(
         blacklist_domain=domain, deleted_at__isnull=True
     ).exists():
@@ -190,20 +209,34 @@ def add_whitelist(request):
             status=400,
         )
 
+    # 💡 [핵심 수정 부분]
+    emp = None
+    if added_by_emp_id:
+        if str(added_by_emp_id).isdigit():
+            emp = Employees.objects.filter(employee_number=int(added_by_emp_id)).first()
+        else:
+            emp = Employees.objects.filter(employee_id=str(added_by_emp_id)).first()
+
     obj = WhitelistAddr.objects.filter(whitelist_domain=domain).first()
-    
+
     if obj:
         if obj.deleted_at is None and obj.source == "USER":
             return Response({"error": "이미 활성화된 허용 도메인입니다."}, status=400)
-        
-        # AI가 넣었든 삭제되었든, 소스를 USER로 덮어쓰고 상태 업데이트
+
         obj.deleted_at = None
         obj.source = "USER"
         obj.is_protected = False
+        obj.description = description
+        obj.added_by_emp = emp
         obj.save()
     else:
-        # 완전 새로운 도메인만 새로 insert
-        WhitelistAddr.objects.create(whitelist_domain=domain, source="USER", is_protected=False)
+        WhitelistAddr.objects.create(
+            whitelist_domain=domain,
+            source="USER",
+            is_protected=False,
+            description=description,
+            added_by_emp=emp,
+        )
 
     notify_pcap_delta("white", "add", domain)
     return Response({"status": "success"})
@@ -221,17 +254,16 @@ def delete_whitelist(request):
             raise WhitelistAddr.DoesNotExist
 
         if w_obj.is_protected:
-            # 문구 유지
             return Response(
                 {"error": "시스템 보호 도메인은 관리자 권한으로 강제 해제해야 합니다."},
                 status=403,
             )
         w_obj.deleted_at = timezone.now().date()
         w_obj.save()
-        
+
         notify_pcap_delta("white", "delete", domain)
         return Response({"status": "success"})
-    
+
     except WhitelistAddr.DoesNotExist:
         return Response({"error": "도메인을 찾을 수 없습니다."}, status=404)
 
@@ -271,7 +303,6 @@ def force_delete_whitelist(request):
 
 
 def _activate_as_user(model, domain_field, domain):
-    """도메인을 정식(USER) 정책으로 만든다. 같은 도메인의 다른 활성 행은 삭제 처리해 중복을 막는다."""
     rows = list(model.objects.filter(**{domain_field: domain}).order_by("pk"))
     if not rows:
         model.objects.create(**{domain_field: domain, "source": "USER"})
@@ -283,9 +314,9 @@ def _activate_as_user(model, domain_field, domain):
     keep.source = "USER"
     keep.deleted_at = None
     keep.save()
-    model.objects.filter(
-        **{domain_field: domain}, deleted_at__isnull=True
-    ).exclude(pk=keep.pk).update(deleted_at=timezone.now().date())
+    model.objects.filter(**{domain_field: domain}, deleted_at__isnull=True).exclude(
+        pk=keep.pk
+    ).update(deleted_at=timezone.now().date())
 
 
 @api_view(["POST"])
@@ -316,10 +347,16 @@ def promote_ai_policy(request):
                     continue
 
                 if action == "to_user_white":
+                    # 1. DB 처리 (블랙에서 논리적 삭제 후 화이트로 유저 등록)
                     BlacklistAddr.objects.filter(
                         blacklist_domain=domain, deleted_at__isnull=True
                     ).update(deleted_at=today)
                     _activate_as_user(WhitelistAddr, "whitelist_domain", domain)
+
+                    # 2. C PCAP 엔진(UDS) 실시간 동기화: 블랙에서 빼고 화이트에 추가
+                    notify_pcap_delta("black", "delete", domain)
+                    notify_pcap_delta("white", "add", domain)
+                    released += 1  # 이관 성공 카운트용
 
                 elif action == "to_user_black":
                     if WhitelistAddr.objects.filter(
@@ -330,28 +367,43 @@ def promote_ai_policy(request):
                         raise ValueError(
                             f"'{domain}'은(는) 시스템 보호 도메인이라 차단으로 이관할 수 없습니다."
                         )
+                    # 1. DB 처리
                     WhitelistAddr.objects.filter(
                         whitelist_domain=domain, deleted_at__isnull=True
                     ).update(deleted_at=today)
                     _activate_as_user(BlacklistAddr, "blacklist_domain", domain)
 
+                    # 2. C PCAP 엔진(UDS) 실시간 동기화: 화이트에서 빼고 블랙에 추가
+                    notify_pcap_delta("white", "delete", domain)
+                    notify_pcap_delta("black", "add", domain)
+                    released += 1
+
                 elif action == "release":
-                    # AI 안전/위험으로 확정된 자동 등록 건만 해제 (의심·수동 정책은 대상 아님)
-                    released += WhitelistAddr.objects.filter(
-                        whitelist_domain=domain, deleted_at__isnull=True, source="AI"
-                    ).update(deleted_at=today)
-                    released += BlacklistAddr.objects.filter(
-                        blacklist_domain=domain, deleted_at__isnull=True, source="AI"
-                    ).update(deleted_at=today)
+                  # 1. 화이트리스트 (AI) 해제 처리
+                  w_obj = WhitelistAddr.objects.filter(
+                      whitelist_domain=domain, deleted_at__isnull=True, source="AI"
+                  ).first()
+                  
+                  if w_obj:
+                      w_obj.deleted_at = today
+                      w_obj.save()
+                      notify_pcap_delta("white", "delete", domain)
+                      released += 1
+
+                  # 2. 블랙리스트 (AI) 해제 처리
+                  b_obj = BlacklistAddr.objects.filter(
+                      blacklist_domain=domain, deleted_at__isnull=True, source="AI"
+                  ).first()
+                  
+                  if b_obj:
+                      b_obj.deleted_at = today
+                      b_obj.save()
+                      notify_pcap_delta("black", "delete", domain)
+                      released += 1
 
                 else:
                     raise ValueError("잘못된 이관 명령입니다.")
-
-            if action == "release" and released == 0:
-                raise ValueError("해제할 수 있는 AI 판별 도메인이 없습니다.")
-
-        # 허용·차단 목록이 함께 바뀌므로 엔진에는 양쪽 모두 동기화
-        sync_pcap_json_files("all")
+            
         message = (
             f"{released}건의 AI 정책이 해제되었습니다."
             if action == "release"
@@ -374,28 +426,31 @@ def get_ai_policies(request):
         ):
             time_val = getattr(w, "insert_time", getattr(w, "created_at", None))
             time_str = time_val.strftime("%Y-%m-%d %H:%M:%S") if time_val else "-"
-            data.append({
-                "domain": w.whitelist_domain,
-                "ai_status": w.source,
-                "ai_score": w.ai_score,
-                "source": "white",
-                "detect_time": time_str
-            })
+            data.append(
+                {
+                    "domain": w.whitelist_domain,
+                    "ai_status": w.source,
+                    "ai_score": w.ai_score,
+                    "source": "white",
+                    "detect_time": time_str,
+                }
+            )
 
         for b in BlacklistAddr.objects.filter(
             deleted_at__isnull=True, source__in=["AI", "DOUBT"]
         ):
             time_val = getattr(b, "insert_time", getattr(b, "created_at", None))
             time_str = time_val.strftime("%Y-%m-%d %H:%M:%S") if time_val else "-"
-            data.append({
-                "domain": b.blacklist_domain,
-                "ai_status": b.source,
-                "ai_score": b.ai_score,
-                "source": "black",
-                "detect_time": time_str
-            })
+            data.append(
+                {
+                    "domain": b.blacklist_domain,
+                    "ai_status": b.source,
+                    "ai_score": b.ai_score,
+                    "source": "black",
+                    "detect_time": time_str,
+                }
+            )
 
-        # 최신순 정렬
         data.sort(key=lambda x: x["detect_time"], reverse=True)
         return Response({"status": "success", "ai_data": data})
     except Exception as e:
@@ -405,7 +460,6 @@ def get_ai_policies(request):
 
 @api_view(["GET"])
 def get_ai_model_metrics(request):
-    """AI_model_metrics 조회 전용 API. 학습 순서대로 내려준다."""
     try:
         metrics = []
         for m in AiModelMetrics.objects.order_by("trained_at", "pk"):

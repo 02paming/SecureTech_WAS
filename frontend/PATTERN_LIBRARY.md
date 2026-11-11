@@ -26,17 +26,31 @@
 
 ## 2. 색상
 
-| 이름 | 라이트 | 다크 | 의미 |
+전체 색상은 **15개로 고정**합니다 — 기본 5계열 색 + 계열별 연한 색 1개씩(10개) + 무채색 5개. 이 밖의 색은 새로 만들지 않고, 그래프·랭킹도 전부 이 15개 안에서 고릅니다.
+
+**기본 5계열 + 연한 색**
+
+| 계열 | 기본 (라이트/다크) | 연한 색 (테마 공통 고정값) | 의미 |
 |---|---|---|---|
-| Primary | `#0284c7` | `#0ea5e9` | 실행, 새로고침, 선택됨, 링크 |
-| Success | `#10b981` | `#34d399` | 허용, 승인, 정상 |
-| Danger | `#ef4444` | `#f87171` | 차단, 삭제, 해제, 위험 |
-| Warning | `#f59e0b` | `#fbbf24` | 의심, 주의 |
-| Neutral | 테두리 `#cbd5e1` | 테두리 `#475569` | 취소, 닫기, 다운로드, 보조 동작 |
+| Primary (파랑) | `#0284c7` / `#0ea5e9` | `--color-primary-light` `#38bdf8` | 실행, 새로고침, 선택됨, 링크 |
+| Success (초록) | `#10b981` / `#34d399` | `--color-success-light` `#34d399` | 허용, 승인, 정상 |
+| Warning (노랑) | `#f59e0b` / `#fbbf24` | `--color-warning-light` `#fbbf24` | 의심, 주의 |
+| 주황 | `#c2410c` / `#ea580c` | `--color-orange-light` `#f97316` | AI 차단, 등급 비교 |
+| Danger (빨강) | `#ef4444` / `#f87171` | `--color-danger-light` `#f87171` | 차단, 삭제, 해제, 위험 |
+
+**무채색 5개**
+
+| 변수 | 라이트 | 다크 | 용도 |
+|---|---|---|---|
+| `--bg-main` | `#f8fafc` | `#0f172a` | 페이지 배경 |
+| `--bg-card` | `#ffffff` | `#1e293b` | 카드·표·드롭다운 배경 |
+| `--text-main` | `#334155` | `#f1f5f9` | 본문 글자 |
+| `--text-title` | `#0f172a` | `#ffffff` | 제목 글자 |
+| `--text-muted` | `#64748b` | `#cbd5e1` | 보조 글자, 테두리 |
 
 - 관리자 로그인 화면만 Primary를 `#851216`(다크 `#f87171`)으로 바꿔 일반 로그인과 구분합니다.
-- 차트 색은 정상 `#38bdf8`, 위협 `#f87171`, AI 의심 `#f59e0b`이고, 원그래프는 순위별 5색을 사용합니다.
-- 상태와 관계없는 여러 지표를 비교하는 선 그래프는 `--series-1~3`을 씁니다. 라이트 `#0284c7`, `#7c3aed`, `#c2410c` / 다크 `#0c94d6`, `#a855f7`, `#ea580c`이며 색약 구분 검증을 통과했습니다.
+- 차트·도넛·랭킹 그래프는 전부 위 15색 안에서만 고릅니다. 예: 차단 도메인 Top5는 빨강→주황(연함)→노랑→노랑(연함)→초록 순서로 위 5계열 색을 재사용합니다. 더 이상 별도 그라데이션 색을 추가하지 않습니다.
+- 상태와 관계없는 여러 지표를 비교하는 선 그래프는 `--series-1~3`(Primary·Success·주황)을 씁니다.
 
 ## 3. 버튼
 
@@ -72,18 +86,21 @@
 | 종류 | 모양 | 클래스 | 사용처 |
 |---|---|---|---|
 | 상태 뱃지 | 높이 26px, 모서리 6px | `status-badge` + 색 | 정상 통과, 차단, 인증 완료 |
-| 건수 뱃지 | 모서리 6px | `count-badge` + 색 | 총 3건, 대기 신청 0건 |
-| 태그 | 모서리 4px, 테두리 | `tag` / `tag-primary` / `tag-mono` | ID, 권한, MAC 주소, 안내 문구 |
+| 건수 뱃지 | 높이 26px, 모서리 6px | `count-badge` + 색 | 총 3건, 대기 신청 0건 |
+| 태그 | 높이 19px, 모서리 4px, 테두리 | `tag` / `tag-primary` / `tag-mono` | ID, 권한, MAC 주소, 안내 문구 |
 
-뱃지 색은 `badge-primary`, `badge-success`, `badge-warning`, `badge-danger`, `badge-gray` 5가지입니다. 이미 적용된 상태를 버튼과 구분할 때는 테두리형 `badge-outline`을 씁니다 (예: 보호 중).
+뱃지·태그 크기는 위 2종류(26px / 19px)뿐입니다.
+
+뱃지 색은 `badge-primary`, `badge-success`, `badge-warning`, `badge-danger`, `badge-gray` 5가지 + 테두리형 `badge-outline`(이미 적용된 상태를 버튼과 구분할 때, 예: 보호 중)입니다. `badge-score-yellow`/`badge-score-orange`는 각각 Warning·주황 색을 그대로 가리키는 별칭이며 새 색이 아닙니다.
 
 ## 5. 입력
 
 | 종류 | 규격 | 클래스 |
 |---|---|---|
-| 입력칸, 선택 상자 | 높이 36px | `custom-input` (`select-input`) |
-| 검색창 | 높이 36px, 너비 300px | `custom-input search-input` |
-| 날짜 | 높이 36px, 너비 140px | `custom-input date-input` |
+| 입력칸 | 높이 36px, 너비 100%(부모에 맞춤) | `custom-input` |
+| 선택 상자(옵션 글자 길이가 제각각) | 높이 36px, 너비 자동(내용에 맞춤) | `custom-input select-input` |
+| 검색창 | 높이 36px, 너비 300px(고정) | `custom-input search-input` |
+| 날짜 | 높이 36px, 너비 140px(고정) | `custom-input date-input` |
 | 여러 줄 입력 | 높이 자동 | `textarea.custom-input` |
 | 라벨 / 힌트 / 검증 문구 | 13px / 11px / 12px | `form-label` / `form-hint` / `form-message` |
 

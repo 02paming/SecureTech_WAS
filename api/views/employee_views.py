@@ -1,3 +1,5 @@
+# 사원 정보 관리, 가입 승인/반려, 상태 변경 및 사원별 보안 상세 조회를 처리하는 백엔드 API 뷰
+
 from datetime import timedelta
 
 from django.core.cache import cache
@@ -27,10 +29,10 @@ from .utils import (
     SERVER_ERROR_MESSAGE,
     employee_ip,
     format_jumin_and_birth,
+    hash_jumin,
     judge_access,
     logger,
     sync_expire_to_pcap,
-    sync_pcap_json_files,
 )
 
 
@@ -61,13 +63,8 @@ def approve_member(request):
         candidate = ProspectiveMembers.objects.get(
             member_id=request.data.get("member_id")
         )
-        last_emp = Employees.objects.order_by("-employee_number").first()
-        Employees.objects.create(
-            employee_number=(
-                (last_emp.employee_number + 1)
-                if (last_emp and last_emp.employee_number)
-                else 1
-            ),
+
+        new_emp = Employees(
             employee_id=candidate.member_id,
             password=candidate.password,
             name=candidate.name,
@@ -75,9 +72,18 @@ def approve_member(request):
             address=candidate.address,
             phone_number=candidate.phone_number,
             jumin_no=candidate.jumin_no,
+            jumin_no_hash=candidate.jumin_no_hash,
             hire_date=timezone.now().date(),
             is_manager=0,
         )
+
+        # 외래키 안전 처리: status_code_id가 있으면 우선 적용
+        if hasattr(new_emp, "status_code_id"):
+            new_emp.status_code_id = 10
+        else:
+            new_emp.status_code = 10
+
+        new_emp.save()
         candidate.delete()
         cache.delete("employee_list_data")
         return Response({"status": "success", "message": "가입이 승인되었습니다."})
@@ -85,7 +91,8 @@ def approve_member(request):
         return Response(
             {"error": "대기자를 찾을 수 없습니다."}, status=status.HTTP_404_NOT_FOUND
         )
-    except IntegrityError:
+    except IntegrityError as e:
+        logger.error("가입 승인 중복 오류: %s", e)
         return Response(
             {"error": DUPLICATE_MEMBER_MESSAGE}, status=status.HTTP_400_BAD_REQUEST
         )
@@ -122,6 +129,22 @@ def get_employees(request):
     for emp in Employees.objects.exclude(employee_id__startswith=ANONYMIZED_ID_PREFIX):
         current_ym = emp.hire_date.strftime("%Y%m") if emp.hire_date else "202610"
         birth_date, masked_jumin = format_jumin_and_birth(getattr(emp, "jumin_no", ""))
+
+        # 💡 [핵심 수정 부분] JSON 에러 방지: 외래키 객체가 아닌 순수 숫자값(ID)만 추출
+        status_val = getattr(emp, "status_code_id", None)
+        if status_val is None:
+            obj_val = getattr(emp, "status_code", 10)
+            status_val = (
+                getattr(obj_val, "status_code", obj_val)
+                if hasattr(obj_val, "status_code")
+                else obj_val
+            )
+
+        current_status = int(status_val) if status_val is not None else 10
+
+        if emp.deleted_at and current_status != 90:
+            current_status = 90
+
         data.append(
             {
                 "employee_id": emp.employee_id,
@@ -140,6 +163,7 @@ def get_employees(request):
                 "address": emp.address,
                 "is_manager": bool(emp.is_manager),
                 "is_deleted": bool(emp.deleted_at),
+                "status_code": current_status,
             }
         )
     cache.set("employee_list_data", data, timeout=60)
@@ -165,14 +189,76 @@ def update_employee(request):
 
 
 @api_view(["POST"])
+@audited("사원 상태 변경", "employee_id", "status_code")
+def update_employee_status(request):
+    try:
+        emp_id = request.data.get("employee_id")
+        kick_ip = request.data.get("kick_ip")
+        
+        new_status = int(request.data.get("status_code", 10))
+
+        employee = Employees.objects.get(employee_id=emp_id)
+
+        # 외래키 안전 업데이트
+        if hasattr(employee, "status_code_id"):
+            employee.status_code_id = new_status
+        else:
+            employee.status_code = new_status
+
+        if new_status in [30, 90]:
+            if new_status == 90:
+                employee.deleted_at = timezone.now().date()
+            
+            # 💡 핵심 수정: 사원 인증 현황의 '차단'과 100% 동일하게 쏴주기 위해 접속 IP 끝자리(kick_ip)를 백엔드에서 자체 추출
+            kick_ip = None
+            online_session = OnlineList.objects.filter(employee=employee).first()
+            
+            if online_session and getattr(online_session, "online_ip", None):
+                # 프론트엔드의 user.ip?.split(".").pop() 와 동일하게 IP 문자열을 점(.)으로 쪼개서 마지막 숫자를 가져옴
+                kick_ip = str(online_session.online_ip).split(".")[-1]
+
+            # 세션 삭제 전 IP를 추출했으므로 이제 안전하게 DB 세션 삭제
+            OnlineList.objects.filter(employee=employee).delete()
+            
+            # 추출한 IP 끝자리(kick_ip)를 담아서 엔진 쪽에 차단 통보 (이제 엔진에서 불만 없을 겁니다!)
+            sync_expire_to_pcap(emp_id, kick_ip)
+            
+            
+        else:
+            employee.deleted_at = None
+
+        employee.save()
+        cache.delete("employee_list_data")
+        return Response(
+            {"status": "success", "message": "상태가 성공적으로 변경되었습니다."}
+        )
+    except Employees.DoesNotExist:
+        return Response(
+            {"status": "error", "message": "사원 없음"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+    except Exception as e:
+        logger.error("상태 변경 실패: %s", e)
+        return Response(
+            {"status": "error", "message": SERVER_ERROR_MESSAGE}, status=500
+        )
+
+
+@api_view(["POST"])
 @audited("퇴사 처리", "employee_id")
 def delete_employee(request):
     try:
         employee = Employees.objects.get(employee_id=request.data.get("employee_id"))
         employee.deleted_at = timezone.now().date()
+
+        if hasattr(employee, "status_code_id"):
+            employee.status_code_id = 90
+        else:
+            employee.status_code = 90
+
         employee.save()
         OnlineList.objects.filter(employee=employee).delete()
-        sync_pcap_json_files("all")
+        
         cache.delete("employee_list_data")
         return Response(
             {"status": "success", "message": "비활성화(퇴사) 처리되었습니다."}
@@ -189,7 +275,6 @@ def delete_employee(request):
 def hard_delete_employee(request):
     try:
         employee = Employees.objects.get(employee_id=request.data.get("employee_id"))
-        # 보안 로그는 5년 보관 대상이라 지우지 않고, 사원의 개인정보만 파기한다
         number = employee.employee_number
         OnlineList.objects.filter(employee=employee).delete()
         employee.employee_id = f"{ANONYMIZED_ID_PREFIX}{number}"
@@ -199,13 +284,23 @@ def hard_delete_employee(request):
         employee.address = "-"
         employee.phone_number = f"D{number:010d}"
         employee.jumin_no = f"D{number:012d}"
+        employee.jumin_no_hash = hash_jumin(employee.jumin_no)
         employee.otp_secret = None
         employee.is_manager = False
+
+        if hasattr(employee, "status_code_id"):
+            employee.status_code_id = 90
+        else:
+            employee.status_code = 90
+
         employee.deleted_at = employee.deleted_at or timezone.now().date()
         employee.save()
         cache.delete("employee_list_data")
         return Response(
-            {"status": "success", "message": "사원 개인정보를 파기했습니다. 보안 로그는 보존됩니다."}
+            {
+                "status": "success",
+                "message": "사원 개인정보를 파기했습니다. 보안 로그는 보존됩니다.",
+            }
         )
     except Employees.DoesNotExist:
         return Response(
@@ -239,9 +334,7 @@ def get_employee_auth_status(request):
                     else "-",
                     "emp_name": emp.name,
                     "emp_id": emp.employee_id,
-                    "ip": employee_ip(session.online_ip)
-                    if session.online_ip
-                    else "-",
+                    "ip": employee_ip(session.online_ip) if session.online_ip else "-",
                     "mac": getattr(session, "online_mac_addr", None) or "-",
                     "login_time": session.login_time.strftime("%Y-%m-%d %H:%M:%S")
                     if (session.login_time and hasattr(session.login_time, "strftime"))
@@ -333,7 +426,6 @@ def get_employee_security_detail(request, emp_id):
         recent_violations, violation_count, normal_access_count = [], 0, 0
         if log_ids:
             try:
-                # WebAccessLog에서 "차단" 이력만 추출
                 v_base = WebAccessLog.objects.filter(
                     online_list_log_id__in=log_ids, access_flag="차단"
                 )
@@ -360,7 +452,9 @@ def get_employee_security_detail(request, emp_id):
                             "time": v_time,
                             "status": "차단",
                             "is_blocked": True,
-                            "category": judge_access(v.ai_status_code, v.access_flag)[1],
+                            "category": judge_access(v.ai_status_code, v.access_flag)[
+                                1
+                            ],
                         }
                     )
             except Exception as e:
@@ -370,7 +464,6 @@ def get_employee_security_detail(request, emp_id):
         web_access_list = []
         if log_ids:
             try:
-                # WebAccessLog에서 "정상" 접근만 추출
                 w_base = WebAccessLog.objects.filter(
                     online_list_log_id__in=log_ids, access_flag="정상"
                 )
@@ -397,7 +490,9 @@ def get_employee_security_detail(request, emp_id):
                             "time": w_time,
                             "status": "허용",
                             "is_blocked": False,
-                            "category": judge_access(w.ai_status_code, w.access_flag)[1],
+                            "category": judge_access(w.ai_status_code, w.access_flag)[
+                                1
+                            ],
                         }
                     )
             except Exception as e:
@@ -409,14 +504,12 @@ def get_employee_security_detail(request, emp_id):
             key=lambda x: x.get("time", ""),
             reverse=True,
         )
-        # 건전성 점수와 어드바이저는 최근 활동만 본다. 위 누적 수치는 화면의 이력 표시용이다
         since = timezone.now() - timedelta(days=SCORE_WINDOW_DAYS)
         recent_access = WebAccessLog.objects.filter(
             online_list_log_id__in=log_ids, access_time__gte=since
         )
         recent_pass = recent_access.filter(access_flag="정상")
         recent_pass_count = recent_pass.count()
-        # 블랙 의심은 실제로 차단되므로 차단으로 계산하고, 화이트 의심 통과만 일부 반영한다
         recent_block_count = recent_access.filter(access_flag="차단").count()
         recent_suspect_count = recent_pass.filter(ai_status_code=5).count()
         recent_mismatch_count = OnlineIpMacMismatchLog.objects.filter(
@@ -443,6 +536,16 @@ def get_employee_security_detail(request, emp_id):
             recent_mismatch_count,
         )
 
+        status_val = getattr(employee, "status_code_id", None)
+        if status_val is None:
+            obj_val = getattr(employee, "status_code", 10)
+            status_val = (
+                getattr(obj_val, "status_code", obj_val)
+                if hasattr(obj_val, "status_code")
+                else obj_val
+            )
+        current_status = int(status_val) if status_val is not None else 10
+
         return Response(
             {
                 "status": "success",
@@ -462,6 +565,7 @@ def get_employee_security_detail(request, emp_id):
                     if getattr(employee, "hire_date", None)
                     else "-",
                     "is_manager": bool(employee.is_manager),
+                    "status_code": current_status,
                     "security_score": security_score,
                     "current_ip": employee_ip(online_session.online_ip)
                     if online_session
@@ -495,7 +599,6 @@ def get_employee_security_detail(request, emp_id):
 @api_view(["POST"])
 @audited("사원 접속 차단", "employee_id")
 def block_employee(request):
-    """지금 접속만 끊는다(킥). 다시 인증하면 바로 접속할 수 있다."""
     try:
         emp_id, kick_ip = (
             request.data.get("employee_id"),

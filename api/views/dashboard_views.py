@@ -1,3 +1,5 @@
+# 대시보드 통계, 트래픽 분석, 설비 구동 시간 및 AI 판별 기준/모델 설정을 관리하는 백엔드 API 뷰
+
 import datetime
 from datetime import timedelta
 
@@ -27,8 +29,19 @@ from .utils import (
     SERVER_ERROR_MESSAGE,
     access_category_q,
     employee_ip,
+    judge_access,
     logger,
 )
+
+# 정책 판정 구성비 그래프 색(원그래프 5색 규칙과 맞춘 팔레트, 판정명 고정)
+JUDGEMENT_COLORS = {
+    "수동 차단": "#ef4444",
+    "AI 차단": "#f97316",
+    "블랙 의심": "#c2410c",
+    "화이트 의심": "#f59e0b",
+    "수동 허용": "#38bdf8",
+    "AI 안전": "#10b981",
+}
 
 
 @api_view(["GET"])
@@ -104,15 +117,18 @@ def _monitoring_status():
 def get_traffic_stats(request):
     try:
         interval_min = int(request.GET.get("interval", 60))
+        # 조회 기간(일). 기본 3일 유지, 최근 7일/30일 등으로 확장 가능
+        range_days = max(1, int(request.GET.get("days", 3)))
+        range_hours = range_days * 24
         now = timezone.now()
         t_func, delta, total_pts = (
             (
                 TruncMinute("access_time"),
                 timedelta(minutes=interval_min),
-                72 * (60 // interval_min) + 1,
+                range_hours * (60 // interval_min) + 1,
             )
             if interval_min < 60
-            else (TruncHour("access_time"), timedelta(hours=1), 73)
+            else (TruncHour("access_time"), timedelta(hours=1), range_hours + 1)
         )
         aligned_now = (
             now.replace(
@@ -172,8 +188,9 @@ def get_traffic_stats(request):
             for i in range(total_pts)
         ]
 
+        # 다른 그래프와 같은 조회 기간 기준으로 집계한다
         top_qs = (
-            WebAccessLog.objects.filter(access_category_q("차단"))
+            base_qs.filter(access_category_q("차단"))
             .values("target_url")
             .annotate(c=Count("web_access_log_id"))
             .order_by("-c")[:10]
@@ -194,7 +211,7 @@ def get_traffic_stats(request):
             deleted_at__isnull=True, source__in=["AI", "DOUBT"]
         ).order_by("-blacklist_id"):
             if b.source == "DOUBT":
-                st, col, bg = "블랙 의심", "#f97316", "rgba(249, 115, 22, 0.1)"
+                st, col, bg = "블랙 의심", "#c2410c", "rgba(194, 65, 12, 0.1)"
             else:
                 st, col, bg = "AI 위험", "#ef4444", "rgba(239, 68, 68, 0.1)"
             ai_suspicious_list.append(
@@ -213,10 +230,36 @@ def get_traffic_stats(request):
                 {
                     "domain": w.whitelist_domain,
                     "status_text": "화이트 의심",
-                    "color": "#eab308",
-                    "bgColor": "rgba(234, 179, 8, 0.1)",
+                    "color": "#f59e0b",
+                    "bgColor": "rgba(245, 158, 11, 0.1)",
                 }
             )
+
+        # 판정 구성비: 모든 접속을 판정 주체로 나눠 겹치지 않게 보여준다.
+        # 수동 판정(수동 허용/수동 차단)과 AI 판정(안전/화이트 의심/블랙 의심/차단)의 합이 전체 접속 건수다.
+        # 판정 코드가 없는 기록은 로그 분석실과 같이 access_flag로 수동 허용·차단으로 센다(judge_access).
+        judgement_counts = {}
+        for row in base_qs.values("ai_status_code", "access_flag").annotate(
+            c=Count("web_access_log_id")
+        ):
+            name, _ = judge_access(row["ai_status_code"], row["access_flag"])
+            judgement_counts[name] = judgement_counts.get(name, 0) + row["c"]
+
+        def _breakdown(names):
+            return [
+                {
+                    "name": name,
+                    "value": judgement_counts[name],
+                    "color": JUDGEMENT_COLORS[name],
+                }
+                for name in names
+                if judgement_counts.get(name, 0) > 0
+            ]
+
+        policy_breakdown_manual = _breakdown(("수동 허용", "수동 차단"))
+        policy_breakdown_ai = _breakdown(
+            ("AI 안전", "화이트 의심", "블랙 의심", "AI 차단")
+        )
 
         return Response(
             {
@@ -224,6 +267,8 @@ def get_traffic_stats(request):
                 "data": chart_data,
                 "top_domains": top_domains,
                 "top_ai_suspicious": ai_suspicious_list,
+                "policy_breakdown_manual": policy_breakdown_manual,
+                "policy_breakdown_ai": policy_breakdown_ai,
                 "monitoring": _monitoring_status(),
             }
         )

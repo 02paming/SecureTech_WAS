@@ -1,3 +1,5 @@
+# MAC 스푸핑 테스트 및 시뮬레이션을 처리하는 백엔드 테스트용 API 뷰 파일
+
 import traceback
 
 from django.utils import timezone
@@ -27,7 +29,7 @@ def test_mac_spoofing(request):
         return Response(
             {
                 "status": "WARNING",
-                "message": f"IP({mock_ip})에서 MAC 변조 시도 탐지 (탐지 MAC: {fake_mac})",
+                "message": f"IP({mock_ip})에서 MAC 스푸핑 시도 탐지 (탐지 MAC: {fake_mac})",
             }
         )
     except Exception as e:

@@ -1,3 +1,5 @@
+# 비동기(ASGI) 프로토콜을 사용하는 서버 환경에서 Django 프로젝트의 실행 진입점을 제공하는 파일
+
 """
 ASGI config for config project.
 

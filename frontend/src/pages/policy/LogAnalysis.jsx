@@ -1,5 +1,8 @@
+// 임직원의 네트워크 접속 기록, 위협 로그 및 MAC 스푸핑 이력을 통합 조회하고 필터링하는 로그 분석실 UI 컴포넌트
+
 import axios from "axios";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { API_BASE_URL, MONITOR_REFRESH_MS } from "../../api";
 import AdminAuthDialog from "../../components/AdminAuthDialog";
 import DomainDetailDialog from "../../components/DomainDetailDialog";
@@ -7,20 +10,25 @@ import PageHeader from "../../components/PageHeader";
 import PaginationBar from "../../components/PaginationBar";
 import SecurityDetailDialog from "../../components/SecurityDetailDialog";
 import { hasAiScore } from "../../utils/aiScore";
+import { appAlert } from "../../utils/appDialog";
+import { formatTimeKR } from "../../utils/formatTime";
 import { LEVEL_TONES } from "../../utils/levelTone";
 import { POLICY_TONES, getResultTone } from "../../utils/policyTone";
 import { padRows, useResetPage } from "../../utils/table";
+import useDebounce from "../../utils/useDebounce";
 
 const itemsPerPage = 10;
 
 const LogAnalysis = () => {
+  const [searchParams] = useSearchParams();
   const [detailDomain, setDetailDomain] = useState(null);
   const [logs, setLogs] = useState([]);
   const [stats, setStats] = useState({ total: 0, allowed: 0, blocked: 0, ai_suspicious: 0, suspicious_blocked: 0 });
   const [loadingAction, setLoadingAction] = useState(false);
   const [lastUpdated, setLastUpdated] = useState("");
 
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(() => searchParams.get("domain") || "");
+  const debouncedSearch = useDebounce(search, 500);
   const [statusFilter, setStatusFilter] = useState("all");
   const [subFilter, setSubFilter] = useState("all");
   const [startDate, setStartDate] = useState("");
@@ -28,6 +36,7 @@ const LogAnalysis = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
 
+  const [autoRefresh, setAutoRefresh] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedSecurity, setSelectedSecurity] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -46,7 +55,7 @@ const LogAnalysis = () => {
         params: {
           page: currentPage,
           limit: itemsPerPage,
-          search,
+          search: debouncedSearch,
           statusFilter,
           subFilter,
           startDate,
@@ -57,7 +66,7 @@ const LogAnalysis = () => {
         setLogs(res.data.general_logs || []);
         if (res.data.stats) setStats(res.data.stats);
         if (res.data.total_pages) setTotalPages(res.data.total_pages);
-        setLastUpdated(new Date().toLocaleTimeString("ko-KR", { hour12: false }));
+        setLastUpdated(formatTimeKR());
       }
     } catch (err) {
       console.error("로그 데이터 갱신 오류:", err);
@@ -65,29 +74,26 @@ const LogAnalysis = () => {
       setLoadingAction(false);
       isFetchingRef.current = false;
     }
-  }, [baseUrl, currentPage, search, statusFilter, subFilter, startDate, endDate]);
+  }, [baseUrl, currentPage, debouncedSearch, statusFilter, subFilter, startDate, endDate]);
 
-  // 검색/필터 변경 시 페이지를 1로 초기화 (fetchData 재생성을 유도)
-  useResetPage([search, statusFilter, subFilter, startDate, endDate], () => setCurrentPage(1));
+  useResetPage([debouncedSearch, statusFilter, subFilter, startDate, endDate], () => setCurrentPage(1));
 
   useEffect(() => {
     fetchData();
-
+    if (!autoRefresh) return undefined;
     const loopFetch = () => {
       fetchTimeoutRef.current = setTimeout(async () => {
         await fetchData();
         loopFetch();
       }, MONITOR_REFRESH_MS);
     };
-
     loopFetch();
-
     return () => {
       if (fetchTimeoutRef.current) {
         clearTimeout(fetchTimeoutRef.current);
       }
     };
-  }, [fetchData]); // fetchData에 모든 의존성이 연결되어 있으므로 안전함
+  }, [fetchData, autoRefresh]);
 
   const selectStatusFilter = useCallback((value) => {
     setStatusFilter(value);
@@ -107,7 +113,7 @@ const LogAnalysis = () => {
         setIsModalOpen(true);
       }
     } catch {
-      alert("해당 사원의 상세 보안 정보를 불러올 수 없습니다.");
+      await appAlert("해당 사원의 상세 보안 정보를 불러올 수 없습니다.");
     } finally {
       setDetailLoading(false);
     }
@@ -120,7 +126,7 @@ const LogAnalysis = () => {
       const res = await axios.get(`${baseUrl}/api/dashboard/employee-security/${selectedSecurity.employee_id}/`);
       if (res.data?.status === "success") setSelectedSecurity(res.data.data);
     } catch {
-      alert("상세 보안 정보를 새로 불러올 수 없습니다.");
+      await appAlert("상세 보안 정보를 새로 불러올 수 없습니다.");
     } finally {
       setDetailLoading(false);
     }
@@ -132,15 +138,14 @@ const LogAnalysis = () => {
         mismatch_id: releaseRequest.mismatchId,
         ...credentials,
       });
-      alert(res.data.message);
+      await appAlert(res.data.message);
       setReleaseRequest(null);
       fetchData();
     } catch (err) {
-      alert(err.response?.data?.message || "해제 처리에 실패했습니다.");
+      await appAlert(err.response?.data?.message || "해제 처리에 실패했습니다.");
     }
   }, [baseUrl, releaseRequest, fetchData]);
 
-  // CSV 다운로드는 현재 필터 조건에 해당하는 전체 데이터를 서버에 임시 요청하여 처리
   const exportToCSV = useCallback(async () => {
     try {
       const res = await axios.get(`${baseUrl}/api/dashboard/integrated-logs/`, {
@@ -169,8 +174,8 @@ const LogAnalysis = () => {
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
-    } catch (err) {
-      alert("CSV 다운로드에 실패했습니다.");
+    } catch {
+      await appAlert("CSV 다운로드에 실패했습니다.");
     }
   }, [baseUrl, search, statusFilter, subFilter, startDate, endDate]);
 
@@ -199,7 +204,16 @@ const LogAnalysis = () => {
         lastUpdated={lastUpdated}
         onRefresh={fetchData}
         refreshing={loadingAction}
-      />
+      >
+        <label className="check-label">
+          <input
+            type="checkbox"
+            checked={autoRefresh}
+            onChange={(e) => setAutoRefresh(e.target.checked)}
+          />
+          자동 갱신
+        </label>
+      </PageHeader>
 
       <div className="stat-row">
         <div onClick={() => selectStatusFilter("all")} className={`stat-card tone-primary ${statusFilter === "all" ? "is-active" : ""}`}>
@@ -231,6 +245,18 @@ const LogAnalysis = () => {
               <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="custom-input date-input" />
               <span className="text-muted fw-bold">~</span>
               <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="custom-input date-input" />
+              <button
+                type="button"
+                onClick={() => {
+                  setSearch("");
+                  setStartDate("");
+                  setEndDate("");
+                  selectStatusFilter("all");
+                }}
+                className="btn-action btn-neutral btn-w-sm btn-form"
+              >
+                초기화
+              </button>
             </div>
             <div className="toolbar-group">
               {subFilterOptions.map((opt) => (
@@ -243,7 +269,7 @@ const LogAnalysis = () => {
                   {opt}
                 </button>
               ))}
-              <button type="button" onClick={exportToCSV} className="btn-action btn-neutral btn-w-auto btn-form">CSV 다운로드</button>
+              <button type="button" onClick={exportToCSV} className="btn-action btn-neutral btn-w-lg btn-form">CSV 다운로드</button>
             </div>
           </div>
 
@@ -308,7 +334,7 @@ const LogAnalysis = () => {
                           </td>
                           <td>
                             {log.is_mismatch ? (
-                              <button type="button" onClick={() => setReleaseRequest({ mismatchId: log.mismatch_id })} className="btn-action btn-neutral btn-w-sm btn-header">
+                              <button type="button" onClick={() => setReleaseRequest({ mismatchId: log.mismatch_id })} className="btn-action btn-danger btn-w-sm btn-header">
                                 해제
                               </button>
                             ) : (

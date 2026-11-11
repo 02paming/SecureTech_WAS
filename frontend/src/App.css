@@ -16,14 +16,20 @@
   --color-success: #10b981;
   --color-danger: #ef4444;
   --color-warning: #f59e0b;
-  --color-score-yellow: #ca8a04;
-  --color-score-orange: #ea580c;
+  --color-score-yellow: #f59e0b;
+  --color-score-orange: #c2410c;
   --color-neutral: #94a3b8;
   --chart-normal: #38bdf8;
   --chart-threat: #f87171;
   --chart-ai: #f59e0b;
+  /* 5개 기본색의 연한 계열. 차트·랭킹 등에서 재사용 (테마와 무관하게 고정) */
+  --color-primary-light: #38bdf8;
+  --color-success-light: #34d399;
+  --color-warning-light: #fbbf24;
+  --color-danger-light: #f87171;
+  --color-orange-light: #f97316;
   --series-1: #0284c7;
-  --series-2: #7c3aed;
+  --series-2: #10b981;
   --series-3: #c2410c;
   --spacing-page-px: 32px;
   --spacing-card-p: 24px;
@@ -38,7 +44,7 @@
 body.dark-mode {
   color-scheme: dark;
   --series-1: #0c94d6;
-  --series-2: #a855f7;
+  --series-2: #34d399;
   --series-3: #ea580c;
   --bg-main: #0f172a;
   --bg-card: #1e293b;
@@ -55,8 +61,8 @@ body.dark-mode {
   --color-danger: #f87171;
   --color-success: #34d399;
   --color-warning: #fbbf24;
-  --color-score-yellow: #facc15;
-  --color-score-orange: #fb923c;
+  --color-score-yellow: #fbbf24;
+  --color-score-orange: #ea580c;
 }
 
 * {
@@ -149,6 +155,14 @@ body {
     max-width: 100% !important;
   }
 
+  /* recharts의 ResponsiveContainer가 내부 div에 px 단위 inline width를 직접 주는데,
+     위 규칙이 max-width:100% !important로 덮어써서 모바일에서 차트가 그려지지 않는다 */
+  .chart-area,
+  .chart-area .recharts-responsive-container,
+  .chart-area .recharts-wrapper {
+    max-width: none !important;
+  }
+
   .table-responsive,
   .custom-table,
   table {
@@ -177,8 +191,59 @@ body {
     min-width: 0;
   }
 
+  .st-board-card .card-header {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  /* 홈 게시판은 관리자 표와 달리 가로 스크롤 대신 제목이 줄바꿈되는 쪽이 읽기 편하다 */
+  .st-board-card .custom-table,
+  .st-board-card .custom-table td,
+  .st-board-card .custom-table th {
+    white-space: normal !important;
+  }
+
+  .st-board-card .custom-table th:first-child,
+  .st-board-card .custom-table td:first-child {
+    width: 70px !important;
+    padding: 8px 6px !important;
+  }
+
+  .st-board-card .custom-table .col-date,
+  .st-board-card .custom-table td:nth-child(4) {
+    width: 72px !important;
+    padding: 8px 6px !important;
+    font-size: 11px;
+  }
+
+  .toolbar-group {
+    flex-wrap: wrap;
+  }
+
   .panel-row {
     flex-direction: column;
+  }
+
+  .chart-slider-hint,
+  .chart-split {
+    flex-direction: column;
+  }
+
+  /* 차트 카드는 flex:1로 부모 높이를 물려받는데, 모바일에서는 .admin-page가
+     height:auto라 그 높이가 끊겨 차트가 0px로 접힘. recharts의 ResponsiveContainer는
+     부모에 min-height가 아니라 명시적 height가 있어야 안쪽 퍼센트 높이가 풀린다.
+     .chart-area의 기본 규칙(min-height:0)이 파일 뒤쪽에 있어 소스 순서상 이기므로 !important로 맞춘다 */
+  .chart-area {
+    height: 280px !important;
+    min-height: 280px !important;
+    flex: none !important;
+  }
+
+  .panel-row,
+  .card-fill,
+  .card-fill-wide {
+    flex: none !important;
+    min-height: 0 !important;
   }
 }
 
@@ -370,10 +435,13 @@ body {
 }
 
 .count-badge {
+  display: inline-flex;
+  align-items: center;
   padding: 4px 10px;
   border-radius: 6px;
   font-size: 12px;
   font-weight: 700;
+  height: 26px;
 }
 
 .custom-input {
@@ -481,6 +549,12 @@ a.btn-action {
   background-color: var(--border-color);
 }
 
+.select-status {
+  text-align: center;
+  text-align-last: center;
+  background-color: var(--bg-card);
+}
+
 .btn-page {
   height: 30px;
   min-width: 30px;
@@ -561,10 +635,6 @@ a.btn-action {
   text-align: left;
 }
 
-.cell-no {
-  color: var(--text-muted);
-}
-
 .custom-table .cell-main {
   padding-left: 24px;
   overflow: hidden;
@@ -610,6 +680,41 @@ a.btn-action {
   flex: 1;
   gap: 24px;
   min-height: 0;
+}
+
+/* 마지막 panel-row 뒤에만 여백이 없어야 하는데 :last-child는 모달(dialog-overlay)처럼
+   뒤에 추가되는 fixed 요소가 생기면 panel-row가 더 이상 마지막 자식이 아니게 되어
+   여백이 되살아나 표 높이가 흔들렸다. 인접 panel-row 사이에만 여백을 주면 모달 유무와 무관해진다 */
+.panel-row + .panel-row {
+  margin-top: 24px;
+}
+
+.chart-split {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  gap: 24px;
+}
+
+.chart-split-item {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.chart-split-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.chart-split-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
 }
 
 .card-fill {
@@ -678,6 +783,8 @@ a.btn-action {
   justify-content: center;
   align-items: center;
   background-color: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
 }
 
 .dialog-box {
@@ -700,6 +807,13 @@ a.btn-action {
   font-size: 13px;
   line-height: 1.5;
   color: var(--text-muted);
+}
+
+/* 네이티브 alert/confirm을 대신하는 공용 창의 본문 (utils/appDialog) */
+.dialog-message {
+  white-space: pre-line;
+  color: var(--text-main);
+  font-size: 14px;
 }
 
 .dialog-form {
@@ -1191,12 +1305,6 @@ body.dark-mode .auth-admin {
   }
 }
 
-.threshold-level-group {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
 .level-btn {
   height: 32px;
   padding: 0 16px;
@@ -1507,6 +1615,7 @@ body.dark-mode .auth-admin {
 .dialog-grid-3 {
   display: grid;
   flex: 1;
+  grid-template-rows: minmax(0, 1fr);
   gap: 16px;
   min-height: 0;
 }
@@ -1577,6 +1686,10 @@ body.dark-mode .auth-admin {
   color: var(--text-main);
 }
 
+.info-value.is-left {
+  text-align: left;
+}
+
 .card-body-scroll {
   flex: 1;
   min-height: 0;
@@ -1626,6 +1739,11 @@ body.dark-mode .auth-admin {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+/* flex 줄에서 이 요소부터 오른쪽 끝으로 밀어낸다 */
+.push-right {
+  margin-left: auto;
 }
 
 .check-label {
@@ -1746,6 +1864,14 @@ body.dark-mode .auth-admin {
   cursor: pointer;
 }
 
+.chart-slider-hint {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 4px;
+  font-size: 12px;
+}
+
 .legend-list {
   display: grid;
   gap: 6px;
@@ -1759,6 +1885,14 @@ body.dark-mode .auth-admin {
   display: flex;
   justify-content: space-between;
   color: var(--text-main);
+}
+
+.legend-item.is-clickable {
+  cursor: pointer;
+}
+
+.legend-item.is-clickable:hover {
+  opacity: 0.8;
 }
 
 .legend-name {
@@ -2130,6 +2264,15 @@ textarea.custom-input {
   overflow-wrap: anywhere;
 }
 
+.anim-domain {
+  display: block;
+  max-width: 120px;
+  margin: 0 auto;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
 .anim-line-bg {
   position: absolute;
   top: 34px;
@@ -2470,6 +2613,10 @@ textarea.custom-input {
   padding: 24px;
 }
 
+.st-board-card {
+  min-height: 560px;
+}
+
 .st-panel-header {
   display: flex;
   justify-content: space-between;
@@ -2591,8 +2738,30 @@ textarea.custom-input {
   }
 
   .st-subnav {
-    gap: 16px;
+    gap: 8px;
     margin: -16px -12px 20px;
+  }
+
+  .st-subnav-item {
+    padding: 14px 2px;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+}
+
+@media (max-width: 768px) {
+  .col-hide-mobile {
+    display: none;
+  }
+
+  .st-res-card {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .st-res-title {
+    overflow-wrap: break-word;
+    word-break: break-word;
   }
 }
 
@@ -2816,12 +2985,6 @@ textarea.custom-input {
   background-color: #334155;
 }
 
-.dark-mode .btn-neutral {
-  color: var(--text-main);
-  border-color: var(--border-input);
-}
-
 .dark-mode .btn-neutral:hover {
   background-color: rgba(255, 255, 255, 0.05);
 }
-

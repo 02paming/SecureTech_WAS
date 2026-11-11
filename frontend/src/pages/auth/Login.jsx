@@ -1,8 +1,11 @@
+// 사원 및 관리자 로그인, 구글 OTP 인증 UI 컴포넌트
+
 import axios from "axios";
 import { useState } from "react";
 import QRCode from "react-qr-code";
 import { Link } from "react-router-dom";
 import { API_BASE_URL } from "../../api";
+import { appAlert } from "../../utils/appDialog";
 
 const Login = ({ setUser, isAdminMode = false }) => {
   const [empId, setEmpId] = useState("");
@@ -18,9 +21,9 @@ const Login = ({ setUser, isAdminMode = false }) => {
   const [otpTicket, setOtpTicket] = useState("");
   const baseUrl = API_BASE_URL;
 
-  const processLoginSuccess = (rawUser) => {
+  const processLoginSuccess = async (rawUser) => {
     if (isAdminMode && !rawUser.is_manager) {
-      alert(
+      await appAlert(
         "관리자 권한이 없는 일반 계정입니다.\n사원 로그인 화면을 이용해 주세요.",
       );
       setLoading(false);
@@ -35,6 +38,9 @@ const Login = ({ setUser, isAdminMode = false }) => {
 
     localStorage.removeItem("user");
     sessionStorage.setItem("user", JSON.stringify(userData));
+    if (rawUser.session_token) {
+      sessionStorage.setItem("sessionToken", rawUser.session_token);
+    }
 
     if (isAdminMode) {
       sessionStorage.setItem("adminPortalMode", "true");
@@ -54,7 +60,7 @@ const Login = ({ setUser, isAdminMode = false }) => {
   const handleLogin = async (e) => {
     e.preventDefault();
     if (!empId.trim() || !password) {
-      alert(
+      await appAlert(
         isAdminMode
           ? "관리자 아이디와 비밀번호를 모두 입력해 주세요."
           : "아이디와 비밀번호를 모두 입력해 주세요.",
@@ -86,12 +92,12 @@ const Login = ({ setUser, isAdminMode = false }) => {
         setLoading(false);
       } else if (response.data.status === "success") {
         // 일반 사원이 로그인 창에서 로그인했을 때 즉시 실행됨
-        processLoginSuccess(response.data.user);
+        await processLoginSuccess(response.data.user);
       }
     } catch (error) {
-      alert(
+      await appAlert(
         error.response?.data?.message ||
-          "아이디 또는 비밀번호가 올바르지 않습니다.",
+        "아이디 또는 비밀번호가 올바르지 않습니다.",
       );
       setLoading(false);
     }
@@ -100,7 +106,7 @@ const Login = ({ setUser, isAdminMode = false }) => {
   const handleOtpSubmit = async (e) => {
     e.preventDefault();
     if (!otpCode || otpCode.length < 6) {
-      alert("6자리 구글 OTP 인증 번호를 정확히 입력해 주세요.");
+      await appAlert("6자리 구글 OTP 인증 번호를 정확히 입력해 주세요.");
       return;
     }
 
@@ -113,12 +119,12 @@ const Login = ({ setUser, isAdminMode = false }) => {
       });
 
       if (response.data.status === "success") {
-        processLoginSuccess(response.data.user);
+        await processLoginSuccess(response.data.user);
       }
     } catch (error) {
-      alert(
+      await appAlert(
         error.response?.data?.message ||
-          "인증 번호가 일치하지 않거나 만료되었습니다.",
+        "인증 번호가 일치하지 않거나 만료되었습니다.",
       );
       setOtpCode("");
     } finally {

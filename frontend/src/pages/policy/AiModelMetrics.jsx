@@ -1,3 +1,5 @@
+// AI 탐지 모델의 버전별 성능 지표, 혼동 행렬 및 판별 기준 레벨을 관리하는 UI 컴포넌트
+
 import axios from "axios";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -14,6 +16,8 @@ import { API_BASE_URL } from "../../api";
 import AdminAuthDialog from "../../components/AdminAuthDialog";
 import PageHeader from "../../components/PageHeader";
 import PaginationBar from "../../components/PaginationBar";
+import { appAlert } from "../../utils/appDialog";
+import { formatTimeKR } from "../../utils/formatTime";
 import { LEVEL_TONES } from "../../utils/levelTone";
 import { padRows } from "../../utils/table";
 
@@ -47,7 +51,6 @@ function MatrixCell({ code, label, value, total }) {
 
 const AiModelMetrics = () => {
   const [metrics, setMetrics] = useState([]);
-  const [selectedVersion, setSelectedVersion] = useState(null);
   const [loading, setLoading] = useState(false);
   const [lastUpdated, setLastUpdated] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
@@ -65,7 +68,7 @@ const AiModelMetrics = () => {
     try {
       const res = await axios.get(`${baseUrl}/api/policies/ai/metrics/`);
       setMetrics(res.data.metrics || []);
-      setLastUpdated(new Date().toLocaleTimeString("ko-KR", { hour12: false }));
+      setLastUpdated(formatTimeKR());
     } catch (err) {
       console.error("AI 모델 성능 조회 실패:", err);
     } finally {
@@ -89,7 +92,7 @@ const AiModelMetrics = () => {
     const black = Number(lv.black_start);
     const block = Number(lv.block_start);
     if (!(white > 0 && white < black && black < block && block <= 100)) {
-      alert("화이트 의심 < 블랙 의심 < 차단 순서로, 1~100 사이에서 입력해 주세요.");
+      appAlert("화이트 의심 < 블랙 의심 < 차단 순서로, 1~100 사이에서 입력해 주세요.");
       return;
     }
 
@@ -100,11 +103,11 @@ const AiModelMetrics = () => {
     const prev = ordered[idx - 1];
     const next = ordered[idx + 1];
     if (prev && block <= Number(prev.block_start)) {
-      alert(`차단 점수가 더 엄격한 '${prev.level}' 레벨(${prev.block_start}점)과 겹칩니다. 더 높은 값을 입력해 주세요.`);
+      appAlert(`차단 점수가 더 엄격한 '${prev.level}' 레벨(${prev.block_start}점)과 겹칩니다. 더 높은 값을 입력해 주세요.`);
       return;
     }
     if (next && block >= Number(next.block_start)) {
-      alert(`차단 점수가 더 완화된 '${next.level}' 레벨(${next.block_start}점)과 겹칩니다. 더 낮은 값을 입력해 주세요.`);
+      appAlert(`차단 점수가 더 완화된 '${next.level}' 레벨(${next.block_start}점)과 겹칩니다. 더 낮은 값을 입력해 주세요.`);
       return;
     }
 
@@ -148,13 +151,13 @@ const AiModelMetrics = () => {
           block_start: authRequest.blockStart,
           ...credentials,
         });
-      alert(res.data.message);
+      await appAlert(res.data.message);
       setAuthRequest(null);
       setEditOpen(false);
       if (isModel) fetchMetrics();
       else fetchThresholds();
     } catch (err) {
-      alert(err.response?.data?.message || "처리에 실패했습니다.");
+      await appAlert(err.response?.data?.message || "처리에 실패했습니다.");
     }
   };
 
@@ -163,10 +166,7 @@ const AiModelMetrics = () => {
     fetchThresholds();
   }, [fetchMetrics, fetchThresholds]);
 
-  const current =
-    metrics.find((m) => m.version_name === selectedVersion) ||
-    metrics.find((m) => m.is_active) ||
-    metrics[metrics.length - 1];
+  const current = metrics.find((m) => m.is_active) || metrics[metrics.length - 1];
 
   const yMin = useMemo(() => {
     const values = metrics.flatMap((m) => SERIES.map((s) => m[s.key]));
@@ -197,7 +197,7 @@ const AiModelMetrics = () => {
         onRefresh={fetchMetrics}
         refreshing={loading}
         center={
-          <div className="threshold-level-group">
+          <div className="btn-group">
             {levels.map((lv) => (
               <button
                 key={lv.config_id}
@@ -312,14 +312,19 @@ const AiModelMetrics = () => {
                     margin={{ top: 8, right: 24, left: -8, bottom: 0 }}
                   >
                     <CartesianGrid strokeDasharray="3 3" stroke="rgba(148, 163, 184, 0.2)" vertical={false} />
-                    <XAxis dataKey="version_name" stroke="var(--text-muted)" fontSize={12} tickLine={false} axisLine={false} />
-                    <YAxis stroke="var(--text-muted)" fontSize={12} tickLine={false} axisLine={false} domain={[yMin, 100]} unit="%" />
+                    <XAxis dataKey="version_name" stroke="var(--text-muted)" tick={{ fontSize: 11, fontFamily: "var(--font-sans)", fill: "var(--text-muted)" }} tickLine={false} axisLine={false} />
+                    <YAxis stroke="var(--text-muted)" tick={{ fontSize: 11, fontFamily: "var(--font-sans)", fill: "var(--text-muted)" }} tickLine={false} axisLine={false} domain={[yMin, 100]} unit="%" />
                     <RechartsTooltip
                       formatter={(value) => formatPercent(value)}
-                      contentStyle={{ background: "var(--bg-card)", borderRadius: "8px", border: "1px solid var(--border-color)", color: "var(--text-main)" }}
-                      itemStyle={{ color: "var(--text-main)" }}
+                      contentStyle={{ background: "var(--bg-card)", borderRadius: "8px", border: "1px solid var(--border-color)", color: "var(--text-main)", fontSize: "13px" }}
+                      labelStyle={{ fontSize: "13px", fontWeight: "bold" }}
+                      itemStyle={{ color: "var(--text-main)", fontSize: "13px" }}
                     />
-                    <Legend wrapperStyle={{ fontSize: "12px" }} formatter={(value) => <span className="text-main">{value}</span>} />
+                    <Legend
+                      wrapperStyle={{ fontSize: "12px" }}
+                      formatter={(value) => <span className="text-main">{value}</span>}
+                      itemSorter={null}
+                    />
                     {SERIES.map((s) => (
                       <Line
                         key={s.key} type="monotone" dataKey={s.key} name={s.label} stroke={s.color} strokeWidth={2}
@@ -358,11 +363,7 @@ const AiModelMetrics = () => {
                     m.isEmpty ? (
                       <tr key={`empty-${idx}`}><td colSpan="6">&nbsp;</td></tr>
                     ) : (
-                      <tr
-                        key={m.version_name}
-                        onClick={() => setSelectedVersion(m.version_name)}
-                        className={`row-clickable ${current?.version_name === m.version_name ? "row-selected" : ""}`}
-                      >
+                      <tr key={m.version_name}>
                         <td className="fw-bold text-title">{m.version_name}</td>
                         <td>{m.trained_at}</td>
                         <td>{formatPercent(m.accuracy)}</td>
@@ -376,7 +377,7 @@ const AiModelMetrics = () => {
                             <button
                               onClick={(e) => handleActivateModel(e, m.version_name)}
                               className="status-badge badge-gray"
-                              style={{ border: "none", cursor: "pointer", padding: "4px 8px", borderRadius: "4px" }}
+                              style={{ border: "none", cursor: "pointer" }}
                               title="클릭하여 해당 모델 가동"
                             >
                               미가동

@@ -1,3 +1,5 @@
+# 사원별 보안 건전성 점수 계산 및 보안 어드바이저 메시지 생성을 담당하는 서비스 파일
+
 SCORE_WINDOW_DAYS = 30  # 점수 계산에 반영하는 최근 기간(일)
 SCORE_SUSPECT_WEIGHT = 0.3  # 의심 통과 1건을 차단 0.3건으로 계산
 SCORE_MIN_ACTIVITY = 20  # 활동이 적을 때 몇 건만으로 점수가 급락하지 않도록 하는 최소 분모
@@ -30,5 +32,5 @@ def generate_advisor_message(score, pass_cnt, block_cnt, suspect_cnt, mismatch_c
             f"최근 {SCORE_WINDOW_DAYS}일 활동 {total}건: 통과 {pass_cnt}건, 차단 {block_cnt}건 "
             f"(준수율 {round(pass_cnt / total * 100)}%)"
         )
-    msg.append(f"의심 통과 {suspect_cnt}건, MAC 변조 {mismatch_cnt}건")
+    msg.append(f"의심 통과 {suspect_cnt}건, MAC 스푸핑 {mismatch_cnt}건")
     return "\n".join(msg)

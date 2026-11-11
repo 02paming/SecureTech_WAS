@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { appAlert } from "../utils/appDialog";
 
 const FLOW_STEPS = [
   {
@@ -15,7 +16,7 @@ const FLOW_STEPS = [
   },
   {
     name: "조치와 기록",
-    desc: "차단 세션은 TCP RST로 끊고, MAC 변조는 Discord로 경보하며, 접속 로그는 5년간 보관합니다.",
+    desc: "차단 세션은 TCP RST로 끊고, MAC 스푸핑은 Discord와 Slack으로 경보하며, 접속 로그는 5년간 보관합니다.",
   },
 ];
 
@@ -63,7 +64,62 @@ const Home = ({ user }) => {
       writer: "보안관제팀",
       views: 410,
       content:
-        "보안 건전성은 기본 100점 만점 기준으로 최근 30일 활동 중 차단·의심 통과 비율과 MAC 변조 여부를 종합하여 보안 어드바이저가 실시간 산출합니다.",
+        "보안 건전성은 기본 100점 만점 기준으로 최근 30일 활동 중 차단·의심 통과 비율과 MAC 스푸핑 여부를 종합하여 보안 어드바이저가 실시간 산출합니다.",
+    },
+    {
+      id: 5,
+      tag: "정책",
+      tagTone: "primary",
+      title: "AI 판정 기준 분기별 재조정 완료 안내",
+      date: "2026-10-05",
+      writer: "보안관제팀",
+      views: 342,
+      content:
+        "최근 3개월간 오탐·미탐 통계를 반영하여 화이트 의심·블랙 의심 임계점수를 재조정했습니다. 세부 기준은 AI 모델 성능 화면에서 확인할 수 있습니다.",
+    },
+    {
+      id: 6,
+      tag: "시스템",
+      tagTone: "success",
+      title: "관제 대시보드 실시간 집계 주기 1분 단위로 개선",
+      date: "2026-09-28",
+      writer: "개발팀",
+      views: 276,
+      content:
+        "기존 5분 단위로 갱신되던 대시보드 집계 주기를 1분 단위로 단축하여 위협 탐지 대응 속도를 높였습니다.",
+    },
+    {
+      id: 7,
+      tag: "안내",
+      tagTone: "warning",
+      title: "연휴 기간 보안관제 비상연락망 안내",
+      date: "2026-09-20",
+      writer: "총무팀",
+      views: 195,
+      content:
+        "연휴 기간 중 긴급 차단 해제나 오탐 신고가 필요한 경우 사내 비상연락망을 통해 보안관제팀 당직자에게 연락해 주시기 바랍니다.",
+    },
+    {
+      id: 8,
+      tag: "정책",
+      tagTone: "primary",
+      title: "화이트리스트 등록 신청 절차 간소화 안내",
+      date: "2026-09-15",
+      writer: "네트워크보안팀",
+      views: 301,
+      content:
+        "사번과 접속 사유만으로 신청 가능하도록 화이트리스트 등록 절차를 간소화했습니다. 처리 기한도 영업일 2일 이내로 단축됩니다.",
+    },
+    {
+      id: 9,
+      tag: "시스템",
+      tagTone: "success",
+      title: "OTP 2단계 인증 전사 의무화 적용",
+      date: "2026-09-08",
+      writer: "보안관제팀",
+      views: 458,
+      content:
+        "관리자 포털뿐 아니라 전 임직원 로그인에 구글 OTP 2단계 인증이 의무 적용됩니다. 최초 로그인 시 QR 코드로 간편하게 등록할 수 있습니다.",
     },
   ];
 
@@ -97,6 +153,56 @@ const Home = ({ user }) => {
       comments: 8,
       content:
         "새로 개편된 플랫폼 반응 속도도 빠르고 실시간 차단 현황이 한눈에 보여서 훨씬 안심됩니다.",
+    },
+    {
+      id: 4,
+      category: "질문",
+      title: "재택근무 시 VPN 접속도 동일하게 관제되나요?",
+      author: "인사팀 최유라",
+      date: "2026-10-12",
+      comments: 3,
+      content:
+        "재택 전환 인원이 늘면서 VPN 구간도 사내망과 동일하게 AI 판정이 적용되는지 궁금합니다.",
+    },
+    {
+      id: 5,
+      category: "팁",
+      title: "MAC 주소 변경 경고 메시지 받았을 때 대처법",
+      author: "IT지원팀 정우성",
+      date: "2026-10-08",
+      comments: 6,
+      content:
+        "단말 교체나 네트워크 카드 드라이버 재설치 후에도 뜰 수 있으니, 먼저 IT지원팀에 자산 변경 등록부터 요청해 주세요.",
+    },
+    {
+      id: 6,
+      category: "자유",
+      title: "AI 모델 성능 꾸준히 올라가는거 보기 좋네요",
+      author: "보안관제팀 한지민",
+      date: "2026-10-03",
+      comments: 4,
+      content:
+        "버전 올라갈 때마다 정밀도·재현율이 같이 개선되고 있어서 오탐 신고도 눈에 띄게 줄었습니다.",
+    },
+    {
+      id: 7,
+      category: "질문",
+      title: "신규 입사자 사번 부여까지 얼마나 걸리나요?",
+      author: "인사팀 김도윤",
+      date: "2026-09-25",
+      comments: 2,
+      content:
+        "가입 승인 완료 후 바로 사번이 자동 부여된다고 들었는데 실제로는 언제부터 사내망 접속이 가능한가요?",
+    },
+    {
+      id: 8,
+      category: "팁",
+      title: "해외 출장 중 접속 차단될 때 임시 허용 요청 방법",
+      author: "해외영업팀 서준혁",
+      date: "2026-09-18",
+      comments: 7,
+      content:
+        "출장지 IP가 블랙 의심으로 잡히는 경우가 종종 있는데, 출장 일정과 함께 사전 신고하면 임시로 화이트 처리해 줍니다.",
     },
   ]);
 
@@ -132,6 +238,22 @@ const Home = ({ user }) => {
       size: "1.1 MB",
       date: "2026-10-05",
       desc: "차단 정책 이력 및 위협 탐지 로그의 5년 보존 주기와 안전한 자동 파기 절차에 관한 사내 규정 문서입니다.",
+    },
+    {
+      id: 5,
+      category: "가이드",
+      title: "AI 탐지 도메인 오탐 신고 및 처리 절차 안내서.pdf",
+      size: "1.8 MB",
+      date: "2026-09-28",
+      desc: "AI 엔진이 정상 도메인을 의심으로 오판정했을 때 신고하고 화이트리스트로 전환하는 절차를 설명합니다.",
+    },
+    {
+      id: 6,
+      category: "정책문서",
+      title: "비인가 단말 네트워크 접근 통제(NAC) 운영 지침.docx",
+      size: "890 KB",
+      date: "2026-09-20",
+      desc: "사내망 MAC 바인딩 및 캡티브 포털 인증 미완료 단말에 대한 접근 통제 운영 기준을 정리한 문서입니다.",
     },
   ];
 
@@ -331,11 +453,11 @@ const Home = ({ user }) => {
               <table className="custom-table">
                 <thead>
                   <tr>
-                    <th style={{ width: "90px" }}>구분</th>
+                    <th className="col-cat" style={{ width: "90px" }}>구분</th>
                     <th className="th-main">제목</th>
-                    <th style={{ width: "130px" }}>작성자</th>
-                    <th style={{ width: "120px" }}>작성일</th>
-                    <th style={{ width: "90px" }}>조회</th>
+                    <th className="col-hide-mobile" style={{ width: "130px" }}>작성자</th>
+                    <th className="col-date" style={{ width: "120px" }}>작성일</th>
+                    <th className="col-hide-mobile" style={{ width: "90px" }}>조회</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -351,9 +473,9 @@ const Home = ({ user }) => {
                         </span>
                       </td>
                       <td className="cell-main">{n.title}</td>
-                      <td>{n.writer}</td>
+                      <td className="col-hide-mobile">{n.writer}</td>
                       <td className="cell-time">{n.date}</td>
-                      <td className="cell-time">{n.views}</td>
+                      <td className="cell-time col-hide-mobile">{n.views}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -440,10 +562,10 @@ const Home = ({ user }) => {
               <table className="custom-table">
                 <thead>
                   <tr>
-                    <th style={{ width: "90px" }}>구분</th>
+                    <th className="col-cat" style={{ width: "90px" }}>구분</th>
                     <th className="th-main">제목</th>
-                    <th style={{ width: "160px" }}>작성자</th>
-                    <th style={{ width: "120px" }}>작성일</th>
+                    <th className="col-hide-mobile" style={{ width: "160px" }}>작성자</th>
+                    <th className="col-date" style={{ width: "120px" }}>작성일</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -460,7 +582,7 @@ const Home = ({ user }) => {
                         {p.title}{" "}
                         <span className="text-primary">[{p.comments}]</span>
                       </td>
-                      <td>{p.author}</td>
+                      <td className="col-hide-mobile">{p.author}</td>
                       <td className="cell-time">{p.date}</td>
                     </tr>
                   ))}
@@ -512,7 +634,7 @@ const Home = ({ user }) => {
                     type="button"
                     className="btn-action btn-primary btn-w-md btn-header"
                     onClick={() =>
-                      alert(`[${r.title}] 파일 다운로드를 시작합니다.`)
+                      appAlert(`[${r.title}] 파일 다운로드를 시작합니다.`)
                     }
                   >
                     다운로드

@@ -1,3 +1,5 @@
+# Gunicorn 등 WSGI 서버가 Django 프로젝트와 통신할 수 있도록 진입점을 제공하는 설정 파일
+
 """
 WSGI config for config project.
 

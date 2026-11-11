@@ -1,7 +1,10 @@
+// 도메인별 접속 현황, 사원 목록, 접속 기록 및 정책 변경 이력을 상세히 보여주는 다이얼로그 컴포넌트
+
 import axios from "axios";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { API_BASE_URL } from "../api";
 import { hasAiScore } from "../utils/aiScore";
+import { appAlert } from "../utils/appDialog";
 import { POLICY_TONES, STATUS_LABELS, getResultTone } from "../utils/policyTone";
 import { padRows } from "../utils/table";
 import PaginationBar from "./PaginationBar";
@@ -22,7 +25,6 @@ function EmployeeColumn({ employees, onEmployeeClick }) {
       <div className="table-responsive table-fill">
         <table className="custom-table table-sm">
           <colgroup>
-            {/* 이름 잘림 방지를 위해 다른 컬럼 가로폭 축소 */}
             <col />
             <col style={{ width: "80px" }} />
             <col style={{ width: "45px" }} />
@@ -177,6 +179,19 @@ function DomainDetailDialog({ domain, onClose }) {
   const [refreshing, setRefreshing] = useState(false);
   const [security, setSecurity] = useState(null);
   const [securityLoading, setSecurityLoading] = useState(false);
+  const [showManualInfo, setShowManualInfo] = useState(false);
+  const manualInfoRef = useRef(null);
+
+  useEffect(() => {
+    if (!showManualInfo) return;
+    const handleOutsideClick = (e) => {
+      if (manualInfoRef.current && !manualInfoRef.current.contains(e.target)) {
+        setShowManualInfo(false);
+      }
+    };
+    document.addEventListener("mousedown", handleOutsideClick);
+    return () => document.removeEventListener("mousedown", handleOutsideClick);
+  }, [showManualInfo]);
 
   const baseUrl = API_BASE_URL;
 
@@ -203,7 +218,7 @@ function DomainDetailDialog({ domain, onClose }) {
       const res = await axios.get(`${baseUrl}/api/dashboard/employee-security/${employeeId}/`);
       setSecurity(res.data.data);
     } catch {
-      alert("사원 보안 상세 현황을 불러올 수 없습니다.");
+      await appAlert("사원 보안 상세 현황을 불러올 수 없습니다.");
     } finally {
       setSecurityLoading(false);
     }
@@ -217,6 +232,25 @@ function DomainDetailDialog({ domain, onClose }) {
             <h3 className="dialog-title">도메인 상세 현황</h3>
             <div className="btn-group">
               <span className="tag tag-primary">{domain}</span>
+              {detail?.manual_info && (
+                <div className="settings-wrap" ref={manualInfoRef}>
+                  <button
+                    type="button"
+                    className={`btn-action btn-toggle btn-w-md btn-header ${showManualInfo ? "active" : ""}`}
+                    onClick={() => setShowManualInfo((v) => !v)}
+                  >
+                    수동 등록 정보
+                  </button>
+                  {showManualInfo && (
+                    <div className="settings-dropdown notice-box tone-primary">
+                      <strong className="notice-title text-primary">수동 등록 정보</strong>
+                      <p className="notice-text">등록자: {detail.manual_info.added_by || "알 수 없음"}</p>
+                      <p className="notice-text">등록 시각: {detail.manual_info.added_at || "-"}</p>
+                      <p className="notice-text">사유: {detail.manual_info.description || "등록된 사유가 없습니다."}</p>
+                    </div>
+                  )}
+                </div>
+              )}
               <button
                 type="button"
                 className="btn-action btn-primary btn-w-md btn-header"
@@ -270,7 +304,6 @@ function DomainDetailDialog({ domain, onClose }) {
                   ))}
                 </div>
                 <div className="info-box">
-                  {/* 날짜 정렬 맞춤을 위해 인라인 블록 및 고정 너비 할당 */}
                   <div className="info-row is-compact">
                     <span className="info-label">첫 접속</span>
                     <span className="info-value info-date">{detail.first_access || "-"}</span>

@@ -1,4 +1,4 @@
-// 모든 표 하단의 페이지 번호: 처음 / 이전 / 번호 최대 5개 / 다음 / 마지막
+// 모든 표(테이블) 하단에서 페이지 이동을 제어하는 공용 페이지네이션 컴포넌트
 function PaginationBar({ page, totalPages, onPageChange }) {
   const getPageNumbers = () => {
     const pages = [];

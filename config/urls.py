@@ -1,3 +1,5 @@
+# SecureTech 백엔드의 모든 API 엔드포인트 URL 라우팅 경로를 정의한 설정 파일
+
 from django.contrib import admin
 from django.urls import path
 
@@ -29,11 +31,18 @@ urlpatterns = [
     path("api/auth/verify-otp/", auth_views.verify_otp, name="verify_otp"),
     path("api/auth/captive-login/", auth_views.captive_login, name="captive_login"),
     path("api/auth/logout/", auth_views.logout_user, name="logout"),
+    path("api/auth/heartbeat/", auth_views.session_heartbeat, name="session_heartbeat"),
     path("api/auth/my-info/", auth_views.get_my_info, name="get_my_info"),
     path("api/auth/profile/", auth_views.my_profile, name="my_profile"),
     path("api/employees/", employee_views.get_employees, name="get_employees"),
     path(
         "api/employees/update/", employee_views.update_employee, name="update_employee"
+    ),
+    # 💡 [핵심 수정] 상태 변경 전용 주소 추가
+    path(
+        "api/employees/update-status/",
+        employee_views.update_employee_status,
+        name="update_employee_status",
     ),
     path(
         "api/employees/delete/", employee_views.delete_employee, name="delete_employee"
@@ -93,7 +102,11 @@ urlpatterns = [
     path(
         "api/dashboard/threat-logs/", log_views.get_threat_logs, name="get_threat_logs"
     ),
-    path("api/dashboard/online/", dashboard_views.get_online_users, name="get_online_users"),
+    path(
+        "api/dashboard/online/",
+        dashboard_views.get_online_users,
+        name="get_online_users",
+    ),
     path(
         "api/dashboard/external/",
         dashboard_views.get_external_access_logs,
@@ -143,11 +156,10 @@ urlpatterns = [
         name="get_ai_model_metrics",
     ),
     path(
-        "api/policies/ai/thresholds/", 
-        dashboard_views.manage_ai_thresholds, 
-        name="manage_ai_thresholds"
+        "api/policies/ai/thresholds/",
+        dashboard_views.manage_ai_thresholds,
+        name="manage_ai_thresholds",
     ),
-    # AI 모델 가동 상태 변경 및 외부 서버 전송 라우트
     path(
         "api/policies/ai/activate/",
         dashboard_views.activate_ai_model,

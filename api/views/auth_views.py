@@ -1,3 +1,5 @@
+# 로그인, 회원가입, OTP 검증 및 세션 관리를 처리하는 백엔드 API 뷰
+
 import hmac
 import re
 import secrets
@@ -20,10 +22,12 @@ from .utils import (
     SERVER_ERROR_MESSAGE,
     decrypt_otp_secret,
     employee_ip,
+    encrypt_jumin,
     encrypt_otp_secret,
     extract_ip_suffix,
     format_jumin_and_birth,
     get_client_ip,
+    hash_jumin,
     is_admin_ip_allowed,
     logger,
     save_online_session,
@@ -35,6 +39,32 @@ MIN_PASSWORD_LENGTH = 8
 MAX_AUTH_FAILURES = 5
 AUTH_LOCK_SECONDS = 300
 OTP_TICKET_SECONDS = 300
+SESSION_TTL_SECONDS = 180
+
+
+def _session_key(emp_id):
+    return f"active_session:{emp_id}"
+
+
+def _reserve_session(emp_id):
+    """동일 아이디의 중복 로그인을 막는다. 이미 활성 세션이 있으면 None을 돌려준다.
+    DB가 아닌 파일 캐시에 TTL로 저장하므로, 탭을 닫아 하트비트가 끊기면 자동으로 풀린다."""
+    key = _session_key(emp_id)
+    if cache.get(key):
+        return None
+    token = secrets.token_urlsafe(24)
+    cache.set(key, token, SESSION_TTL_SECONDS)
+    return token
+
+
+def _duplicate_session_response():
+    return Response(
+        {
+            "status": "error",
+            "message": "이미 다른 곳에서 로그인되어 있는 계정입니다. 먼저 로그아웃 후 다시 시도해주세요.",
+        },
+        status=status.HTTP_409_CONFLICT,
+    )
 
 
 def _is_reserved_id(member_id):
@@ -86,6 +116,7 @@ def apply_signup(request):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        jumin_plain = re.sub(r"[^0-9]", "", str(request.data.get("jumin_no", "")))[:13]
         ProspectiveMembers.objects.create(
             member_id=member_id,
             password=make_password(request.data.get("password")),
@@ -95,7 +126,8 @@ def apply_signup(request):
             phone_number=re.sub(
                 r"[^0-9]", "", str(request.data.get("phone_number", ""))
             )[:11],
-            jumin_no=re.sub(r"[^0-9]", "", str(request.data.get("jumin_no", "")))[:13],
+            jumin_no=encrypt_jumin(jumin_plain),
+            jumin_no_hash=hash_jumin(jumin_plain),
             date_of_request=timezone.now().date(),
         )
         return Response({"status": "success"}, status=status.HTTP_201_CREATED)
@@ -127,10 +159,18 @@ def check_duplicate(request):
             }
         )
 
+    # jumin_no는 암호화 저장이라 평문으로 직접 조회할 수 없다. 블라인드 인덱스(해시)로 대신 비교한다
+    lookup_field = "jumin_no_hash" if field == "jumin_no" else field
+    lookup_value = hash_jumin(value) if field == "jumin_no" else value
+
     if (
-        ProspectiveMembers.objects.filter(**{field: value}).exists()
+        ProspectiveMembers.objects.filter(**{lookup_field: lookup_value}).exists()
         or Employees.objects.filter(
-            **{"employee_id" if field == "member_id" else field: value}
+            **{
+                "employee_id"
+                if field == "member_id"
+                else lookup_field: lookup_value
+            }
         ).exists()
     ):
         name_kr = {
@@ -183,7 +223,9 @@ def login(request):
                 )
 
             stored_secret = getattr(employee, "otp_secret", None)
-            current_secret = decrypt_otp_secret(stored_secret) if stored_secret else None
+            current_secret = (
+                decrypt_otp_secret(stored_secret) if stored_secret else None
+            )
 
             if not current_secret:
                 new_secret = pyotp.random_base32()
@@ -219,6 +261,9 @@ def login(request):
         # [분기 2] 일반 사원은 OTP 없이 즉시 로그인 완료
         # 웹 로그인은 네트워크 인증이 아니므로 online_list를 건드리지 않는다 (캡티브 포털에서만 기록)
         else:
+            session_token = _reserve_session(employee.employee_id)
+            if not session_token:
+                return _duplicate_session_response()
             return Response(
                 {
                     "status": "success",
@@ -228,6 +273,7 @@ def login(request):
                         "name": employee.name,
                         "is_manager": employee.is_manager,
                         "online_ip": client_ip,
+                        "session_token": session_token,
                     },
                 }
             )
@@ -254,7 +300,10 @@ def verify_otp(request):
         ticket, str(request.data.get("otp_ticket", ""))
     ):
         return Response(
-            {"status": "error", "message": "인증 시간이 지났습니다. 다시 로그인해주세요."},
+            {
+                "status": "error",
+                "message": "인증 시간이 지났습니다. 다시 로그인해주세요.",
+            },
             status=status.HTTP_401_UNAUTHORIZED,
         )
 
@@ -283,6 +332,9 @@ def verify_otp(request):
 
     totp = pyotp.TOTP(current_secret)
     if totp.verify(otp_code):
+        session_token = _reserve_session(employee.employee_id)
+        if not session_token:
+            return _duplicate_session_response()
         _clear_failures("otp", emp_id)
         cache.delete(f"otp_ticket:{emp_id}")
         client_ip = get_client_ip(request)
@@ -296,6 +348,7 @@ def verify_otp(request):
                     "name": employee.name,
                     "is_manager": employee.is_manager,
                     "online_ip": client_ip,
+                    "session_token": session_token,
                 },
             }
         )
@@ -357,7 +410,30 @@ def captive_login(request):
 @api_view(["POST"])
 def logout_user(request):
     # 웹 로그아웃은 캡티브 포털 인증(online_list)에 영향을 주지 않는다
+    emp_id = request.data.get("employee_id")
+    session_token = request.data.get("session_token")
+    if emp_id and session_token and cache.get(_session_key(emp_id)) == session_token:
+        cache.delete(_session_key(emp_id))
     return Response({"status": "success", "message": "로그아웃 처리되었습니다."})
+
+
+@api_view(["POST"])
+def session_heartbeat(request):
+    """중복 로그인 방지용 세션이 살아있음을 주기적으로 알린다. 하트비트가 끊기면
+    SESSION_TTL_SECONDS 뒤 캐시에서 자동 소멸해 다른 곳에서 다시 로그인할 수 있다."""
+    emp_id = request.data.get("employee_id")
+    session_token = request.data.get("session_token")
+    if not emp_id or not session_token:
+        return Response({"status": "error", "message": "잘못된 요청입니다."}, status=status.HTTP_400_BAD_REQUEST)
+
+    key = _session_key(emp_id)
+    if cache.get(key) != session_token:
+        return Response(
+            {"status": "expired", "message": "세션이 만료되었거나 다른 곳에서 로그인되었습니다."},
+            status=status.HTTP_409_CONFLICT,
+        )
+    cache.set(key, session_token, SESSION_TTL_SECONDS)
+    return Response({"status": "success"})
 
 
 @api_view(["GET", "PUT"])

@@ -1,8 +1,12 @@
+// 사원 목록 조회, 상태 변경, 정보 수정, 검색 및 CSV 다운로드를 제공하는 사원 관리 UI 컴포넌트
+
 import axios from "axios";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { API_BASE_URL } from "../../api";
 import PageHeader from "../../components/PageHeader";
 import PaginationBar from "../../components/PaginationBar";
+import { appAlert, appConfirm } from "../../utils/appDialog";
+import { formatTimeKR } from "../../utils/formatTime";
 import { padRows, useResetPage } from "../../utils/table";
 import useDebounce from "../../utils/useDebounce";
 
@@ -43,6 +47,38 @@ const COLUMNS = [
   { id: "jumin", label: "주민등록번호" },
 ];
 
+// 네이티브 select 팝업은 다크모드와 무관하게 항상 밝은 배경으로 뜨므로,
+// 옵션 글자색은 테마 변수 대신 밝은 배경에서도 또렷한 고정값을 쓴다.
+const COLOR_CLASS_VAR = {
+  "text-success": "#10b981",
+  "text-warning": "#f59e0b",
+  "text-danger": "#ef4444",
+  "text-muted": "#64748b",
+};
+
+const STATUS_OPTIONS = [
+  {
+    code: 10,
+    label: "정상",
+    colorClass: "text-success",
+    bgClass: "btn-success",
+  },
+  {
+    code: 20,
+    label: "휴가중",
+    colorClass: "text-warning",
+    bgClass: "btn-warning",
+  },
+  {
+    code: 30,
+    label: "이용정지",
+    colorClass: "text-danger",
+    bgClass: "btn-danger",
+  },
+  { code: 40, label: "휴직", colorClass: "text-muted", bgClass: "btn-neutral" },
+  { code: 90, label: "퇴사", colorClass: "text-danger", bgClass: "btn-danger" },
+];
+
 const EmployeeManage = () => {
   const [employees, setEmployees] = useState([]);
   const [searchInput, setSearchInput] = useState("");
@@ -72,8 +108,9 @@ const EmployeeManage = () => {
   const [checkedCols, setCheckedCols] = useState(defaultCols);
   const [activeCols, setActiveCols] = useState(defaultCols);
 
+  // 💡 기존 탭을 대체하는 '상태 필터' ("all" 또는 숫자 문자열)
   const [filterRole, setFilterRole] = useState(
-    () => sessionStorage.getItem("empFilterRole") || "active",
+    () => sessionStorage.getItem("empFilterRole") || "all",
   );
   const [currentPage, setCurrentPage] = useState(1);
   const [sortOrder, setSortOrder] = useState("asc");
@@ -84,19 +121,18 @@ const EmployeeManage = () => {
   const [colWidths, setColWidths] = useState({
     empNum: 100,
     joinDate: 90,
-    name: 80,
+    name: 110,
     userId: 100,
-    email: 180,
-    phone: 110,
+    email: 150,
+    phone: 100,
     birth: 120,
-    address: 220,
-    jumin: 140,
-    action: 160,
+    address: 170,
+    jumin: 120,
+    action: 180,
   });
 
   const baseUrl = API_BASE_URL;
 
-  // 눈에 보이는 열의 갯수를 동적으로 계산 (데이터 컬럼 + 관리 버튼 컬럼 1개)
   const visibleColCount = useMemo(() => {
     return Object.values(activeCols).filter(Boolean).length + 1;
   }, [activeCols]);
@@ -130,7 +166,7 @@ const EmployeeManage = () => {
       try {
         const res = await axios.get(`${baseUrl}/api/employees/`, { signal });
         if (res?.data) setEmployees(res.data);
-        setLastUpdated(new Date().toLocaleTimeString("ko-KR", { hour12: false }));
+        setLastUpdated(formatTimeKR());
       } catch (err) {
         if (err.name !== "CanceledError") console.error(err);
       }
@@ -148,7 +184,9 @@ const EmployeeManage = () => {
     sessionStorage.setItem("empFilterRole", filterRole);
   }, [filterRole]);
 
-  useResetPage([filterRole, debouncedSearch, activeCols, sortOrder], () => setCurrentPage(1));
+  useResetPage([filterRole, debouncedSearch, activeCols, sortOrder], () =>
+    setCurrentPage(1),
+  );
 
   const handleEmpCardClick = async (emp) => {
     const targetKey = emp.employee_id || emp.employee_number;
@@ -176,6 +214,7 @@ const EmployeeManage = () => {
       jumin_no: emp.jumin_no
         ? renderMaskedJumin(emp.jumin_no)
         : "[RRN Omitted]",
+      status_code: emp.status_code,
     });
     setIsDetailModalOpen(true);
   };
@@ -202,7 +241,7 @@ const EmployeeManage = () => {
         email: editModal.email.trim(),
       });
       if (res.data.status === "success") {
-        alert("수정되었습니다.");
+        await appAlert("수정되었습니다.");
         setEditModal({
           isOpen: false,
           empId: null,
@@ -210,48 +249,71 @@ const EmployeeManage = () => {
           address: "",
           email: "",
         });
-        window.location.reload();
+        fetchEmployees();
       }
     } catch {
-      alert("수정에 실패했습니다.");
+      await appAlert("수정에 실패했습니다.");
     } finally {
       setLoading(false);
     }
   };
 
-  const handleDelete = async (empId, empName) => {
-    if (!window.confirm(`'${empName}' 퇴사 처리하시겠습니까?`)) return;
+  // 💡 상태(Status) 변경 함수
+  const handleStatusChange = async (empId, newStatusCode, empName) => {
+    const selectedOption = STATUS_OPTIONS.find(
+      (opt) => opt.code === Number(newStatusCode),
+    );
+    if (!selectedOption) return;
+
+    if (
+      !(await appConfirm(
+        `'${empName}' 사원의 상태를 [${selectedOption.label}]으(로) 변경하시겠습니까?`,
+      ))
+    ) {
+      // 취소하면 화면 새로고침하여 원래 select 값 복구
+      fetchEmployees();
+      return;
+    }
+
     try {
-      await axios.post(`${baseUrl}/api/employees/delete/`, {
+      // 💡 백엔드(update-status) 하나만 호출하면 백엔드가 알아서 DB 세션도 지우고 엔진에 차단 신호도 보냅니다!
+      await axios.post(`${baseUrl}/api/employees/update-status/`, {
         employee_id: empId,
+        status_code: newStatusCode,
       });
-      alert("처리되었습니다.");
-      window.location.reload();
-    } catch {
-      alert("처리 중 오류가 발생했습니다.");
+      fetchEmployees();
+    } catch (err) {
+      await appAlert("상태 변경에 실패했습니다.");
+      console.error(err);
     }
   };
 
   const handleHardDelete = async (empId, empName) => {
-    if (!window.confirm(`'${empName}' 데이터를 완전히 삭제하시겠습니까?`)) return;
+    if (
+      !(await appConfirm(
+        `'${empName}' 데이터를 완전히 파기하시겠습니까? (보안 로그 제외)`,
+      ))
+    )
+      return;
     try {
       await axios.post(`${baseUrl}/api/employees/hard-delete/`, {
         employee_id: empId,
       });
-      alert("삭제되었습니다.");
-      window.location.reload();
+      await appAlert("삭제되었습니다.");
+      fetchEmployees();
     } catch {
-      alert("처리 중 오류가 발생했습니다.");
+      await appAlert("처리 중 오류가 발생했습니다.");
     }
   };
 
-  const roleFiltered = useMemo(
-    () =>
-      employees.filter((emp) =>
-        filterRole === "deleted" ? emp.is_deleted : !emp.is_deleted,
-      ),
-    [employees, filterRole],
-  );
+  // 💡 드롭다운 필터 적용
+  const roleFiltered = useMemo(() => {
+    if (filterRole === "all") return employees;
+    return employees.filter(
+      (emp) => String(emp.status_code) === String(filterRole),
+    );
+  }, [employees, filterRole]);
+
   const searchFiltered = useMemo(() => {
     const term = debouncedSearch.toLowerCase();
     if (!term) return roleFiltered;
@@ -291,15 +353,6 @@ const EmployeeManage = () => {
       currentPage * itemsPerPage,
     ),
     itemsPerPage,
-  );
-
-  const totalEmployeesCount = useMemo(
-    () => employees.filter((emp) => !emp.is_deleted).length,
-    [employees],
-  );
-  const totalDeletedCount = useMemo(
-    () => employees.filter((emp) => emp.is_deleted).length,
-    [employees],
   );
 
   const handleMouseDown = (e, colKey) => {
@@ -362,7 +415,6 @@ const EmployeeManage = () => {
       });
       csvRows.push(rowData.join(","));
     });
-
     const bom = "\uFEFF";
     const blob = new Blob([bom + csvRows.join("\n")], {
       type: "text/csv;charset=utf-8;",
@@ -370,18 +422,23 @@ const EmployeeManage = () => {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `SecureTech_Employees_${filterRole === "active" ? "재직자" : "퇴사자"}_${new Date().getTime()}.csv`;
+    link.download = `SecureTech_Employees_${filterRole}_${new Date().getTime()}.csv`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
   }, [sortedEmployees, activeCols, filterRole]);
 
+  const getStatusDisplay = (code) => {
+    const st = STATUS_OPTIONS.find((o) => o.code === Number(code));
+    return st || STATUS_OPTIONS[0];
+  };
+
   return (
     <div className="page-container admin-page">
       <PageHeader
         title="사원 관리"
-        subtitle="사번을 클릭하면 사원 상세 정보를 확인할 수 있습니다."
+        subtitle="사원 상태를 변경하고 상세 정보를 관리합니다."
         lastUpdated={lastUpdated}
         onRefresh={fetchEmployees}
       />
@@ -389,25 +446,35 @@ const EmployeeManage = () => {
       <div className="card dashboard-card card-fill">
         <div className="card-toolbar">
           <div className="btn-group">
-            <button
-              type="button"
-              className={`btn-action btn-toggle btn-w-auto btn-form ${filterRole === "active" ? "active" : ""}`}
-              onClick={() => setFilterRole("active")}
+            {/* 💡 새로운 드롭다운 상태 필터 */}
+            <span className="fw-bold text-title">상태 필터:{" "}</span>
+            <select
+              className={`custom-input select-status ${filterRole === "all" ? "text-title" : getStatusDisplay(filterRole).colorClass}`}
+              style={{ width: "auto", minWidth: "150px" }}
+              value={filterRole}
+              onChange={(e) => setFilterRole(e.target.value)}
             >
-              재직자 명부 ({totalEmployeesCount}명)
-            </button>
-            <button
-              type="button"
-              className={`btn-action btn-toggle btn-w-auto btn-form ${filterRole === "deleted" ? "active" : ""}`}
-              onClick={() => setFilterRole("deleted")}
-            >
-              퇴사자 명부 ({totalDeletedCount}명)
-            </button>
+              <option value="all">전체 ({employees.length}명)</option>
+              {STATUS_OPTIONS.map((opt) => {
+                const count = employees.filter(
+                  (emp) => emp.status_code === opt.code,
+                ).length;
+                return (
+                  <option
+                    key={opt.code}
+                    value={opt.code}
+                    style={{ color: COLOR_CLASS_VAR[opt.colorClass] }}
+                  >
+                    {opt.label} ({count}명)
+                  </option>
+                );
+              })}
+            </select>
           </div>
           <button
             type="button"
             onClick={exportToCSV}
-            className="btn-action btn-neutral btn-w-auto btn-form"
+            className="btn-action btn-neutral btn-w-lg btn-form"
           >
             CSV 다운로드
           </button>
@@ -529,18 +596,25 @@ const EmployeeManage = () => {
                     handleMouseDown={handleMouseDown}
                   />
                 )}
-                <th className="col-sticky-right" style={{ width: colWidths.action }}>
+                <th
+                  className="col-sticky-right"
+                  style={{ width: colWidths.action }}
+                >
                   조치
                 </th>
               </tr>
             </thead>
             <tbody>
               {currentItems.map((emp, idx) => {
-                const subText = emp.is_deleted ? "text-muted" : "";
+                const currentStatus = getStatusDisplay(emp.status_code);
+                const subText = emp.status_code === 90 ? "text-muted" : "";
+
                 return (
                   <tr
                     key={emp.employee_id || `empty-${idx}`}
-                    className={emp.is_deleted && !emp.isEmpty ? "row-muted" : ""}
+                    className={
+                      emp.status_code === 90 && !emp.isEmpty ? "row-muted" : ""
+                    }
                   >
                     {emp.isEmpty ? (
                       <td colSpan={visibleColCount}>&nbsp;</td>
@@ -548,9 +622,8 @@ const EmployeeManage = () => {
                       <>
                         {activeCols.empNum && (
                           <td
-                            className={`cell-ellipsis ${emp.is_deleted ? "cell-link-off" : "cell-link"}`}
+                            className={`cell-ellipsis ${emp.status_code === 90 ? "cell-link-off" : "cell-link"}`}
                             onClick={() => handleEmpCardClick(emp)}
-                            title="클릭하여 상세 정보 보기"
                           >
                             {emp.emp_code || "-"}
                           </td>
@@ -560,21 +633,22 @@ const EmployeeManage = () => {
                             {emp.hire_date || "-"}
                           </td>
                         )}
+
                         {activeCols.name && (
-                          <td className={`cell-strong cell-ellipsis ${emp.is_deleted ? "text-danger" : ""}`}>
-                            {emp.name}{" "}
-                            {emp.is_deleted && (
-                              <span className="tag text-danger">퇴사</span>
-                            )}
+                          <td
+                            className={`cell-strong cell-ellipsis ${currentStatus.colorClass}`}
+                          >
+                            {emp.name}
                           </td>
                         )}
+
                         {activeCols.userId && (
                           <td className={`cell-ellipsis ${subText}`}>
                             {emp.employee_id}
                           </td>
                         )}
                         {activeCols.email && (
-                          <td className={`cell-left cell-ellipsis ${emp.is_deleted ? "text-muted" : "text-primary"}`}>
+                          <td className={`cell-left cell-ellipsis ${subText}`}>
                             {emp.email}
                           </td>
                         )}
@@ -595,20 +669,23 @@ const EmployeeManage = () => {
                         )}
                         {activeCols.jumin && (
                           <td className={`cell-ellipsis ${subText}`}>
-                            {emp.jumin_no ? renderMaskedJumin(emp.jumin_no) : "-"}
+                            {emp.jumin_no
+                              ? renderMaskedJumin(emp.jumin_no)
+                              : "-"}
                           </td>
                         )}
-                        <td className="col-sticky-right" style={{ width: colWidths.action }}>
-                          {emp.is_deleted ? (
+
+                        <td
+                          className="col-sticky-right"
+                          style={{ width: colWidths.action }}
+                        >
+                          {emp.employee_id.startsWith("ANON") ? (
                             <button
                               type="button"
-                              className="btn-action btn-danger btn-w-sm"
-                              onClick={() =>
-                                handleHardDelete(emp.employee_id, emp.name)
-                              }
-                              disabled={loading}
+                              className="btn-action btn-neutral btn-w-sm"
+                              disabled
                             >
-                              완전 삭제
+                              파기됨
                             </button>
                           ) : (
                             <div className="action-btn-group">
@@ -619,15 +696,27 @@ const EmployeeManage = () => {
                               >
                                 수정
                               </button>
-                              <button
-                                type="button"
-                                className="btn-action btn-danger btn-w-sm"
-                                onClick={() =>
-                                  handleDelete(emp.employee_id, emp.name)
+                              <select
+                                className={`btn-action btn-neutral btn-w-md select-status ${currentStatus.colorClass}`}
+                                value={emp.status_code || 10}
+                                onChange={(e) =>
+                                  handleStatusChange(
+                                    emp.employee_id,
+                                    e.target.value,
+                                    emp.name,
+                                  )
                                 }
                               >
-                                퇴사
-                              </button>
+                                {STATUS_OPTIONS.map((opt) => (
+                                  <option
+                                    key={opt.code}
+                                    value={opt.code}
+                                    style={{ color: COLOR_CLASS_VAR[opt.colorClass] }}
+                                  >
+                                    {opt.label}
+                                  </option>
+                                ))}
+                              </select>
                             </div>
                           )}
                         </td>
@@ -663,7 +752,6 @@ const EmployeeManage = () => {
                       phone: formatPhone(e.target.value),
                     })
                   }
-                  placeholder="연락처 입력 (숫자만 입력)"
                   maxLength={13}
                 />
               </div>
@@ -676,7 +764,6 @@ const EmployeeManage = () => {
                   onChange={(e) =>
                     setEditModal({ ...editModal, email: e.target.value })
                   }
-                  placeholder="이메일 입력"
                 />
               </div>
               <div className="form-group">
@@ -688,7 +775,6 @@ const EmployeeManage = () => {
                   onChange={(e) =>
                     setEditModal({ ...editModal, address: e.target.value })
                   }
-                  placeholder="주소 입력"
                 />
               </div>
               <div className="dialog-actions">
@@ -731,19 +817,35 @@ const EmployeeManage = () => {
               </div>
               <div className="info-row is-compact">
                 <span className="info-label">아이디</span>
-                <span className="info-value">{selectedEmpDetail.employee_id}</span>
+                <span className="info-value">
+                  {selectedEmpDetail.employee_id}
+                </span>
               </div>
               <div className="info-row is-compact">
                 <span className="info-label">이름</span>
-                <span className="info-value fw-bold text-title">{selectedEmpDetail.name}</span>
+                <span className="info-value fw-bold text-title">
+                  {selectedEmpDetail.name}
+                </span>
+              </div>
+              <div className="info-row is-compact">
+                <span className="info-label">상태</span>
+                <span
+                  className={`info-value ${getStatusDisplay(selectedEmpDetail.status_code).colorClass}`}
+                >
+                  {getStatusDisplay(selectedEmpDetail.status_code).label}
+                </span>
               </div>
               <div className="info-row is-compact">
                 <span className="info-label">입사일</span>
-                <span className="info-value">{selectedEmpDetail.hire_date}</span>
+                <span className="info-value">
+                  {selectedEmpDetail.hire_date}
+                </span>
               </div>
               <div className="info-row is-compact">
                 <span className="info-label">생년월일</span>
-                <span className="info-value">{selectedEmpDetail.birth_date || "-"}</span>
+                <span className="info-value">
+                  {selectedEmpDetail.birth_date || "-"}
+                </span>
               </div>
               <div className="info-row is-compact">
                 <span className="info-label">이메일</span>
@@ -751,7 +853,9 @@ const EmployeeManage = () => {
               </div>
               <div className="info-row is-compact">
                 <span className="info-label">연락처</span>
-                <span className="info-value">{formatPhone(selectedEmpDetail.phone_number)}</span>
+                <span className="info-value">
+                  {formatPhone(selectedEmpDetail.phone_number)}
+                </span>
               </div>
               <div className="info-row is-compact">
                 <span className="info-label">주소</span>
@@ -759,10 +863,30 @@ const EmployeeManage = () => {
               </div>
               <div className="info-row is-compact">
                 <span className="info-label">주민등록번호</span>
-                <span className="info-value text-warning">{selectedEmpDetail.jumin_no}</span>
+                <span className="info-value text-warning">
+                  {selectedEmpDetail.jumin_no}
+                </span>
               </div>
             </div>
             <div className="dialog-actions">
+              {/* 퇴사(90) 상태일 때만 '완전 삭제' 버튼 노출 */}
+              {selectedEmpDetail.status_code === 90 &&
+                !selectedEmpDetail.employee_id.startsWith("ANON") && (
+                  <button
+                    type="button"
+                    className="btn-action btn-danger btn-w-md btn-header"
+                    onClick={() => {
+                      handleHardDelete(
+                        selectedEmpDetail.employee_id,
+                        selectedEmpDetail.name,
+                      );
+                      setIsDetailModalOpen(false);
+                    }}
+                    style={{ marginRight: "auto" }}
+                  >
+                    완전 삭제 파기
+                  </button>
+                )}
               <button
                 type="button"
                 className="btn-action btn-neutral btn-w-md btn-header"

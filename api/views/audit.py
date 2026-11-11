@@ -1,3 +1,5 @@
+# API 요청에 대한 감사(Audit) 로그 기록 및 데코레이터 관리 파일
+
 import functools
 import json
 

@@ -1,27 +1,45 @@
+// 관리자가 직접 허용 및 차단 도메인 정책을 등록, 조회, 해제하고 보호 도메인을 제어하는 관리자 UI 컴포넌트
+
 import axios from "axios";
 import { useCallback, useEffect, useState } from "react";
+import { API_BASE_URL } from "../../api";
 import AdminAuthDialog from "../../components/AdminAuthDialog";
 import DomainDetailDialog from "../../components/DomainDetailDialog";
 import PageHeader from "../../components/PageHeader";
 import PaginationBar from "../../components/PaginationBar";
+import { appAlert, appConfirm } from "../../utils/appDialog";
+import { formatTimeKR } from "../../utils/formatTime";
 import { padRows } from "../../utils/table";
-import { API_BASE_URL } from "../../api";
 
 const PolicyManage = () => {
   const [policies, setPolicies] = useState([]);
   const [whitePolicies, setWhitePolicies] = useState([]);
-  const [newDomain, setNewDomain] = useState("");
-  const [whiteDomain, setWhiteDomain] = useState("");
   const [lastUpdated, setLastUpdated] = useState("");
   const [detailDomain, setDetailDomain] = useState(null);
+
+  // 검색 상태
+  const [searchTerm, setSearchTerm] = useState("");
+
+  // 등록 모달 상태 (type: 'white' | 'block')
+  const [addModal, setAddModal] = useState({
+    isOpen: false,
+    type: null,
+    domain: "",
+    description: "",
+  });
 
   const [currentPage, setCurrentPage] = useState(1);
   const [whitePage, setWhitePage] = useState(1);
   const itemsPerPage = 10;
 
-  const [authModal, setAuthModal] = useState({ isOpen: false, action: null, domain: "" });
+  const [authModal, setAuthModal] = useState({
+    isOpen: false,
+    action: null,
+    domain: "",
+  });
 
   const baseUrl = API_BASE_URL;
+  const currentEmpId = localStorage.getItem("employee_id") || "admin";
 
   const fetchPolicies = useCallback(async () => {
     try {
@@ -31,7 +49,7 @@ const PolicyManage = () => {
       ]);
       setPolicies(Array.isArray(resBlock.data) ? resBlock.data : []);
       setWhitePolicies(Array.isArray(resWhite.data) ? resWhite.data : []);
-      setLastUpdated(new Date().toLocaleTimeString("ko-KR", { hour12: false }));
+      setLastUpdated(formatTimeKR());
     } catch (err) {
       console.error("정책 조회 실패:", err);
     }
@@ -43,47 +61,59 @@ const PolicyManage = () => {
     return () => clearInterval(interval);
   }, [fetchPolicies]);
 
-  const handleAddPolicy = async (e) => {
+  // 검색 필터링 적용 (검색창 1개로 허용·차단 목록을 동시에 거른다)
+  const filteredWhite = whitePolicies.filter((p) =>
+    p.domain.toLowerCase().includes(searchTerm.toLowerCase()),
+  );
+  const filteredBlock = policies.filter((p) =>
+    p.blacklist_domain.toLowerCase().includes(searchTerm.toLowerCase()),
+  );
+
+  // 도메인 등록 모달 Submit 처리
+  const handleAddSubmit = async (e) => {
     e.preventDefault();
-    if (!newDomain.trim()) return;
+    if (!addModal.domain.trim()) return;
+
+    const endpoint =
+      addModal.type === "white"
+        ? "/api/policies/whitelist/add/"
+        : "/api/policies/add/";
+    const payloadKey =
+      addModal.type === "white" ? "domain" : "blacklist_domain";
+
     try {
-      await axios.post(`${baseUrl}/api/policies/add/`, { blacklist_domain: newDomain.trim() });
-      setNewDomain("");
+      await axios.post(`${baseUrl}${endpoint}`, {
+        [payloadKey]: addModal.domain.trim(),
+        description: addModal.description.trim(),
+        added_by_emp_id: currentEmpId,
+      });
+
+      setAddModal({ isOpen: false, type: null, domain: "", description: "" });
       fetchPolicies();
     } catch (err) {
-      alert(err.response?.data?.error || "차단 등록에 실패했습니다.");
+      await appAlert(err.response?.data?.error || "등록에 실패했습니다.");
     }
   };
 
   const handleDeletePolicy = async (domain) => {
-    if (!window.confirm(`'${domain}' 차단 정책을 해제하시겠습니까?`)) return;
+    if (!(await appConfirm(`'${domain}' 차단 정책을 해제하시겠습니까?`))) return;
     try {
-      await axios.post(`${baseUrl}/api/policies/delete/`, { blacklist_domain: domain });
+      await axios.post(`${baseUrl}/api/policies/delete/`, {
+        blacklist_domain: domain,
+      });
       fetchPolicies();
     } catch (err) {
-      alert(err.response?.data?.error || "차단 해제에 실패했습니다.");
-    }
-  };
-
-  const handleAddWhitePolicy = async (e) => {
-    e.preventDefault();
-    if (!whiteDomain.trim()) return;
-    try {
-      await axios.post(`${baseUrl}/api/policies/whitelist/add/`, { domain: whiteDomain.trim() });
-      setWhiteDomain("");
-      fetchPolicies();
-    } catch (err) {
-      alert(err.response?.data?.error || "허용 등록에 실패했습니다.");
+      await appAlert(err.response?.data?.error || "차단 해제에 실패했습니다.");
     }
   };
 
   const handleDeleteWhitePolicy = async (domain) => {
-    if (!window.confirm(`'${domain}' 허용 정책을 해제하시겠습니까?`)) return;
+    if (!(await appConfirm(`'${domain}' 허용 정책을 해제하시겠습니까?`))) return;
     try {
       await axios.post(`${baseUrl}/api/policies/whitelist/delete/`, { domain });
       fetchPolicies();
     } catch (err) {
-      alert(err.response?.data?.error || err.response?.data?.message || "허용 해제에 실패했습니다.");
+      await appAlert(err.response?.data?.error || "허용 해제에 실패했습니다.");
     }
   };
 
@@ -93,18 +123,40 @@ const PolicyManage = () => {
 
   const handleAuthSubmit = async (credentials) => {
     try {
-      const endpoint = authModal.action === "upgrade" ? "/api/policies/whitelist/upgrade/" : "/api/policies/whitelist/force-delete/";
-      await axios.post(`${baseUrl}${endpoint}`, { domain: authModal.domain, ...credentials });
+      const endpoint =
+        authModal.action === "upgrade"
+          ? "/api/policies/whitelist/upgrade/"
+          : "/api/policies/whitelist/force-delete/";
+      await axios.post(`${baseUrl}${endpoint}`, {
+        domain: authModal.domain,
+        ...credentials,
+      });
       setAuthModal({ isOpen: false, action: null, domain: "" });
       fetchPolicies();
-      alert(authModal.action === "upgrade" ? "보호 도메인으로 지정되었습니다." : "보호가 해제되었습니다.");
+      await appAlert(
+        authModal.action === "upgrade"
+          ? "보호 도메인으로 지정되었습니다."
+          : "보호가 해제되었습니다.",
+      );
     } catch (err) {
-      alert(err.response?.data?.error || "인증에 실패했습니다.");
+      await appAlert(err.response?.data?.error || "인증에 실패했습니다.");
     }
   };
 
-  const paginatedWhite = padRows(whitePolicies.slice((whitePage - 1) * itemsPerPage, whitePage * itemsPerPage), itemsPerPage);
-  const paginatedBlock = padRows(policies.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage), itemsPerPage);
+  const paginatedWhite = padRows(
+    filteredWhite.slice(
+      (whitePage - 1) * itemsPerPage,
+      whitePage * itemsPerPage,
+    ),
+    itemsPerPage,
+  );
+  const paginatedBlock = padRows(
+    filteredBlock.slice(
+      (currentPage - 1) * itemsPerPage,
+      currentPage * itemsPerPage,
+    ),
+    itemsPerPage,
+  );
 
   return (
     <div className="page-container admin-page">
@@ -113,19 +165,46 @@ const PolicyManage = () => {
         subtitle="관리자가 직접 등록하는 허용·차단 도메인을 관리합니다."
         lastUpdated={lastUpdated}
         onRefresh={fetchPolicies}
-      />
+      >
+        <input
+          type="text"
+          className="custom-input search-input"
+          placeholder="도메인 검색..."
+          value={searchTerm}
+          onChange={(e) => {
+            setSearchTerm(e.target.value);
+            setWhitePage(1);
+            setCurrentPage(1);
+          }}
+        />
+      </PageHeader>
 
       <div className="panel-row">
         {/* 허용 도메인 */}
         <div className="card dashboard-card card-fill">
           <div className="card-header">
             <h3 className="card-title title-success">허용 도메인 주소</h3>
-            <span className="count-badge badge-success">총 {whitePolicies.length}건</span>
+            <div className="toolbar-group">
+              <span className="count-badge badge-success">
+                총 {filteredWhite.length}건
+              </span>
+              <button
+                type="button"
+                className="btn-action btn-success btn-w-md btn-header"
+                onClick={() =>
+                  setAddModal({
+                    isOpen: true,
+                    type: "white",
+                    domain: "",
+                    description: "",
+                  })
+                }
+              >
+                + 허용 추가
+              </button>
+            </div>
           </div>
-          <form onSubmit={handleAddWhitePolicy} className="inline-form">
-            <input type="text" className="custom-input search-input" placeholder="도메인 입력 (예: safe.com)" value={whiteDomain} onChange={(e) => setWhiteDomain(e.target.value)} required />
-            <button type="submit" className="btn-action btn-success btn-w-md btn-header">허용</button>
-          </form>
+
           <div className="table-responsive table-fill">
             <table className="custom-table">
               <thead>
@@ -144,21 +223,55 @@ const PolicyManage = () => {
                       <td colSpan="5">&nbsp;</td>
                     ) : (
                       <>
-                        <td className="cell-no">{(whitePage - 1) * itemsPerPage + idx + 1}</td>
-                        <td className={`cell-main cell-clickable ${p.is_protected ? "is-protected" : ""}`} title={p.domain} onClick={() => setDetailDomain(p.domain)}>{p.domain}</td>
+                        <td className="text-muted">
+                          {(whitePage - 1) * itemsPerPage + idx + 1}
+                        </td>
+                        <td
+                          className={`cell-main cell-clickable ${p.is_protected ? "is-protected" : ""}`}
+                          title={p.domain}
+                          onClick={() => setDetailDomain(p.domain)}
+                        >
+                          {p.domain}
+                        </td>
                         <td>{p.access_count}건</td>
                         <td className="text-muted">{p.last_access || "-"}</td>
                         <td>
                           <div className="action-btn-group">
                             {p.is_protected ? (
                               <>
-                                <span className="status-badge badge-outline btn-w-sm">보호</span>
-                                <button type="button" onClick={() => handleAuthRequest("force_delete", p.domain)} className="btn-action btn-danger btn-w-sm">해제</button>
+                                <span className="status-badge badge-outline btn-w-sm">
+                                  보호
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleAuthRequest("force_delete", p.domain)
+                                  }
+                                  className="btn-action btn-danger btn-w-sm"
+                                >
+                                  해제
+                                </button>
                               </>
                             ) : (
                               <>
-                                <button type="button" onClick={() => handleAuthRequest("upgrade", p.domain)} className="btn-action btn-primary btn-w-sm">보호</button>
-                                <button type="button" onClick={() => handleDeleteWhitePolicy(p.domain)} className="btn-action btn-danger btn-w-sm">해제</button>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleAuthRequest("upgrade", p.domain)
+                                  }
+                                  className="btn-action btn-primary btn-w-sm"
+                                >
+                                  보호
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleDeleteWhitePolicy(p.domain)
+                                  }
+                                  className="btn-action btn-danger btn-w-sm"
+                                >
+                                  해제
+                                </button>
                               </>
                             )}
                           </div>
@@ -170,19 +283,38 @@ const PolicyManage = () => {
               </tbody>
             </table>
           </div>
-          <PaginationBar page={whitePage} totalPages={Math.ceil(whitePolicies.length / itemsPerPage) || 1} onPageChange={setWhitePage} />
+          <PaginationBar
+            page={whitePage}
+            totalPages={Math.ceil(filteredWhite.length / itemsPerPage) || 1}
+            onPageChange={setWhitePage}
+          />
         </div>
 
         {/* 차단 도메인 */}
         <div className="card dashboard-card card-fill">
           <div className="card-header">
             <h3 className="card-title title-danger">차단 도메인 주소</h3>
-            <span className="count-badge badge-danger">총 {policies.length}건</span>
+            <div className="toolbar-group">
+              <span className="count-badge badge-danger">
+                총 {filteredBlock.length}건
+              </span>
+              <button
+                type="button"
+                className="btn-action btn-danger btn-w-md btn-header"
+                onClick={() =>
+                  setAddModal({
+                    isOpen: true,
+                    type: "block",
+                    domain: "",
+                    description: "",
+                  })
+                }
+              >
+                + 차단 추가
+              </button>
+            </div>
           </div>
-          <form onSubmit={handleAddPolicy} className="inline-form">
-            <input type="text" className="custom-input search-input" placeholder="도메인 입력 (예: evil.com)" value={newDomain} onChange={(e) => setNewDomain(e.target.value)} required />
-            <button type="submit" className="btn-action btn-danger btn-w-md btn-header">차단</button>
-          </form>
+
           <div className="table-responsive table-fill">
             <table className="custom-table">
               <thead>
@@ -196,18 +328,36 @@ const PolicyManage = () => {
               </thead>
               <tbody>
                 {paginatedBlock.map((p, idx) => (
-                  <tr key={p.isEmpty ? `block-empty-${idx}` : p.blacklist_domain}>
+                  <tr
+                    key={p.isEmpty ? `block-empty-${idx}` : p.blacklist_domain}
+                  >
                     {p.isEmpty ? (
                       <td colSpan="5">&nbsp;</td>
                     ) : (
                       <>
-                        <td className="cell-no">{(currentPage - 1) * itemsPerPage + idx + 1}</td>
-                        <td className="cell-main cell-clickable" title={p.blacklist_domain} onClick={() => setDetailDomain(p.blacklist_domain)}>{p.blacklist_domain}</td>
+                        <td className="text-muted">
+                          {(currentPage - 1) * itemsPerPage + idx + 1}
+                        </td>
+                        <td
+                          className="cell-main cell-clickable"
+                          title={p.blacklist_domain}
+                          onClick={() => setDetailDomain(p.blacklist_domain)}
+                        >
+                          {p.blacklist_domain}
+                        </td>
                         <td>{p.access_count}건</td>
                         <td className="text-muted">{p.last_access || "-"}</td>
                         <td>
                           <div className="action-btn-group">
-                            <button type="button" onClick={() => handleDeletePolicy(p.blacklist_domain)} className="btn-action btn-danger btn-w-sm">해제</button>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleDeletePolicy(p.blacklist_domain)
+                              }
+                              className="btn-action btn-danger btn-w-sm"
+                            >
+                              해제
+                            </button>
                           </div>
                         </td>
                       </>
@@ -217,19 +367,102 @@ const PolicyManage = () => {
               </tbody>
             </table>
           </div>
-          <PaginationBar page={currentPage} totalPages={Math.ceil(policies.length / itemsPerPage) || 1} onPageChange={setCurrentPage} />
+          <PaginationBar
+            page={currentPage}
+            totalPages={Math.ceil(filteredBlock.length / itemsPerPage) || 1}
+            onPageChange={setCurrentPage}
+          />
         </div>
       </div>
 
-      {detailDomain && <DomainDetailDialog domain={detailDomain} onClose={() => setDetailDomain(null)} />}
+      {/* 등록 모달창 */}
+      {addModal.isOpen && (
+        <div className="dialog-overlay">
+          <div className="dialog-box">
+            <h3 className="dialog-title">
+              {addModal.type === "white"
+                ? "허용 정책 도메인 등록"
+                : "차단 정책 도메인 등록"}
+            </h3>
+            <p className="dialog-desc">
+              등록할 도메인 주소와 사유를 입력해주세요.
+            </p>
+            <form onSubmit={handleAddSubmit} className="dialog-form">
+              <div className="form-group">
+                <label className="form-label">도메인 주소</label>
+                <input
+                  type="text"
+                  className="custom-input"
+                  placeholder={
+                    addModal.type === "white" ? "예: safe.com" : "예: evil.com"
+                  }
+                  value={addModal.domain}
+                  onChange={(e) =>
+                    setAddModal({ ...addModal, domain: e.target.value })
+                  }
+                  required
+                />
+              </div>
+              <div className="form-group">
+                <label className="form-label">등록 사유</label>
+                <textarea
+                  className="custom-input"
+                  rows="3"
+                  placeholder="등록하는 구체적인 사유를 입력하세요"
+                  value={addModal.description}
+                  onChange={(e) =>
+                    setAddModal({ ...addModal, description: e.target.value })
+                  }
+                  required
+                />
+              </div>
+              <div className="dialog-actions">
+                <button
+                  type="button"
+                  className="btn-action btn-neutral btn-w-md btn-header"
+                  onClick={() =>
+                    setAddModal({
+                      isOpen: false,
+                      type: null,
+                      domain: "",
+                      description: "",
+                    })
+                  }
+                >
+                  취소
+                </button>
+                <button
+                  type="submit"
+                  className={`btn-action btn-w-md btn-header ${addModal.type === "white" ? "btn-success" : "btn-danger"}`}
+                >
+                  등록
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {detailDomain && (
+        <DomainDetailDialog
+          domain={detailDomain}
+          onClose={() => setDetailDomain(null)}
+        />
+      )}
 
       {authModal.isOpen && (
         <AdminAuthDialog
-          title={authModal.action === "upgrade" ? "보호 도메인 지정 인증" : "보호 도메인 해제 인증"}
+          title={
+            authModal.action === "upgrade"
+              ? "보호 도메인 지정 인증"
+              : "보호 도메인 해제 인증"
+          }
           target={authModal.domain}
           danger={authModal.action !== "upgrade"}
           onSubmit={handleAuthSubmit}
-          onCancel={() => setAuthModal({ isOpen: false, action: null, domain: "" })}
+          onCancel={() =>
+            setAuthModal({ isOpen: false, action: null, domain: "" })
+          }
         />
       )}
     </div>

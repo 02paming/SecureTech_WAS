@@ -1,3 +1,5 @@
+# AI 판별 기준 레벨의 변화를 감지하고 파일 기반의 이력 추적 및 시점별 레벨 조회를 담당하는 파일
+
 import json
 
 from django.conf import settings

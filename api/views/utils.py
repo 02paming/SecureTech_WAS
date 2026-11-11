@@ -1,3 +1,7 @@
+# 암호화, IP 파싱, 세션 관리, PCAP 백엔드 통신 및 정책 상태 동기화를 담당하는 유틸리티 함수 파일
+
+import hashlib
+import hmac
 import json
 import logging
 import os
@@ -7,7 +11,6 @@ import threading
 import urllib.request
 
 from cryptography.fernet import Fernet, InvalidToken
-from django.core.cache import cache
 from django.db import DatabaseError, connection, connections
 from django.db.models import Q
 
@@ -17,6 +20,8 @@ file_lock = threading.Lock()
 logger = logging.getLogger(__name__)
 PCAP_BACKEND_URL = os.getenv("PCAP_BACKEND_URL", "http://127.0.0.1:8080")
 _otp_fernet = Fernet(os.environ["OTP_SECRET_KEY"].encode())
+_jumin_key = os.environ["JUMIN_SECRET_KEY"].encode()
+_jumin_fernet = Fernet(_jumin_key)
 
 
 def encrypt_otp_secret(raw_secret):
@@ -29,6 +34,24 @@ def decrypt_otp_secret(stored_value):
         return _otp_fernet.decrypt(stored_value.encode()).decode()
     except (InvalidToken, UnicodeDecodeError, ValueError):
         return stored_value
+
+
+def encrypt_jumin(raw_jumin):
+    return _jumin_fernet.encrypt(str(raw_jumin).encode()).decode()
+
+
+def decrypt_jumin(stored_value):
+    """DB에 평문으로 남아 있던 기존 값도 그대로 쓸 수 있게 복호화 실패 시 원문을 돌려준다."""
+    try:
+        return _jumin_fernet.decrypt(str(stored_value).encode()).decode()
+    except (InvalidToken, UnicodeDecodeError, ValueError):
+        return stored_value
+
+
+def hash_jumin(raw_jumin):
+    """중복 확인용 블라인드 인덱스. 암호화된 jumin_no는 매번 값이 달라져 UNIQUE/조회에 못 쓰므로,
+    같은 평문이면 항상 같은 값이 나오는 HMAC 해시를 별도 컬럼(jumin_no_hash)에 저장해 대신 쓴다."""
+    return hmac.new(_jumin_key, str(raw_jumin).encode(), hashlib.sha256).hexdigest()
 
 
 EMPLOYEE_IP_PREFIX = "192.168.2."
@@ -47,7 +70,7 @@ DUPLICATE_MEMBER_MESSAGE = "이미 등록된 아이디, 이메일, 전화번호 
 
 
 def format_jumin_and_birth(jumin):
-    c = re.sub(r"[^0-9]", "", str(jumin))
+    c = re.sub(r"[^0-9]", "", decrypt_jumin(jumin))
     return (
         (
             f"{'20' if c[6] in '34' else '19'}{c[0:2]}년 {c[2:4]}월 {c[4:6]}일",

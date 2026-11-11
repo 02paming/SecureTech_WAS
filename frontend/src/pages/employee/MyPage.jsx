@@ -1,7 +1,10 @@
-import { useState, useEffect, useCallback } from "react";
-import api from "../../api";
+// 사원이 본인의 기본 정보, 연락처, 네트워크 인증 상태를 확인하고 정보를 수정하는 마이페이지 UI 컴포넌트
+
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import api from "../../api";
 import PageHeader from "../../components/PageHeader";
+import { appAlert } from "../../utils/appDialog";
 
 const MyPage = () => {
   const navigate = useNavigate();
@@ -9,6 +12,9 @@ const MyPage = () => {
   const [loading, setLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showNewPasswordConfirm, setShowNewPasswordConfirm] = useState(false);
   const [editForm, setEditForm] = useState({
     email: "",
     phone_number: "",
@@ -47,8 +53,10 @@ const MyPage = () => {
   useEffect(() => {
     const savedUser = sessionStorage.getItem("user");
     if (!savedUser) {
-      alert("로그인이 필요합니다.");
-      navigate("/");
+      (async () => {
+        await appAlert("로그인이 필요합니다.");
+        navigate("/");
+      })();
       return;
     }
     const timer = setTimeout(() => {
@@ -95,13 +103,16 @@ const MyPage = () => {
       newPassword: "",
       newPasswordConfirm: "",
     });
+    setShowCurrentPassword(false);
+    setShowNewPassword(false);
+    setShowNewPasswordConfirm(false);
     setIsEditing(true);
   };
 
   const handleSave = async (e) => {
     e.preventDefault();
     if (editForm.newPassword !== editForm.newPasswordConfirm) {
-      alert("새 비밀번호가 서로 일치하지 않습니다.");
+      await appAlert("새 비밀번호가 서로 일치하지 않습니다.");
       return;
     }
     setSaving(true);
@@ -114,11 +125,11 @@ const MyPage = () => {
         current_password: editForm.currentPassword,
         new_password: editForm.newPassword,
       });
-      alert(res.data.message);
+      await appAlert(res.data.message);
       setIsEditing(false);
       fetchMyInfo(employeeId);
     } catch (err) {
-      alert(err.response?.data?.message || "정보 수정에 실패했습니다.");
+      await appAlert(err.response?.data?.message || "정보 수정에 실패했습니다.");
     } finally {
       setSaving(false);
     }
@@ -142,38 +153,38 @@ const MyPage = () => {
             </div>
           </div>
           <div className="info-rows">
-          <div className="info-row">
-            <span className="info-label">권한</span>
-            <div className="info-value">{renderRoleBadge()}</div>
-          </div>
-          <div className="info-row">
-            <span className="info-label">이름</span>
-            <span className="info-value fw-bold text-title">{userData.name}</span>
-          </div>
-          <div className="info-row">
-            <span className="info-label">아이디</span>
-            <span className="tag tag-mono">{employeeId}</span>
-          </div>
-          <div className="info-row">
-            <span className="info-label">사번</span>
-            <span className="info-value fw-bold text-primary">
-              {userData.emp_code && userData.emp_code !== "-"
-                ? userData.emp_code
-                : "미부여"}
-            </span>
-          </div>
-          <div className="info-row">
-            <span className="info-label">입사일</span>
-            <span className="info-value">{userData.hire_date || "-"}</span>
-          </div>
-          <div className="info-row">
-            <span className="info-label">생년월일</span>
-            <span className="info-value">{userData.birth_date || "-"}</span>
-          </div>
-          <div className="info-row">
-            <span className="info-label">주민등록번호</span>
-            <span className="info-value">{userData.jumin_no || "-"}</span>
-          </div>
+            <div className="info-row">
+              <span className="info-label">권한</span>
+              <div className="info-value">{renderRoleBadge()}</div>
+            </div>
+            <div className="info-row">
+              <span className="info-label">이름</span>
+              <span className="info-value fw-bold text-title">{userData.name}</span>
+            </div>
+            <div className="info-row">
+              <span className="info-label">아이디</span>
+              <span className="tag tag-mono">{employeeId}</span>
+            </div>
+            <div className="info-row">
+              <span className="info-label">사번</span>
+              <span className="info-value fw-bold text-primary">
+                {userData.emp_code && userData.emp_code !== "-"
+                  ? userData.emp_code
+                  : "미부여"}
+              </span>
+            </div>
+            <div className="info-row">
+              <span className="info-label">입사일</span>
+              <span className="info-value">{userData.hire_date || "-"}</span>
+            </div>
+            <div className="info-row">
+              <span className="info-label">생년월일</span>
+              <span className="info-value">{userData.birth_date || "-"}</span>
+            </div>
+            <div className="info-row">
+              <span className="info-label">주민등록번호</span>
+              <span className="info-value">{userData.jumin_no || "-"}</span>
+            </div>
           </div>
         </div>
 
@@ -212,22 +223,22 @@ const MyPage = () => {
               <h3 className="card-title">네트워크 인증 상태</h3>
             </div>
             <div className="info-rows">
-            <div className="info-row">
-              <span className="info-label">인증 상태</span>
-              {userData.network_authenticated ? (
-                <span className="status-badge badge-success">인증 완료</span>
-              ) : (
-                <span className="status-badge badge-gray">미인증</span>
-              )}
-            </div>
-            <div className="info-row">
-              <span className="info-label">접속 IP</span>
-              <span className="info-value">{userData.network_ip || "-"}</span>
-            </div>
-            <div className="info-row">
-              <span className="info-label">인증 시간</span>
-              <span className="info-value">{userData.network_auth_time || "-"}</span>
-            </div>
+              <div className="info-row">
+                <span className="info-label">인증 상태</span>
+                {userData.network_authenticated ? (
+                  <span className="status-badge badge-success">인증 완료</span>
+                ) : (
+                  <span className="status-badge badge-gray">미인증</span>
+                )}
+              </div>
+              <div className="info-row">
+                <span className="info-label">접속 IP</span>
+                <span className="info-value">{userData.network_ip || "-"}</span>
+              </div>
+              <div className="info-row">
+                <span className="info-label">인증 시간</span>
+                <span className="info-value">{userData.network_auth_time || "-"}</span>
+              </div>
             </div>
           </div>
         </div>
@@ -277,41 +288,68 @@ const MyPage = () => {
                   <label className="form-label">
                     새 비밀번호<span className="form-hint">(변경 시에만)</span>
                   </label>
-                  <input
-                    type="password"
-                    name="newPassword"
-                    autoComplete="new-password"
-                    className="custom-input"
-                    value={editForm.newPassword}
-                    onChange={handleFormChange}
-                  />
+                  <div className="input-with-btn">
+                    <input
+                      type={showNewPassword ? "text" : "password"}
+                      name="newPassword"
+                      autoComplete="new-password"
+                      className="custom-input"
+                      value={editForm.newPassword}
+                      onChange={handleFormChange}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowNewPassword((v) => !v)}
+                      className="btn-action btn-neutral btn-w-sm btn-form"
+                    >
+                      {showNewPassword ? "숨김" : "보기"}
+                    </button>
+                  </div>
                 </div>
                 <div className="form-group">
                   <label className="form-label">새 비밀번호 확인</label>
-                  <input
-                    type="password"
-                    name="newPasswordConfirm"
-                    autoComplete="new-password"
-                    className="custom-input"
-                    value={editForm.newPasswordConfirm}
-                    onChange={handleFormChange}
-                  />
+                  <div className="input-with-btn">
+                    <input
+                      type={showNewPasswordConfirm ? "text" : "password"}
+                      name="newPasswordConfirm"
+                      autoComplete="new-password"
+                      className="custom-input"
+                      value={editForm.newPasswordConfirm}
+                      onChange={handleFormChange}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowNewPasswordConfirm((v) => !v)}
+                      className="btn-action btn-neutral btn-w-sm btn-form"
+                    >
+                      {showNewPasswordConfirm ? "숨김" : "보기"}
+                    </button>
+                  </div>
                 </div>
               </div>
               <div className="form-group">
                 <label className="form-label">
                   현재 비밀번호 <span className="text-danger">*</span>
                 </label>
-                <input
-                  type="password"
-                  name="currentPassword"
-                  autoComplete="current-password"
-                  className="custom-input"
-                  placeholder="저장하려면 현재 비밀번호를 입력하세요."
-                  value={editForm.currentPassword}
-                  onChange={handleFormChange}
-                  required
-                />
+                <div className="input-with-btn">
+                  <input
+                    type={showCurrentPassword ? "text" : "password"}
+                    name="currentPassword"
+                    autoComplete="current-password"
+                    className="custom-input"
+                    placeholder="저장하려면 현재 비밀번호를 입력하세요."
+                    value={editForm.currentPassword}
+                    onChange={handleFormChange}
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowCurrentPassword((v) => !v)}
+                    className="btn-action btn-neutral btn-w-sm btn-form"
+                  >
+                    {showCurrentPassword ? "숨김" : "보기"}
+                  </button>
+                </div>
               </div>
               <div className="dialog-actions">
                 <button

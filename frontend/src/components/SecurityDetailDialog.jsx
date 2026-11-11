@@ -1,7 +1,9 @@
+// 사원 인증 현황과 로그 분석실에서 공용으로 사용하는 단말 보안 상세 정보 및 이력 관리 UI 컴포넌트
+
 import { useMemo, useState } from "react";
 import { getSecurityTheme } from "../utils/securityTheme";
-import PaginationBar from "./PaginationBar";
 import { padRows } from "../utils/table";
+import PaginationBar from "./PaginationBar";
 
 function IpMacHistoryColumn({ logs }) {
   const [search, setSearch] = useState("");
@@ -55,7 +57,7 @@ function IpMacHistoryColumn({ logs }) {
       </div>
       <input
         type="text"
-        className="custom-input"
+        className="custom-input search-input"
         placeholder="IP, MAC 검색..."
         value={search}
         onChange={(e) => {
@@ -103,7 +105,6 @@ function IpMacHistoryColumn({ logs }) {
   );
 }
 
-const ACTIVITY_ROW = { 의심: "row-warning", 차단: "row-danger" };
 const ACTIVITY_TEXT = { 정상: "text-success", 의심: "text-warning", 차단: "text-danger" };
 
 function ExternalAccessColumn({ externalLogs }) {
@@ -185,7 +186,7 @@ function ExternalAccessColumn({ externalLogs }) {
       </div>
       <input
         type="text"
-        className="custom-input"
+        className="custom-input search-input"
         placeholder="도메인 검색..."
         value={search}
         onChange={(e) => {
@@ -211,7 +212,7 @@ function ExternalAccessColumn({ externalLogs }) {
           </thead>
           <tbody>
             {currentItems.map((item, idx) => (
-              <tr key={idx} className={ACTIVITY_ROW[item.category] || ""}>
+              <tr key={idx}>
                 {item.isEmpty ? (
                   <td colSpan="4" className="text-muted">
                     {idx === 0 && filteredLogs.length === 0 ? "활동 기록이 없습니다." : "\u00a0"}
@@ -294,7 +295,7 @@ function SecurityDetailDialog({ security, onClose, onRefresh, refreshing }) {
               </div>
               <div className="info-box-row info-box-note">
                 <span>최근 30일 통과: {security?.recent_pass_count || 0}건 (의심 {security?.recent_suspect_count || 0}건)</span>
-                <span>MAC 변조: {security?.recent_mismatch_count || 0}건</span>
+                <span>MAC 스푸핑: {security?.recent_mismatch_count || 0}건</span>
               </div>
             </div>
             <div className="info-box info-box-row">

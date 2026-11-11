@@ -1,10 +1,14 @@
+// 실시간 온라인 사원 인증 현황을 모니터링하고 단말 접속 차단 및 보안 상세 조회 창을 연동하는 컴포넌트
+
 import axios from "axios";
 import { useCallback, useEffect, useState } from "react";
+import { API_BASE_URL, MONITOR_REFRESH_MS } from "../../api";
 import PageHeader from "../../components/PageHeader";
 import PaginationBar from "../../components/PaginationBar";
 import SecurityDetailDialog from "../../components/SecurityDetailDialog";
+import { appAlert, appConfirm } from "../../utils/appDialog";
+import { formatTimeKR } from "../../utils/formatTime";
 import { padRows, useResetPage } from "../../utils/table";
-import { API_BASE_URL, MONITOR_REFRESH_MS } from "../../api";
 
 const EmployeeAuth = () => {
   const [onlineUsers, setOnlineUsers] = useState([]);
@@ -26,7 +30,7 @@ const EmployeeAuth = () => {
     try {
       const res = await axios.get(`${baseUrl}/api/dashboard/employee-auth-status/`);
       setOnlineUsers(res.data || []);
-      setLastUpdated(new Date().toLocaleTimeString("ko-KR", { hour12: false }));
+      setLastUpdated(formatTimeKR());
     } catch (err) {
       console.error("사원 인증 현황 조회 실패:", err);
     } finally {
@@ -57,7 +61,7 @@ const EmployeeAuth = () => {
       console.error("보안 상세 현황 조회 실패:", err);
     }
     // 점수를 알 수 없을 때 안전한 값처럼 보여 주지 않는다
-    alert("보안 상세 현황을 불러올 수 없습니다.");
+    await appAlert("보안 상세 현황을 불러올 수 없습니다.");
   };
 
   const handleRefreshDetail = async () => {
@@ -77,18 +81,18 @@ const EmployeeAuth = () => {
 
   // 접속만 끊는다(킥). 이 사원은 다시 인증하면 바로 접속할 수 있다
   const handleBlockUser = async (user) => {
-    if (!window.confirm(`${user.emp_name} 단말 접속을 차단하시겠습니까?`)) return;
+    if (!(await appConfirm(`${user.emp_name} 단말 접속을 차단하시겠습니까?`))) return;
     setLoading(true);
     try {
       await axios.post(`${baseUrl}/api/dashboard/block-employee/`, {
         employee_id: user.emp_id,
         kick_host_id: user.ip?.split(".").pop(),
       });
-      alert("접속이 차단되었습니다.");
+      await appAlert("접속이 차단되었습니다.");
       await fetchData();
     } catch (err) {
       console.error("단말 차단 실패:", err);
-      alert("차단에 실패했습니다.");
+      await appAlert("차단에 실패했습니다.");
     } finally {
       setLoading(false);
     }

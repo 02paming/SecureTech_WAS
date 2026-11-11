@@ -1,3 +1,5 @@
+# Django의 커맨드라인 유틸리티 파일로, 서버 실행 및 관리자 명령어를 수행하는 스크립트
+
 #!/usr/bin/env python
 """Django's command-line utility for administrative tasks."""
 import os

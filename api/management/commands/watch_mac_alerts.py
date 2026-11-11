@@ -1,3 +1,5 @@
+# 백그라운드에서 MAC 스푸핑 및 정책 변경 이력을 상시 감시하고 웹훅 경보를 수행하는 관리 명령어 파일
+
 import time
 
 from django.conf import settings
@@ -68,7 +70,7 @@ def process_new_alerts():
 
 
 class Command(BaseCommand):
-  help = "상시 실행: MAC 변조 행을 Discord로 경보하고 정책 변경 이력을 기록"
+  help = "상시 실행: MAC 스푸핑 행을 Discord와 Slack으로 경보하고 정책 변경 이력을 기록"
 
   def handle(self, *args, **options):
     while True:
@@ -77,7 +79,7 @@ class Command(BaseCommand):
       try:
         process_new_alerts()
       except Exception as e:
-        logger.error("MAC 변조 경보 처리 오류: %s", e)
+        logger.error("MAC 스푸핑 경보 처리 오류: %s", e)
       try:
         record_policy_changes()
       except Exception as e:

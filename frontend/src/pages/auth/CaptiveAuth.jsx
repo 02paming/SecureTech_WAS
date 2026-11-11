@@ -1,7 +1,10 @@
-import { useState } from "react";
+// SecureTech 통합 보안 플랫폼의 홈 화면으로, 플랫폼 소개, 공지사항, 사내 커뮤니티 및 보안 자료실을 제공하는 UI 컴포넌트
+
 import axios from "axios";
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import { API_BASE_URL } from "../../api";
+import { appAlert } from "../../utils/appDialog";
 
 const CaptiveAuth = () => {
   const [employeeId, setEmployeeId] = useState("");
@@ -17,7 +20,7 @@ const CaptiveAuth = () => {
   const handleAuth = async (e) => {
     e.preventDefault();
     if (!employeeId.trim() || !password) {
-      alert("사번과 비밀번호를 모두 입력해 주세요.");
+      await appAlert("사번과 비밀번호를 모두 입력해 주세요.");
       return;
     }
 
@@ -43,14 +46,14 @@ const CaptiveAuth = () => {
         };
         localStorage.setItem("user", JSON.stringify(userData));
 
-        alert(
+        await appAlert(
           `[인증 성공]\n${displayName} 사원님 인증이 완료되었습니다.\n외부 인터넷 통신이 인가되었습니다.`,
         );
       }
     } catch (err) {
-      alert(
+      await appAlert(
         err.response?.data?.message ||
-          "인증에 실패했습니다. 사번 및 비밀번호를 확인해주세요.",
+        "인증에 실패했습니다. 사번 및 비밀번호를 확인해주세요.",
       );
     } finally {
       setLoading(false);

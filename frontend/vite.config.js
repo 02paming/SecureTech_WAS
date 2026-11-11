@@ -1,5 +1,7 @@
-import { defineConfig } from "vite";
+// Vite 빌드 설정 파일로, terser를 이용한 콘솔 로그 제거 및 벤더(Vendor) 청크 분할 최적화 전략을 정의
+
 import react from "@vitejs/plugin-react";
+import { defineConfig } from "vite";
 
 export default defineConfig({
   plugins: [react()],
@@ -17,7 +19,11 @@ export default defineConfig({
         // 💡 2. 벤더(Vendor) 청크 분할 전략: 무거운 라이브러리들을 쪼개서 병렬 로딩
         manualChunks(id) {
           if (id.includes("node_modules")) {
-            if (/node_modules\/(react|react-dom|react-router|react-router-dom|scheduler)\//.test(id)) {
+            if (
+              /node_modules\/(react|react-dom|react-router|react-router-dom|scheduler)\//.test(
+                id,
+              )
+            ) {
               return "react-core"; // 리액트 코어 묶음
             }
             if (id.includes("axios")) {

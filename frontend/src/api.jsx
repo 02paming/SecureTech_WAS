@@ -1,3 +1,5 @@
+// Axios 기반의 API 통신 기본 설정, 동적 베이스 URL 판별 및 요청/응답 인터셉터를 관리하는 모듈 파일
+
 import axios from "axios";
 
 const getBaseUrl = () => {

@@ -1,17 +1,25 @@
+// AI 엔진이 탐지한 위험 및 의심 도메인을 관리하고 수동 허용·차단 정책으로 이관하는 관리자 UI 컴포넌트
+
 import axios from "axios";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { API_BASE_URL } from "../../api";
 import AdminAuthDialog from "../../components/AdminAuthDialog";
 import DomainDetailDialog from "../../components/DomainDetailDialog";
 import PageHeader from "../../components/PageHeader";
 import PaginationBar from "../../components/PaginationBar";
 import { hasAiScore } from "../../utils/aiScore";
+import { appAlert } from "../../utils/appDialog";
+import { formatTimeKR } from "../../utils/formatTime";
 import { padRows } from "../../utils/table";
 
 const AiPolicyManage = () => {
+  const [searchParams] = useSearchParams();
   const [aiData, setAiData] = useState([]);
   const [lastUpdated, setLastUpdated] = useState("");
-  const [detailDomain, setDetailDomain] = useState(null);
+  const [detailDomain, setDetailDomain] = useState(
+    () => searchParams.get("domain") || null,
+  );
 
   // 검색 디바운스를 위한 상태 및 Ref 분리
   const [searchInput, setSearchInput] = useState("");
@@ -36,7 +44,7 @@ const AiPolicyManage = () => {
     try {
       const res = await axios.get(`${baseUrl}/api/policies/ai/`);
       setAiData(res.data.ai_data || []);
-      setLastUpdated(new Date().toLocaleTimeString("ko-KR", { hour12: false }));
+      setLastUpdated(formatTimeKR());
       setSelectedWhite([]);
       setSelectedBlack([]);
     } catch (err) {
@@ -71,11 +79,11 @@ const AiPolicyManage = () => {
       const res = await axios.post(`${baseUrl}/api/policies/promote/`, {
         domains: authModal.domains, action: authModal.action, ...credentials,
       });
-      alert(res.data.message);
+      await appAlert(res.data.message);
       closeAuthModal();
       fetchAiPolicies();
     } catch (err) {
-      alert(err.response?.data?.error || "인증에 실패했습니다.");
+      await appAlert(err.response?.data?.error || "인증에 실패했습니다.");
     }
   };
 
@@ -209,7 +217,7 @@ const AiPolicyManage = () => {
               </thead>
               <tbody>
                 {paginatedWhite.map((p, idx) => (
-                  <tr key={p.isEmpty ? `w-empty-${idx}` : p.domain} className={!p.isEmpty && p.ai_status === "DOUBT" ? "row-warning" : ""}>
+                  <tr key={p.isEmpty ? `w-empty-${idx}` : p.domain}>
                     {p.isEmpty ? (<td colSpan="5">&nbsp;</td>) : (
                       <>
                         <td className="cell-check"><input type="checkbox" checked={selectedWhite.includes(p.domain)} onChange={() => toggleSelect(p.domain, setSelectedWhite)} /></td>
@@ -264,7 +272,7 @@ const AiPolicyManage = () => {
               </thead>
               <tbody>
                 {paginatedBlack.map((p, idx) => (
-                  <tr key={p.isEmpty ? `b-empty-${idx}` : p.domain} className={!p.isEmpty && p.ai_status === "DOUBT" ? "row-warning" : ""}>
+                  <tr key={p.isEmpty ? `b-empty-${idx}` : p.domain}>
                     {p.isEmpty ? (<td colSpan="5">&nbsp;</td>) : (
                       <>
                         <td className="cell-check"><input type="checkbox" checked={selectedBlack.includes(p.domain)} onChange={() => toggleSelect(p.domain, setSelectedBlack)} /></td>

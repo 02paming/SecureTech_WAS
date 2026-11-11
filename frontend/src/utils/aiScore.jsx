@@ -1,3 +1,2 @@
-// AI 위협 점수 표시 규칙. 음수나 빈 값은 점수 없음이다.
-// 색상은 기준 변경에 흔들리지 않도록 숫자가 아니라 정책 판단(policyTone)을 따른다.
+// AI 위협 점수가 유효한 값인지 판별하는 유틸리티 함수 파일
 export const hasAiScore = (score) => score !== null && score !== undefined && score >= 0;

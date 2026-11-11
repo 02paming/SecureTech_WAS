@@ -1,3 +1,5 @@
+# SecureTech 프로젝트의 DB 테이블 구조(회원, 사원, 정책, 로그, AI 모델 설정 등)를 정의한 Django 모델 파일
+
 from django.db import models
 from django.utils import timezone
 
@@ -21,12 +23,25 @@ class ProspectiveMembers(models.Model):
     email = models.CharField(unique=True, max_length=255)
     address = models.CharField(max_length=255)
     phone_number = models.CharField(unique=True, max_length=11)
-    jumin_no = models.CharField(unique=True, max_length=13)
+    # Fernet 암호문은 평문보다 훨씬 길고 매번 달라져 UNIQUE로 못 쓴다. 중복 확인은 jumin_no_hash로 한다
+    jumin_no = models.CharField(max_length=255)
+    jumin_no_hash = models.CharField(max_length=64, unique=True, blank=True, null=True)
     date_of_request = models.DateField(default=timezone.now)
 
     class Meta:
         managed = False
         db_table = "prospective_members"
+
+
+class EmployeeStatusCodes(models.Model):
+    status_code = models.IntegerField(primary_key=True)
+    status_name = models.CharField(max_length=50)
+    display_name = models.CharField(max_length=50)
+    description = models.CharField(max_length=255, blank=True, null=True)
+
+    class Meta:
+        managed = False
+        db_table = "employee_status_codes"
 
 
 class Employees(models.Model):
@@ -37,11 +52,13 @@ class Employees(models.Model):
     email = models.CharField(unique=True, max_length=255)
     address = models.CharField(max_length=255)
     phone_number = models.CharField(unique=True, max_length=11)
-    jumin_no = models.CharField(unique=True, max_length=13)
+    jumin_no = models.CharField(max_length=255)
+    jumin_no_hash = models.CharField(max_length=64, unique=True, blank=True, null=True)
     hire_date = models.DateField(default=timezone.now)
     is_manager = models.BooleanField(default=False)
+    status_code = models.ForeignKey(EmployeeStatusCodes, models.DO_NOTHING, db_column='status_code', default=10)
     deleted_at = models.DateField(blank=True, null=True)
-    otp_secret = models.CharField(max_length=128, blank=True, null=True)
+    otp_secret = models.CharField(max_length=255, blank=True, null=True)
 
     class Meta:
         managed = False
@@ -55,6 +72,9 @@ class WhitelistAddr(models.Model):
     is_protected = models.BooleanField(default=False)
     ai_score = models.FloatField(default=-1.0, blank=True, null=True)
     source = models.CharField(max_length=50)
+    added_by_emp = models.ForeignKey(Employees, models.DO_NOTHING, db_column='added_by_emp_id', blank=True, null=True)
+    description = models.CharField(max_length=255, blank=True, null=True)
+    added_at = models.DateTimeField(default=timezone.now)
 
     class Meta:
         managed = False
@@ -67,6 +87,9 @@ class BlacklistAddr(models.Model):
     deleted_at = models.DateField(blank=True, null=True)
     ai_score = models.FloatField(default=-1.0, blank=True, null=True)
     source = models.CharField(max_length=50)
+    added_by_emp = models.ForeignKey(Employees, models.DO_NOTHING, db_column='added_by_emp_id', blank=True, null=True)
+    description = models.CharField(max_length=255, blank=True, null=True)
+    added_at = models.DateTimeField(default=timezone.now)
 
     class Meta:
         managed = False
@@ -75,7 +98,7 @@ class BlacklistAddr(models.Model):
 
 class OnlineList(models.Model):
     employee = models.OneToOneField(Employees, models.DO_NOTHING, primary_key=True)
-    online_ip = models.IntegerField()
+    online_ip = models.IntegerField(unique=True)
     login_time = models.DateTimeField(default=timezone.now)
     online_mac_addr = models.CharField(max_length=17)
 

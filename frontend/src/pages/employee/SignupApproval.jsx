@@ -2,6 +2,8 @@ import axios from "axios";
 import { useCallback, useEffect, useState } from "react";
 import PageHeader from "../../components/PageHeader";
 import PaginationBar from "../../components/PaginationBar";
+import { appAlert, appConfirm } from "../../utils/appDialog";
+import { formatTimeKR } from "../../utils/formatTime";
 import { padRows } from "../../utils/table";
 import { API_BASE_URL } from "../../api";
 
@@ -47,7 +49,7 @@ const SignupApproval = () => {
     try {
       const res = await axios.get(`${baseUrl}/api/approvals/pending/`);
       setPendingList(Array.isArray(res.data) ? res.data : res.data?.data || []);
-      setLastUpdated(new Date().toLocaleTimeString("ko-KR", { hour12: false }));
+      setLastUpdated(formatTimeKR());
     } catch (err) {
       console.error("가입 대기 목록 조회 실패:", err);
     }
@@ -57,28 +59,30 @@ const SignupApproval = () => {
   }, [fetchPending]);
 
   const handleApprove = async (memberId, name) => {
-    if (!window.confirm(`${name}(${memberId}) 님을 승인할까요?`)) return;
+    if (!(await appConfirm(`${name}(${memberId}) 님을 승인할까요?`))) return;
     setLoading(true);
     try {
       await axios.post(`${baseUrl}/api/approvals/approve/`, {
         member_id: memberId,
       });
       fetchPending();
-    } catch {
-      alert("승인에 실패했습니다.");
+    } catch (err) {
+      console.error("가입 승인 실패:", err);
+      await appAlert(err.response?.data?.error || "승인에 실패했습니다.");
     } finally {
       setLoading(false);
     }
   };
   const handleReject = async (memberId, name) => {
-    if (!window.confirm(`${name} 요청을 반려할까요? 신청 내용은 삭제됩니다.`)) return;
+    if (!(await appConfirm(`${name} 요청을 반려할까요? 신청 내용은 삭제됩니다.`))) return;
     try {
       await axios.post(`${baseUrl}/api/approvals/reject/`, {
         member_id: memberId,
       });
       fetchPending();
-    } catch {
-      alert("반려에 실패했습니다.");
+    } catch (err) {
+      console.error("가입 반려 실패:", err);
+      await appAlert(err.response?.data?.error || "반려에 실패했습니다.");
     }
   };
 

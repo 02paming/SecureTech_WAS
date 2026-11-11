@@ -1,12 +1,16 @@
+// 망 분리, MAC 검사, 캡티브 포털 인증 및 도메인 정책 판정을 가상으로 테스트하는 시뮬레이션 UI 컴포넌트
+
 import { useEffect, useRef, useState } from "react";
 import PageHeader from "../../components/PageHeader";
+import { appAlert } from "../../utils/appDialog";
+import { formatTimeKR } from "../../utils/formatTime";
 
 // 이 화면은 DB와 연결하지 않는다. 판정은 아래 속성과 화면에 등록한 테스트 주소로만 이루어진다
 const ADMIN_SERVER = "192.168.3.23";
 const STORAGE_KEY = "testLabAddresses";
 
 const TEST_KINDS = {
-  system_allow: { label: "시스템 기본 허용", result: "정상 통과", tone: "success", blocked: false, message: "시스템에 고정된 사내 주소입니다." },
+  system_allow: { label: "시스템 기본 허용", result: "정상 통과", tone: "success", blocked: false, message: "시스템에 기본으로 고정된 허용 주소입니다." },
   protected_allow: { label: "보호 허용", result: "정상 통과", tone: "success", blocked: false, message: "관리자가 보호로 지정한 주소입니다." },
   manual_allow: { label: "수동 허용", result: "정상 통과", tone: "success", blocked: false, message: "허용 목록에 등록된 주소입니다." },
   ai_safe: { label: "AI 안전", result: "정상 통과", tone: "success", blocked: false, message: "AI가 안전으로 판별한 주소입니다." },
@@ -88,7 +92,7 @@ export default function TestLab() {
     setTestAddresses((prev) => prev.filter((a) => a.address !== address));
 
   const addLog = (message, type = "info") => {
-    const time = new Date().toLocaleTimeString("ko-KR", { hour12: false });
+    const time = formatTimeKR();
     setVirtualLogs((prev) => [...prev, { time, message, type }]);
   };
 
@@ -141,14 +145,14 @@ export default function TestLab() {
     }
 
     if (isSpoofing) {
-      addLog(`MAC 변조 탐지. 접속 차단 및 Discord 경보`, "danger");
+      addLog(`MAC 스푸핑 탐지. 접속 차단 및 Discord·Slack 경보`, "danger");
       showSimulationResult(
         ip,
         domain,
         "blocked",
         "차단",
-        "접속 기록의 MAC 주소와 달라 차단하고 관리자에게 Discord로 경보합니다.",
-        "MAC 변조",
+        "접속 기록의 MAC 주소와 달라 차단하고 관리자에게 Discord와 Slack으로 경보합니다.",
+        "MAC 스푸핑",
       );
       return;
     }
@@ -192,7 +196,10 @@ export default function TestLab() {
 
   const handleNavigate = (e) => {
     e.preventDefault();
-    if (!simUrl.trim()) return alert("도메인을 입력하세요.");
+    if (!simUrl.trim()) {
+      appAlert("도메인을 입력하세요.");
+      return;
+    }
     const domain = cleanDomain(simUrl);
     const ip = activeIp.trim();
 
@@ -249,7 +256,7 @@ export default function TestLab() {
               <strong>망 구분:</strong> 사외망은 관제 대상이 아니며 관제 서버 접속은 차단
             </li>
             <li>
-              <strong>MAC 검사:</strong> 사내망에서 MAC이 변조되면 차단 및 Discord 경보
+              <strong>MAC 검사:</strong> 사내망에서 MAC 스푸핑이 탐지되면 차단 및 Discord·Slack 경보
             </li>
             <li>
               <strong>망분리:</strong> 사원망(192.168.2.x)의 관제 서버 접속 차단
@@ -356,7 +363,7 @@ export default function TestLab() {
                     checked={isSpoofing}
                     onChange={(e) => setIsSpoofing(e.target.checked)}
                   />
-                  MAC 변조
+                  MAC 스푸핑
                 </label>
               </form>
               <button
@@ -371,14 +378,14 @@ export default function TestLab() {
               <span className="form-label">도메인:</span>
               <input
                 type="text"
-                className="custom-input"
+                className="custom-input search-input"
                 value={simUrl}
                 onChange={(e) => setSimUrl(e.target.value)}
                 placeholder="왼쪽 테스트 주소를 누르거나 직접 입력"
               />
               <button
                 type="submit"
-                className="btn-action btn-primary btn-w-lg btn-form"
+                className="btn-action btn-primary btn-w-lg btn-form push-right"
               >
                 접속 시도
               </button>
@@ -428,7 +435,9 @@ export default function TestLab() {
                     <span className="anim-label">
                       목적지
                       <br />
-                      {cleanDomain(simUrl) || "-"}
+                      <span className="anim-domain" title={cleanDomain(simUrl) || "-"}>
+                        {cleanDomain(simUrl) || "-"}
+                      </span>
                     </span>
                   </div>
                 </div>
@@ -532,7 +541,7 @@ export default function TestLab() {
               </div>
               <div className="info-row is-compact">
                 <span className="info-label">상세 내용</span>
-                <span className="info-value">{reportData.message}</span>
+                <span className="info-value is-left">{reportData.message}</span>
               </div>
             </div>
             <div className="dialog-actions">

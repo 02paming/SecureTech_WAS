@@ -1,9 +1,11 @@
+// 라우팅, 인증 상태, 세션 하트비트, 반응형 네비게이션바 및 관리자 권한 제어를 총괄하는 메인 애플리케이션 컴포넌트
+
 import "@fontsource/jetbrains-mono/400.css";
 import "@fontsource/jetbrains-mono/700.css";
 import "@fontsource/pretendard/400.css";
 import "@fontsource/pretendard/600.css";
 import "@fontsource/pretendard/700.css";
-import { lazy, memo, Suspense, useEffect, useState } from "react";
+import { lazy, memo, Suspense, useEffect, useRef, useState } from "react";
 import {
   BrowserRouter,
   Link,
@@ -17,6 +19,7 @@ import {
 import "./App.css";
 import api from "./api";
 import BrandIcon from "./components/BrandIcon";
+import { appAlert, appConfirm, AppDialogHost } from "./utils/appDialog";
 
 const ADMIN_MENU = [
   { to: "/dashboard", label: "관제 대시보드" },
@@ -71,16 +74,29 @@ const NavigationBar = memo(function NavigationBar({
   const location = useLocation();
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const settingsRef = useRef(null);
+
+  useEffect(() => {
+    if (!isSettingsOpen) return;
+    const handleOutsideClick = (e) => {
+      if (settingsRef.current && !settingsRef.current.contains(e.target)) {
+        setIsSettingsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleOutsideClick);
+    return () => document.removeEventListener("mousedown", handleOutsideClick);
+  }, [isSettingsOpen]);
 
   if (["/login", "/admin-login", "/user-login"].includes(location.pathname))
     return null;
 
   const handleLogout = async () => {
-    if (!window.confirm("로그아웃 하시겠습니까?")) return;
+    if (!(await appConfirm("로그아웃 하시겠습니까?"))) return;
     try {
       if (user && (user.employee_id || user.emp_id))
         await api.post(`/api/auth/logout/`, {
           employee_id: user.employee_id || user.emp_id,
+          session_token: sessionStorage.getItem("sessionToken"),
         });
     } catch (err) {
       console.error("로그아웃 실패:", err);
@@ -88,8 +104,9 @@ const NavigationBar = memo(function NavigationBar({
       localStorage.removeItem("user");
       sessionStorage.removeItem("user");
       sessionStorage.removeItem("adminPortalMode");
+      sessionStorage.removeItem("sessionToken");
       setUser(null);
-      alert("로그아웃되었습니다.");
+      await appAlert("로그아웃되었습니다.");
       navigate(isAdminPortal ? "/admin-login" : "/", {
         replace: true,
       });
@@ -160,7 +177,7 @@ const NavigationBar = memo(function NavigationBar({
         </nav>
 
         <div className="nav-right">
-          <div className="settings-wrap">
+          <div className="settings-wrap" ref={settingsRef}>
             <button
               type="button"
               className="btn-action btn-neutral btn-w-md btn-header"
@@ -384,6 +401,35 @@ function App() {
     return () => clearTimeout(timer);
   }, []);
 
+  // 중복 로그인 방지: 접속 중에는 주기적으로 하트비트를 보내 세션을 유지하고,
+  // 다른 곳에서 같은 아이디로 로그인해 세션을 가져가면 자동으로 로그아웃한다.
+  useEffect(() => {
+    const empId = user?.employee_id || user?.emp_id;
+    const sessionToken = sessionStorage.getItem("sessionToken");
+    if (!empId || !sessionToken) return;
+
+    const beat = async () => {
+      try {
+        await api.post(`/api/auth/heartbeat/`, {
+          employee_id: empId,
+          session_token: sessionToken,
+        });
+      } catch (err) {
+        if (err.response?.status === 409) {
+          sessionStorage.removeItem("user");
+          sessionStorage.removeItem("adminPortalMode");
+          sessionStorage.removeItem("sessionToken");
+          setUser(null);
+          await appAlert("다른 곳에서 로그인되어 현재 세션이 종료되었습니다.");
+        }
+        // 그 외 네트워크 오류는 무시하고 다음 주기에 다시 시도한다
+      }
+    };
+
+    const interval = setInterval(beat, 60000);
+    return () => clearInterval(interval);
+  }, [user]);
+
   useEffect(() => {
     document.body.classList.toggle("dark-mode", isDarkMode);
     localStorage.setItem("theme", isDarkMode ? "dark" : "light");
@@ -398,6 +444,12 @@ function App() {
   const canAccessAdmin = Boolean(
     DEV_MODE ||
     (isInternalAdminNetwork && user && checkIsManager(user) && isAdminPortal),
+  );
+  // DEV_MODE는 화면 열람 편의용이라 /admin-login에는 적용하면 안 된다.
+  // 여기에 포함시키면 실제 로그인 여부와 무관하게 로그인 폼이 뜨지 않고
+  // 곧바로 /dashboard로 튕겨서 관리자 로그인 자체를 테스트할 수 없게 된다.
+  const isAlreadyLoggedInAsAdmin = Boolean(
+    isInternalAdminNetwork && user && checkIsManager(user) && isAdminPortal,
   );
 
   return (
@@ -446,7 +498,7 @@ function App() {
                 element={
                   !isInternalAdminNetwork ? (
                     <Navigate to="/user-login" replace />
-                  ) : canAccessAdmin ? (
+                  ) : isAlreadyLoggedInAsAdmin ? (
                     <Navigate to="/dashboard" replace />
                   ) : (
                     <Login setUser={setUser} isAdminMode={true} />
@@ -558,6 +610,7 @@ function App() {
           </Suspense>
         </main>
       </div>
+      <AppDialogHost />
     </BrowserRouter>
   );
 }
