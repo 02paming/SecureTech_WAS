@@ -55,9 +55,7 @@ const checkIsManager = (u) => {
   return (
     u.is_manager === true ||
     String(u.is_manager) === "1" ||
-    String(u.is_manager).toLowerCase() === "true" ||
-    u.employee_id === "admin" ||
-    u.emp_id === "admin"
+    String(u.is_manager).toLowerCase() === "true"
   );
 };
 
