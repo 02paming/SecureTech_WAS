@@ -1,14 +1,14 @@
-#  SecureTech WAS — 관리자 웹 · 백엔드
+# SecureTech — 관리자 웹 · 백엔드 (SecureTech_WAS)
 
 ![Python](https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white)
 ![Django](https://img.shields.io/badge/Django-092E20?style=for-the-badge&logo=django&logoColor=white)
 ![React](https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)
 ![MariaDB](https://img.shields.io/badge/MariaDB-003545?style=for-the-badge&logo=mariadb&logoColor=white)
 
-> **L3 스위치 포트 미러링으로 사내망 트래픽 사본을 분석하고, Raw Socket 으로 TCP RST·HTTP 302 를 주입해 차단하는 Out-of-Path 사내망 접근 통제 시스템** — 그중 **관리자 웹(React)·관리 API(Django)·엔진 동기화 백엔드(8080)** 를 담은 저장소입니다.
+> **L3 스위치 포트 미러링으로 사내망 트래픽 사본을 분석하고, Raw Socket 으로 TCP RST·HTTP 302 를 주입해 차단하는 Out-of-Path 사내망 접근 통제 시스템** **SecureTech** 중 **관리자 웹(React)·관리 API(Django)·엔진 동기화 백엔드(8080)** 를 담은 저장소입니다.
 
 - 4인 팀 프로젝트 · 2026.10.01 ~ 2026.11.20
-- 패킷 제어 엔진(C)·AI 판정 서버·캡티브 포털 프록시는 [Captive](https://github.com/02paming/Captive) 저장소에 있습니다.
+- C 패킷 제어 엔진·AI 판정 서버·캡티브 포털 프록시는 [Captive](https://github.com/02paming/Captive) 저장소에 있습니다.
 
 🔗 **[![Notion](https://img.shields.io/badge/Notion_개발_일지_보러가기-000000?style=for-the-badge&logo=notion&logoColor=white)](https://app.notion.com/p/206597615cf6415c8859374a152ad97c)**
 
@@ -24,7 +24,7 @@
 | 관리 API (`api/`, Django + DRF, Gunicorn 4 workers) | 8000 | 관리자 인증·사원 관리·정책 변경·로그 조회·대시보드 집계 | 이 저장소 |
 | 엔진 동기화 백엔드 (`pcap_checker.py`) | 8080 | 사원 인증 검증, 접속·차단 로그 저장, 정책·도메인·AI 설정을 엔진 쪽 프록시로 전달 | 이 저장소 |
 | MAC 불일치 알림 (`manage.py watch_mac_alerts`) | — | IP 스푸핑 의심 로그 감시·알림 | 이 저장소 |
-| 패킷 제어 엔진 · AI 판정 서버 · 캡티브 포털 프록시 | 5000 등 | 트래픽 분석·차단, 악성 도메인 판정 | [Captive](https://github.com/02paming/Captive) |
+| C 패킷 제어 엔진 · AI 판정 서버 · 캡티브 포털 프록시 | 5000 등 | 트래픽 분석·차단, 악성 도메인 판정 | [Captive](https://github.com/02paming/Captive) |
 | MariaDB | 3306 | `internal_db` | DB망 |
 
 망은 클라이언트망(192.168.2.x)·분석망(192.168.3.x)·DB망(192.168.4.x)으로 **서브넷을 분리**했습니다. 엔진 쪽은 DB 를 직접 다루지 않고, **DB 접근은 이 저장소의 백엔드에만** 있습니다.
