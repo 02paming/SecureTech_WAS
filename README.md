@@ -9,7 +9,8 @@
 
 - 4인 팀 프로젝트 · 2026.10.01 ~ 2026.11.20
 - 패킷 제어 엔진(C)·AI 판정 서버·캡티브 포털 프록시는 [Captive](https://github.com/02paming/Captive) 저장소에 있습니다.
-- 개발 일지: [Notion](https://app.notion.com/p/206597615cf6415c8859374a152ad97c)
+
+🔗 **[![Notion](https://img.shields.io/badge/Notion_개발_일지_보러가기-000000?style=for-the-badge&logo=notion&logoColor=white)](https://app.notion.com/p/206597615cf6415c8859374a152ad97c)**
 
 ---
 
