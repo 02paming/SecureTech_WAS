@@ -8,7 +8,8 @@ module.exports = {
       cwd: "./",
       // 파이썬 실행 파일을 직접 지정하고, 관리자 명령어로 Gunicorn을 구동합니다.
       script: "venv/bin/python",
-      args: "-m gunicorn config.wsgi:application --workers 4 --bind 0.0.0.0:8000",
+      // nginx(80/443)만 거쳐서 들어오도록 loopback에만 바인드한다. 외부에서 8000번 직접 접근 차단.
+      args: "-m gunicorn config.wsgi:application --workers 4 --bind 127.0.0.1:8000",
       interpreter: "none",
       env: {
         DJANGO_SETTINGS_MODULE: "config.settings",

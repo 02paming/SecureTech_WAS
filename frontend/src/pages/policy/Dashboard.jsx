@@ -308,7 +308,7 @@ const Dashboard = () => {
               </label>
               <label
                 className={`check-label text-warning ${showAi ? "" : "is-off"}`}
-                title="AI가 블랙/화이트 의심으로 분류한 접속. 통과·차단 여부와 무관하게 별도 집계되며 위 두 항목과 겹치지 않음"
+                title="AI가 블랙/화이트 추정으로 분류한 접속. 통과·차단 여부와 무관하게 별도 집계되며 위 두 항목과 겹치지 않음"
               >
                 <input
                   type="checkbox"
@@ -446,6 +446,7 @@ const Dashboard = () => {
                     labelFormatter={(l) =>
                       l ? (l.split(" ").length > 1 ? l.split(" ")[1] : l) : ""
                     }
+                    formatter={(value, name) => [Number(value).toLocaleString(), name]}
                   />
                   {showNormal && (
                     <Area
@@ -632,16 +633,6 @@ const Dashboard = () => {
                           />
                         ))}
                       </Pie>
-                      <RechartsTooltip
-                        formatter={(v) => [`${v}건`, "차단"]}
-                        contentStyle={{
-                          background: "var(--bg-card)",
-                          borderRadius: "8px",
-                          border: "1px solid var(--border-color)",
-                          color: "var(--text-main)",
-                          fontSize: "13px",
-                        }}
-                      />
                       <Legend
                         verticalAlign="bottom"
                         height={80}
@@ -665,7 +656,7 @@ const Dashboard = () => {
                                   {item.name}
                                 </span>
                                 <strong style={{ color: COLORS[i % COLORS.length] }}>
-                                  {item.value}건
+                                  {item.value.toLocaleString()}건
                                 </strong>
                               </li>
                             ))}
@@ -682,9 +673,10 @@ const Dashboard = () => {
 
             <div className="chart-split-item">
               <div className="chart-split-header">
-                <span className="chart-split-title">
-                  수동 정책 판정 (총 {manualTotal}건)
-                </span>
+                <div className="chart-split-title-group">
+                  <span className="chart-split-title">수동 정책 판정</span>
+                  <span className="chart-split-count">총 {manualTotal.toLocaleString()}건</span>
+                </div>
                 <button
                   type="button"
                   onClick={() => navigate("/policies")}
@@ -712,16 +704,6 @@ const Dashboard = () => {
                           <Cell key={`main-cell-${i}`} fill={item.color} />
                         ))}
                       </Pie>
-                      <RechartsTooltip
-                        formatter={(v) => [`${v}건`, "판정"]}
-                        contentStyle={{
-                          background: "var(--bg-card)",
-                          borderRadius: "8px",
-                          border: "1px solid var(--border-color)",
-                          color: "var(--text-main)",
-                          fontSize: "13px",
-                        }}
-                      />
                       <Legend
                         verticalAlign="bottom"
                         height={80}
@@ -737,7 +719,7 @@ const Dashboard = () => {
                                   {item.name}
                                 </span>
                                 <strong style={{ color: item.color }}>
-                                  {item.value}건
+                                  {item.value.toLocaleString()}건
                                 </strong>
                               </li>
                             ))}
@@ -754,9 +736,10 @@ const Dashboard = () => {
 
             <div className="chart-split-item">
               <div className="chart-split-header">
-                <span className="chart-split-title">
-                  AI 판정 (총 {aiTotal}건)
-                </span>
+                <div className="chart-split-title-group">
+                  <span className="chart-split-title">AI 판정</span>
+                  <span className="chart-split-count">총 {aiTotal.toLocaleString()}건</span>
+                </div>
                 <button
                   type="button"
                   onClick={() => navigate("/ai-policies")}
@@ -784,16 +767,6 @@ const Dashboard = () => {
                           <Cell key={`ai-cell-${i}`} fill={item.color} />
                         ))}
                       </Pie>
-                      <RechartsTooltip
-                        formatter={(v) => [`${v}건`, "판정"]}
-                        contentStyle={{
-                          background: "var(--bg-card)",
-                          borderRadius: "8px",
-                          border: "1px solid var(--border-color)",
-                          color: "var(--text-main)",
-                          fontSize: "13px",
-                        }}
-                      />
                       <Legend
                         verticalAlign="bottom"
                         height={80}
@@ -809,7 +782,7 @@ const Dashboard = () => {
                                   {item.name}
                                 </span>
                                 <strong style={{ color: item.color }}>
-                                  {item.value}건
+                                  {item.value.toLocaleString()}건
                                 </strong>
                               </li>
                             ))}

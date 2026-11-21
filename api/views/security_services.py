@@ -29,8 +29,8 @@ def generate_advisor_message(score, pass_cnt, block_cnt, suspect_cnt, mismatch_c
     total = pass_cnt + block_cnt
     if total > 0:
         msg.append(
-            f"최근 {SCORE_WINDOW_DAYS}일 활동 {total}건: 통과 {pass_cnt}건, 차단 {block_cnt}건 "
+            f"최근 {SCORE_WINDOW_DAYS}일 활동 {total:,}건: 통과 {pass_cnt:,}건, 차단 {block_cnt:,}건 "
             f"(준수율 {round(pass_cnt / total * 100)}%)"
         )
-    msg.append(f"의심 통과 {suspect_cnt}건, MAC 스푸핑 {mismatch_cnt}건")
+    msg.append(f"의심 통과 {suspect_cnt:,}건, MAC 스푸핑 {mismatch_cnt:,}건")
     return "\n".join(msg)

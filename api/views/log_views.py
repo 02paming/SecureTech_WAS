@@ -14,6 +14,7 @@ from ..models import (
     Employees,
     OnlineIpMacMismatchLog,
     OnlineListLog,
+    UnauthThreatLog,
     WebAccessLog,
     WhitelistAddr,
 )
@@ -186,7 +187,9 @@ def get_domain_detail(request, domain):
             .order_by("-access_time")
         ):
             judgement_label, access_status = judge_access(w.ai_status_code, w.access_flag)
-            counts[access_status] += 1
+            if access_status in counts:
+                counts[access_status] += 1
+
             if latest_judgement_label is None:
                 latest_judgement_label = judgement_label
             if ai_score is None and w.ai_score is not None and w.ai_score >= 0:
@@ -222,29 +225,49 @@ def get_domain_detail(request, domain):
             if access_status == "차단":
                 row["blocked_count"] += 1
 
+        # AI가 막 탐지한 도메인은 아직 접속 로그(WebAccessLog)가 한 건도 없을 수 있다.
+        # 그 경우 위 반복문에서 ai_score를 못 구하므로, 정책 테이블(AI/DOUBT로 등록된 레코드) 자체의
+        # ai_score를 대신 보여준다. 그래야 로그가 쌓이기 전에도 "AI 위협 점수"가 비어 보이지 않는다.
+        if ai_score is None:
+            policy_obj = WhitelistAddr.objects.filter(
+                whitelist_domain=target, deleted_at__isnull=True
+            ).first() or BlacklistAddr.objects.filter(
+                blacklist_domain=target, deleted_at__isnull=True
+            ).first()
+            if policy_obj and policy_obj.ai_score is not None and policy_obj.ai_score >= 0:
+                ai_score = policy_obj.ai_score
+
         manual_info = None
 
-        target_obj = WhitelistAddr.objects.filter(
-            whitelist_domain=target, deleted_at__isnull=True, source="USER"
-        ).first()
+        # deleted_at 유무와 무관하게 조회한다. 삭제(해제)된 도메인도 등록 당시의
+        # 수동 등록 정보(등록자·사유)는 계속 보여줘야 하기 때문이다.
+        target_obj = (
+            WhitelistAddr.objects.filter(whitelist_domain=target, source="USER")
+            .order_by("-pk")
+            .first()
+        )
 
         if not target_obj:
-            target_obj = BlacklistAddr.objects.filter(
-                blacklist_domain=target, deleted_at__isnull=True, source="USER"
-            ).first()
+            target_obj = (
+                BlacklistAddr.objects.filter(blacklist_domain=target, source="USER")
+                .order_by("-pk")
+                .first()
+            )
 
         if target_obj:
-            emp_name = "-"
+            emp_id_text, emp_name = "-", "-"
 
             emp_id_val = getattr(target_obj, "added_by_emp_id", None)
 
             if emp_id_val:
                 emp_obj = Employees.objects.filter(employee_number=emp_id_val).first()
-                if emp_obj and getattr(emp_obj, "name", None):
-                    emp_name = emp_obj.name
+                if emp_obj:
+                    emp_id_text = emp_obj.employee_id
+                    emp_name = emp_obj.name or "-"
 
             manual_info = {
-                "added_by": emp_name,
+                "added_by_id": emp_id_text,
+                "added_by_name": emp_name,
                 "added_at": target_obj.added_at.strftime("%Y-%m-%d %H:%M:%S")
                 if getattr(target_obj, "added_at", None)
                 else "-",
@@ -294,6 +317,12 @@ def _web_log_to_dict(w):
         else None
     )
     policy, category = judge_access(w.ai_status_code, w.access_flag)
+    if w.access_flag == "DGA의심":
+        source = "DNS"
+    elif policy.startswith("수동"):
+        source = "수동"
+    else:
+        source = "AI"
     return {
         "log_id": w.web_access_log_id,
         "type": w.access_flag,
@@ -305,7 +334,7 @@ def _web_log_to_dict(w):
         else "-",
         "domain": getattr(w, "target_url", "-"),
         "policy": policy,
-        "source": "수동" if policy.startswith("수동") else "AI",
+        "source": source,
         "ai_score": w.ai_score,
         "ai_level": None,
         "time": w.access_time.strftime("%Y-%m-%d %H:%M:%S") if w.access_time else "-",
@@ -339,7 +368,8 @@ def _mac_log_to_dict(m):
 def get_integrated_logs(request):
     try:
         page = max(1, int(request.GET.get("page", 1)))
-        limit = int(request.GET.get("limit", 10))
+        max_limit = 100000 if request.GET.get("export") == "1" else 50
+        limit = min(max(int(request.GET.get("limit", 10)), 1), max_limit)
         search = request.GET.get("search", "").strip()
         status_filter = request.GET.get("statusFilter", "all")
         sub_filter = request.GET.get("subFilter", "all")
@@ -347,108 +377,79 @@ def get_integrated_logs(request):
         end_date = request.GET.get("endDate", "")
 
         base_web_q = Q()
-        base_mac_q = Q()
 
         if start_date:
             base_web_q &= Q(access_time__gte=f"{start_date} 00:00:00")
-            base_mac_q &= Q(insert_time__gte=f"{start_date} 00:00:00")
         if end_date:
             base_web_q &= Q(access_time__lte=f"{end_date} 23:59:59")
-            base_mac_q &= Q(insert_time__lte=f"{end_date} 23:59:59")
 
         if search:
+            ip_search = str(extract_ip_suffix(search)) if "." in search else search
             base_web_q &= (
                 Q(online_list_log__employee__name__icontains=search)
                 | Q(online_list_log__employee__employee_id__icontains=search)
-                | Q(online_list_log__online_ip__icontains=search)
+                | Q(online_list_log__online_ip__icontains=ip_search)
                 | Q(target_url__icontains=search)
-            )
-            base_mac_q &= (
-                Q(online_list_log__employee__name__icontains=search)
-                | Q(online_list_log__employee__employee_id__icontains=search)
-                | Q(online_list_log__online_ip__icontains=search)
-                | Q(mismatch_mac_addr__icontains=search)
             )
 
         web_base_qs = WebAccessLog.objects.filter(base_web_q)
-        mac_base_qs = OnlineIpMacMismatchLog.objects.filter(base_mac_q).select_related(
-            "online_list_log__employee"
-        )
-        mac_base_list = [
-            m
-            for m in mac_base_qs
-            if not cache.get(MAC_MISMATCH_RELEASED_KEY.format(m.pk))
-        ]
 
         stats = {
-            "total": web_base_qs.count() + len(mac_base_list),
+            "total": web_base_qs.count(),
             "allowed": web_base_qs.filter(access_category_q("정상")).count(),
-            "blocked": web_base_qs.filter(access_category_q("차단")).count()
-            + len(mac_base_list),
+            "blocked": web_base_qs.filter(access_category_q("차단")).count(),
             "ai_suspicious": web_base_qs.filter(access_category_q("의심")).count(),
             "suspicious_blocked": web_base_qs.filter(
                 access_category_q("의심"), access_flag="차단"
             ).count(),
+            "dga": web_base_qs.filter(access_category_q("DGA의심")).count(),
         }
 
-        status_category = {"허용": "정상", "차단": "차단", "의심": "의심"}.get(
-            status_filter
-        )
+        status_category = {
+            "허용": "정상",
+            "차단": "차단",
+            "의심": "의심",
+            "DGA의심": "DGA의심",
+        }.get(status_filter)
+
         web_q = base_web_q
         if status_category:
             web_q &= access_category_q(status_category)
 
-        include_mac = status_filter in ("all", "차단")
         if sub_filter != "all":
             if status_filter == "의심":
-                code = {"화이트 의심": 5, "블랙 의심": 4}.get(sub_filter)
+                code = {"화이트 추정": 5, "블랙 의심": 4}.get(sub_filter)
                 web_q &= Q(ai_status_code=code) if code else Q(pk__isnull=True)
-                include_mac = False
-            elif sub_filter == "MAC 스푸핑":
-                web_q &= Q(pk__isnull=True)
+            # elif sub_filter in ("미존재 도메인", "미존재 도메인 (DGA)"):
+            #     web_q &= Q(access_flag="DGA의심")
             elif sub_filter == "AI":
-                web_q &= Q(ai_status_code__in=AI_CODES)
-                include_mac = False
+                web_q &= Q(ai_status_code__in=AI_CODES) & ~Q(
+                    access_flag__in=("DGA의심", "미지")
+                )
             elif sub_filter == "수동":
                 web_q &= (
                     Q(ai_status_code__in=MANUAL_CODES)
                     | Q(ai_status_code__isnull=True)
                     | ~Q(ai_status_code__in=list(ACCESS_JUDGEMENTS))
-                )
-                include_mac = False
+                ) & ~Q(access_flag__in=("DGA의심", "미지"))
 
         web_filtered_qs = (
             WebAccessLog.objects.select_related("online_list_log__employee")
             .filter(web_q)
-            .order_by("-access_time")
+            .order_by("-access_time", "-web_access_log_id")
         )
-        web_count = web_filtered_qs.count()
-
-        mac_list = []
-        if include_mac:
-            mac_list = [
-                m
-                for m in mac_base_qs
-                if not cache.get(MAC_MISMATCH_RELEASED_KEY.format(m.pk))
-            ]
-        total_count = web_count + len(mac_list)
+        total_count = web_filtered_qs.count()
         total_pages = max(1, (total_count + limit - 1) // limit)
         page = min(page, total_pages)
         offset = (page - 1) * limit
 
-        web_slice = list(web_filtered_qs[: offset + limit]) if web_count else []
-        combined = [_web_log_to_dict(w) for w in web_slice] + [
-            _mac_log_to_dict(m) for m in mac_list
+        page_logs = [
+            _web_log_to_dict(w) for w in web_filtered_qs[offset : offset + limit]
         ]
-        combined.sort(
-            key=lambda x: x["raw_time"].timestamp() if x["raw_time"] else 0,
-            reverse=True,
-        )
-        page_logs = combined[offset : offset + limit]
 
         threshold_history = load_history()
         for row in page_logs:
-            if not row["is_mismatch"] and row["source"] != "수동":
+            if row["source"] == "AI":
                 row["ai_level"] = level_at(row["raw_time"], threshold_history) or "-"
 
         ai_data = []
@@ -508,6 +509,88 @@ def release_mac_mismatch(request):
         )
     except Exception as e:
         logger.error("MAC 스푸핑 해제 처리 실패: %s", e)
+        return Response(
+            {"status": "error", "message": SERVER_ERROR_MESSAGE}, status=500
+        )
+
+# =====================================================================
+# [신규 추가] 미인증 단말 위협 로그 (UnauthThreatLog) 전용 API
+# =====================================================================
+
+def _unauth_threat_to_dict(t):
+    """위협 로그 모델 데이터를 프론트엔드 표 규격에 맞게 변환"""
+    time_str = t.detected_at.strftime("%Y-%m-%d %H:%M:%S") if t.detected_at else "-"
+    return {
+        "id": t.id,
+        "time": time_str,
+        "detected_at": time_str,
+        "raw_time": t.detected_at,
+        "threat_type": t.threat_type,
+        "ip_address": t.ip_address,
+        "mac_address": t.mac_address,
+        "target_info": t.target_info,
+        "action_taken": t.action_taken,
+        "is_threat": True,
+    }
+
+@api_view(["GET"])
+def get_unauth_threat_logs(request):
+    try:
+        page = max(1, int(request.GET.get("page", 1)))
+        max_limit = 100000 if request.GET.get("export") == "1" else 50
+        limit = min(max(int(request.GET.get("limit", 10)), 1), max_limit)
+        search = request.GET.get("search", "").strip()
+        status_filter = request.GET.get("statusFilter", "all")
+        start_date = request.GET.get("startDate", "")
+        end_date = request.GET.get("endDate", "")
+
+        base_q = Q()
+
+        if start_date:
+            base_q &= Q(detected_at__gte=f"{start_date} 00:00:00")
+        if end_date:
+            base_q &= Q(detected_at__lte=f"{end_date} 23:59:59")
+        if search:
+            base_q &= (
+                Q(ip_address__icontains=search)
+                | Q(mac_address__icontains=search)
+                | Q(threat_type__icontains=search)
+                | Q(target_info__icontains=search)
+            )
+
+        base_qs = UnauthThreatLog.objects.filter(base_q)
+        total_count = base_qs.count()
+        dga_count = base_qs.filter(threat_type="DGA_NXDOMAIN").count()
+        mac_count = base_qs.filter(threat_type="MAC_SPOOFING").count()
+
+        filtered_qs = base_qs.order_by("-detected_at", "-id")
+        if status_filter in ("DGA_NXDOMAIN", "MAC_SPOOFING"):
+            filtered_qs = filtered_qs.filter(threat_type=status_filter)
+
+        filtered_count = filtered_qs.count()
+        total_pages = max(1, (filtered_count + limit - 1) // limit)
+        page = min(page, total_pages)
+        offset = (page - 1) * limit
+
+        page_logs = [
+            _unauth_threat_to_dict(t) for t in filtered_qs[offset : offset + limit]
+        ]
+
+        return Response(
+            {
+                "status": "success",
+                "stats": {
+                    "total": total_count,
+                    "dga_count": dga_count,
+                    "mac_count": mac_count,
+                },
+                "total_pages": total_pages,
+                "current_page": page,
+                "general_logs": page_logs,
+            }
+        )
+    except Exception as e:
+        logger.error(f"미인증 위협 로그 조회 오류: {e}")
         return Response(
             {"status": "error", "message": SERVER_ERROR_MESSAGE}, status=500
         )

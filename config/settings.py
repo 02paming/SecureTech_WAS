@@ -16,13 +16,13 @@ SECRET_KEY = os.environ["DJANGO_SECRET_KEY"]
 DEBUG = os.environ.get("DEBUG", "False") == "True"
 
 ALLOWED_HOSTS = [
-    "192.168.1.23", 
+    "192.168.1.23",
+    "192.168.3.23",
     "localhost",
     "127.0.0.1",
     "securetechkg.digital",
     "api.securetechkg.digital",
     "portal.securetechkg.digital",
-    "*",
 ]
 
 INSTALLED_APPS = [
@@ -101,18 +101,25 @@ USE_TZ = False
 STATIC_URL = "static/"
 STATICFILES_DIRS = [os.path.join(FRONTEND_DIST_DIR, "assets")]
 
-CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOW_ALL_ORIGINS = False
 CORS_ALLOW_CREDENTIALS = True
 
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
+    "http://localhost:81",
+    "http://127.0.0.1:81",
     "http://192.168.3.23",
+    "http://192.168.3.23:80",
     "http://192.168.3.23:8000",
+    "http://192.168.3.23:5173",
+    "http://192.168.1.23",
+    "http://192.168.1.23:80",
+    "http://192.168.1.23:8000",
+    "http://192.168.1.23:5173",
     "https://securetechkg.digital",
     "https://api.securetechkg.digital",
     "https://portal.securetechkg.digital",
-    "http://192.168.3.23:80",
 ]
 
 CACHES = {

@@ -8,7 +8,7 @@ import PaginationBar from "../../components/PaginationBar";
 import SecurityDetailDialog from "../../components/SecurityDetailDialog";
 import { appAlert, appConfirm } from "../../utils/appDialog";
 import { formatTimeKR } from "../../utils/formatTime";
-import { padRows, useResetPage } from "../../utils/table";
+import { padRows, usePagination, useResetPage } from "../../utils/table";
 
 const EmployeeAuth = () => {
   const [onlineUsers, setOnlineUsers] = useState([]);
@@ -21,8 +21,7 @@ const EmployeeAuth = () => {
   const [sortOrder, setSortOrder] = useState("asc");
   const [loginTimeSortOrder, setLoginTimeSortOrder] = useState("desc");
   const [activeSortField, setActiveSortField] = useState("login_time");
-  const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 10;
+  const { page: currentPage, setPage: setCurrentPage, perPage: itemsPerPage, changePerPage } = usePagination(10);
   const baseUrl = API_BASE_URL;
 
   const fetchData = useCallback(async () => {
@@ -225,6 +224,8 @@ const EmployeeAuth = () => {
           page={currentPage}
           totalPages={totalPages}
           onPageChange={setCurrentPage}
+          pageSize={itemsPerPage}
+          onPageSizeChange={changePerPage}
         />
       </div>
 

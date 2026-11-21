@@ -1,6 +1,5 @@
 # SecureTech 백엔드의 모든 API 엔드포인트 URL 라우팅 경로를 정의한 설정 파일
 
-from django.contrib import admin
 from django.urls import path
 
 from api.views import (
@@ -13,7 +12,6 @@ from api.views import (
 )
 
 urlpatterns = [
-    path("admin/", admin.site.urls),
     path("api/auth/signup/", auth_views.apply_signup, name="apply_signup"),
     path(
         "api/auth/check-duplicate/", auth_views.check_duplicate, name="check_duplicate"
@@ -70,6 +68,12 @@ urlpatterns = [
     path("api/policies/blocklist/", policy_views.get_blocklist, name="get_blocklist"),
     path("api/policies/add/", policy_views.add_policy, name="add_policy"),
     path("api/policies/delete/", policy_views.delete_policy, name="delete_policy"),
+    path(
+        "api/policies/blocklist/deleted/",
+        policy_views.get_deleted_blocklist,
+        name="get_deleted_blocklist",
+    ),
+    path("api/policies/restore/", policy_views.restore_policy, name="restore_policy"),
     path("api/policies/whitelist/", policy_views.get_whitelist, name="get_whitelist"),
     path(
         "api/policies/whitelist/add/", policy_views.add_whitelist, name="add_whitelist"
@@ -78,6 +82,16 @@ urlpatterns = [
         "api/policies/whitelist/delete/",
         policy_views.delete_whitelist,
         name="delete_whitelist",
+    ),
+    path(
+        "api/policies/whitelist/deleted/",
+        policy_views.get_deleted_whitelist,
+        name="get_deleted_whitelist",
+    ),
+    path(
+        "api/policies/whitelist/restore/",
+        policy_views.restore_whitelist,
+        name="restore_whitelist",
     ),
     path(
         "api/policies/whitelist/upgrade/",
@@ -164,5 +178,10 @@ urlpatterns = [
         "api/policies/ai/activate/",
         dashboard_views.activate_ai_model,
         name="activate_ai_model",
+    ),
+    path(
+        "api/dashboard/unauth-threat-logs/",
+        log_views.get_unauth_threat_logs,
+        name="get_unauth_threat_logs",
     ),
 ]

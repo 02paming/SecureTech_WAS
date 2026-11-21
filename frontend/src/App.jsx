@@ -21,6 +21,9 @@ import api from "./api";
 import BrandIcon from "./components/BrandIcon";
 import { appAlert, appConfirm, AppDialogHost } from "./utils/appDialog";
 
+// 세션 유효성을 재확인하는 주기 (다른 곳에서 로그인되어 끊겼는지 등)
+const SESSION_HEARTBEAT_MS = 60000;
+
 const ADMIN_MENU = [
   { to: "/dashboard", label: "관제 대시보드" },
   { to: "/log-analysis", label: "로그 분석실" },
@@ -48,8 +51,6 @@ const AiModelMetrics = lazy(() => import("./pages/policy/AiModelMetrics"));
 const LogAnalysis = lazy(() => import("./pages/policy/LogAnalysis"));
 const TestLab = lazy(() => import("./pages/policy/TestLab"));
 
-const DEV_MODE = true;
-
 const checkIsManager = (u) => {
   if (!u) return false;
   return (
@@ -73,6 +74,12 @@ const NavigationBar = memo(function NavigationBar({
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const settingsRef = useRef(null);
+  // 관리자망(192.168.3.x)에서만 로그인 버튼도 관리자 로그인으로 보낸다. 공개 도메인의
+  // 일반 방문자는 대부분 일반 사원이라 기본은 사원 로그인으로 둔다(관리자 계정으로 로그인해도
+  // Login.jsx에서 is_manager 여부로 관리자 모드를 판단하므로 메뉴는 정상적으로 보인다).
+  const loginRoute = window.location.hostname.includes("192.168.3.")
+    ? "/admin-login"
+    : "/user-login";
 
   useEffect(() => {
     if (!isSettingsOpen) return;
@@ -111,10 +118,7 @@ const NavigationBar = memo(function NavigationBar({
     }
   };
 
-  const showAdminMenu = Boolean(
-    DEV_MODE ||
-    (user && checkIsManager(user) && isAdminPortal),
-  );
+  const showAdminMenu = Boolean(user && checkIsManager(user) && isAdminPortal);
 
   return (
     <div className="navbar">
@@ -241,7 +245,7 @@ const NavigationBar = memo(function NavigationBar({
             ) : (
               <>
                 <Link
-                  to="/user-login"
+                  to={loginRoute}
                   className="btn-action btn-neutral btn-w-md btn-header"
                 >
                   로그인
@@ -272,20 +276,7 @@ const NavigationBar = memo(function NavigationBar({
           >
             홈
           </Link>
-          {showAdminMenu && (
-            <>
-              {ADMIN_MENU.map((m) => (
-                <Link
-                  key={m.to}
-                  to={m.to}
-                  className="mobile-nav-link"
-                  onClick={() => setIsMobileMenuOpen(false)}
-                >
-                  {m.label}
-                </Link>
-              ))}
-            </>
-          )}
+          {/* 모바일은 기기 특성상 관리자 메뉴를 두지 않고 일반 홈페이지와 동일하게 보여준다 */}
           {user && (
             <Link
               to="/mypage"
@@ -323,7 +314,7 @@ const NavigationBar = memo(function NavigationBar({
             ) : (
               <>
                 <Link
-                  to="/user-login"
+                  to={loginRoute}
                   className="btn-action btn-neutral btn-form"
                   onClick={() => setIsMobileMenuOpen(false)}
                 >
@@ -366,7 +357,13 @@ function App() {
   const toggleTheme = (forceDark) => setIsDarkMode(forceDark);
 
   const currentHost = window.location.hostname;
-  const isInternalAdminNetwork = DEV_MODE || currentHost.includes("192.168.3.");
+  // 192.168.3.x(관리자망)와 공개 도메인(securetechkg.digital)에서는 관리자 로그인이 가능하고,
+  // 그 외(192.168.1.23 등 다른 IP)는 전부 일반 홈페이지로 간다. 공개 도메인의 일반 방문자는
+  // 평소처럼 홈을 보고, 관리자 계정으로 로그인했을 때만 관리자 화면에 접근할 수 있다.
+  const isInternalAdminNetwork =
+    currentHost.includes("192.168.3.") ||
+    currentHost === "localhost" ||
+    currentHost.includes("securetechkg.digital");
   const fallbackRoute = isInternalAdminNetwork ? "/admin-login" : "/user-login";
 
   useEffect(() => {
@@ -424,7 +421,10 @@ function App() {
       }
     };
 
-    const interval = setInterval(beat, 60000);
+    // 탭을 닫았다 다시 열었을 때(브라우저 세션 복원 등) sessionStorage만 믿고
+    // "로그인 상태"로 잘못 보여주지 않도록, 60초를 기다리지 않고 화면이 뜨자마자 한 번 확인한다.
+    beat();
+    const interval = setInterval(beat, SESSION_HEARTBEAT_MS);
     return () => clearInterval(interval);
   }, [user]);
 
@@ -439,16 +439,10 @@ function App() {
 
   if (!authLoaded) return null;
 
-  const canAccessAdmin = Boolean(
-    DEV_MODE ||
-    (isInternalAdminNetwork && user && checkIsManager(user) && isAdminPortal),
-  );
-  // DEV_MODE는 화면 열람 편의용이라 /admin-login에는 적용하면 안 된다.
-  // 여기에 포함시키면 실제 로그인 여부와 무관하게 로그인 폼이 뜨지 않고
-  // 곧바로 /dashboard로 튕겨서 관리자 로그인 자체를 테스트할 수 없게 된다.
-  const isAlreadyLoggedInAsAdmin = Boolean(
-    isInternalAdminNetwork && user && checkIsManager(user) && isAdminPortal,
-  );
+  // 테스트 단계: 망 구분 없이 실제 관리자 계정(+ OTP)으로 로그인하면 관리자 화면에 접근할 수 있다.
+  // 테스트가 끝나면 isInternalAdminNetwork 조건을 다시 추가해야 한다.
+  const canAccessAdmin = Boolean(user && checkIsManager(user) && isAdminPortal);
+  const isAlreadyLoggedInAsAdmin = canAccessAdmin;
 
   return (
     <BrowserRouter>
@@ -494,9 +488,7 @@ function App() {
               <Route
                 path="/admin-login"
                 element={
-                  !isInternalAdminNetwork ? (
-                    <Navigate to="/user-login" replace />
-                  ) : isAlreadyLoggedInAsAdmin ? (
+                  isAlreadyLoggedInAsAdmin ? (
                     <Navigate to="/dashboard" replace />
                   ) : (
                     <Login setUser={setUser} isAdminMode={true} />

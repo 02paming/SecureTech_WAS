@@ -9,15 +9,11 @@ from urllib.parse import parse_qs
 import django
 
 # 1. 경로 설정: 현재 파일이 위치한 SecureTech_WAS 폴더를 장고의 Root 경로로 인식시킴
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# 💡 2. Settings 교체: 루트 계정의 'backend_pcap_test.settings' 대신 일반 계정의 'config.settings'로 연결
+# 2. Settings 교체: 루트 계정의 'backend_pcap_test.settings' 대신 일반 계정의 'config.settings'로 연결
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
 
-# 1. Django 환경 설정 및 MariaDB 10.3 버전 체크 우회
-# os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'backend_pcap_test.settings')
-# from django.db.backends.base.base import BaseDatabaseWrapper
-# BaseDatabaseWrapper.check_database_version_supported = lambda self: None
 django.setup()
 
 from django.db import close_old_connections, connection, transaction
@@ -879,6 +875,43 @@ def run_server():
                     res = {"status": "error", "error": "Missing client_ip or mismatch_mac"}
 
                 client_sock.sendall(create_http_response(200, res))
+                continue
+
+
+            # =========================================================
+            # [테스트용 신규] 일반 사원(is_manager=0) 목록 조회 API 
+            # =========================================================
+            if method == "GET" and path.startswith('/api/get_dummy_employees'):
+                try:
+                    # 요청받은 limit 개수 (기본 100개)
+                    limit = int(parsed.get("limit", 100))
+                    
+                    # DB에서 삭제되지 않은 일반 사원을 사번 순으로 limit 개수만큼 조회
+                    dummy_employees = Employees.objects.filter(
+                        is_manager=False, 
+                        deleted_at__isnull=True
+                    ).order_by('employee_number')[:limit]
+                    
+                    # JSON 형태로 반환할 데이터 포장
+                    employee_list = []
+                    for emp in dummy_employees:
+                        employee_list.append({
+                            "emp_number": emp.employee_number,
+                            "name": emp.name
+                        })
+                    
+                    res_data = {
+                        "status": "success",
+                        "count": len(employee_list),
+                        "data": employee_list
+                    }
+                    
+                    print(f"  [시스템] 더미 사원 {len(employee_list)}명 목록 조회 성공")
+                    client_sock.sendall(create_http_response(200, res_data))
+                    
+                except Exception as e:
+                    print(f"  [오류] 더미 사원 목록 조회 실패: {e}")
+                    client_sock.sendall(create_http_response(500, {"status": "error", "error": str(e)}))
                 continue
             
             # =========================================================

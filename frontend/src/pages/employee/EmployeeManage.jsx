@@ -7,7 +7,7 @@ import PageHeader from "../../components/PageHeader";
 import PaginationBar from "../../components/PaginationBar";
 import { appAlert, appConfirm } from "../../utils/appDialog";
 import { formatTimeKR } from "../../utils/formatTime";
-import { padRows, useResetPage } from "../../utils/table";
+import { padRows, usePagination, useResetPage } from "../../utils/table";
 import useDebounce from "../../utils/useDebounce";
 
 const ResizableTh = ({
@@ -89,9 +89,11 @@ const EmployeeManage = () => {
   const [editModal, setEditModal] = useState({
     isOpen: false,
     empId: null,
+    name: "",
     phone: "",
     address: "",
     email: "",
+    birthDate: "",
   });
 
   const defaultCols = {
@@ -112,9 +114,8 @@ const EmployeeManage = () => {
   const [filterRole, setFilterRole] = useState(
     () => sessionStorage.getItem("empFilterRole") || "all",
   );
-  const [currentPage, setCurrentPage] = useState(1);
+  const { page: currentPage, setPage: setCurrentPage, perPage: itemsPerPage, changePerPage } = usePagination(10);
   const [sortOrder, setSortOrder] = useState("asc");
-  const itemsPerPage = 10;
   const [loading, setLoading] = useState(false);
   const [lastUpdated, setLastUpdated] = useState("");
 
@@ -223,9 +224,14 @@ const EmployeeManage = () => {
     setEditModal({
       isOpen: true,
       empId: emp.employee_id,
+      name: emp.name || "",
       phone: formatPhone(emp.phone_number),
       address: emp.address || "",
       email: emp.email || "",
+      // 생년월일은 주민등록번호에서 유도되는 값이라 목록에는 "1985년 10월 13일"처럼
+      // 한글로만 내려온다. 날짜 입력창 형식(yyyy-mm-dd)과 달라 그대로 채울 수 없으므로
+      // 비워 두고, 실제로 바꿀 때만 입력하게 한다(비우면 기존 값 유지).
+      birthDate: "",
     });
   };
 
@@ -236,23 +242,29 @@ const EmployeeManage = () => {
       const cleanPhone = editModal.phone.replace(/[^0-9]/g, "");
       const res = await axios.post(`${baseUrl}/api/employees/update/`, {
         employee_id: editModal.empId,
+        name: editModal.name.trim(),
         phone_number: cleanPhone,
         address: editModal.address.trim(),
         email: editModal.email.trim(),
+        birth_date: editModal.birthDate || undefined,
       });
       if (res.data.status === "success") {
         await appAlert("수정되었습니다.");
         setEditModal({
           isOpen: false,
           empId: null,
+          name: "",
           phone: "",
           address: "",
           email: "",
+          birthDate: "",
         });
         fetchEmployees();
+      } else {
+        await appAlert(res.data.message || "수정에 실패했습니다.");
       }
-    } catch {
-      await appAlert("수정에 실패했습니다.");
+    } catch (err) {
+      await appAlert(err.response?.data?.message || "수정에 실패했습니다.");
     } finally {
       setLoading(false);
     }
@@ -314,25 +326,36 @@ const EmployeeManage = () => {
     );
   }, [employees, filterRole]);
 
+  // 검색은 "표시 항목"으로 적용해 둔 열만 대상으로 해서, 숨긴 열 때문에
+  // 이유를 알 수 없는 행이 걸리지 않게 한다. 공백으로 여러 단어를 입력하면
+  // 모든 단어가 각각 표시 중인 열 어딘가에 걸려야 한다(AND 병렬 검색).
   const searchFiltered = useMemo(() => {
-    const term = debouncedSearch.toLowerCase();
-    if (!term) return roleFiltered;
-    return roleFiltered.filter((emp) =>
-      [
-        "employee_number",
-        "emp_code",
-        "name",
-        "employee_id",
-        "phone_number",
-        "email",
-        "address",
-      ].some((k) =>
-        String(emp[k] || "")
-          .toLowerCase()
-          .includes(term),
-      ),
+    const terms = debouncedSearch.toLowerCase().split(/\s+/).filter(Boolean);
+    if (!terms.length) return roleFiltered;
+
+    const colValues = {
+      empNum: (emp) => [emp.emp_code, emp.employee_number],
+      joinDate: (emp) => [emp.hire_date],
+      name: (emp) => [emp.name],
+      userId: (emp) => [emp.employee_id],
+      email: (emp) => [emp.email],
+      // 연락처는 저장값(숫자만)과 화면 표기(하이픈 포함) 어느 쪽으로 검색해도 걸리게 한다
+      phone: (emp) => [emp.phone_number, formatPhone(emp.phone_number)],
+      birth: (emp) => [emp.birth_date],
+      address: (emp) => [emp.address],
+      jumin: (emp) => [emp.jumin_no ? renderMaskedJumin(emp.jumin_no) : ""],
+    };
+    const visibleIds = COLUMNS.map((c) => c.id).filter(
+      (id) => activeCols[id] && colValues[id],
     );
-  }, [roleFiltered, debouncedSearch]);
+
+    return roleFiltered.filter((emp) => {
+      const haystack = visibleIds
+        .flatMap((id) => colValues[id](emp))
+        .map((v) => String(v || "").toLowerCase());
+      return terms.every((term) => haystack.some((h) => h.includes(term)));
+    });
+  }, [roleFiltered, debouncedSearch, activeCols]);
 
   const sortedEmployees = useMemo(
     () =>
@@ -454,7 +477,7 @@ const EmployeeManage = () => {
               value={filterRole}
               onChange={(e) => setFilterRole(e.target.value)}
             >
-              <option value="all">전체 ({employees.length}명)</option>
+              <option value="all">전체 ({employees.length.toLocaleString()}명)</option>
               {STATUS_OPTIONS.map((opt) => {
                 const count = employees.filter(
                   (emp) => emp.status_code === opt.code,
@@ -465,7 +488,7 @@ const EmployeeManage = () => {
                     value={opt.code}
                     style={{ color: COLOR_CLASS_VAR[opt.colorClass] }}
                   >
-                    {opt.label} ({count}명)
+                    {opt.label} ({count.toLocaleString()}명)
                   </option>
                 );
               })}
@@ -484,7 +507,7 @@ const EmployeeManage = () => {
           <input
             type="text"
             className="custom-input search-input"
-            placeholder="이름, 사번, 아이디 검색..."
+            placeholder="표시 중인 항목에서 검색 (공백으로 여러 단어 가능)..."
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
           />
@@ -732,6 +755,8 @@ const EmployeeManage = () => {
           page={currentPage}
           totalPages={totalPages}
           onPageChange={setCurrentPage}
+          pageSize={itemsPerPage}
+          onPageSizeChange={changePerPage}
         />
       </div>
 
@@ -740,6 +765,17 @@ const EmployeeManage = () => {
           <div className="dialog-box">
             <h3 className="dialog-title">사원 정보 수정</h3>
             <form onSubmit={handleUpdate} className="auth-form">
+              <div className="form-group">
+                <label className="form-label">이름</label>
+                <input
+                  type="text"
+                  className="custom-input"
+                  value={editModal.name}
+                  onChange={(e) =>
+                    setEditModal({ ...editModal, name: e.target.value })
+                  }
+                />
+              </div>
               <div className="form-group">
                 <label className="form-label">연락처</label>
                 <input
@@ -777,6 +813,17 @@ const EmployeeManage = () => {
                   }
                 />
               </div>
+              <div className="form-group">
+                <label className="form-label">생년월일 (바꿀 때만 입력)</label>
+                <input
+                  type="date"
+                  className="custom-input"
+                  value={editModal.birthDate}
+                  onChange={(e) =>
+                    setEditModal({ ...editModal, birthDate: e.target.value })
+                  }
+                />
+              </div>
               <div className="dialog-actions">
                 <button
                   type="button"
@@ -785,9 +832,11 @@ const EmployeeManage = () => {
                     setEditModal({
                       isOpen: false,
                       empId: null,
+                      name: "",
                       phone: "",
                       address: "",
                       email: "",
+                      birthDate: "",
                     })
                   }
                 >

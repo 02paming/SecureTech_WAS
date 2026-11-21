@@ -606,20 +606,28 @@ a.btn-action {
   background-color: var(--bg-main);
   color: var(--text-muted);
   font-weight: 600;
-  padding: 12px 14px;
+  padding: 8px 12px;
   font-size: 13px;
   border-bottom: 1px solid var(--border-color);
 }
 
 /* 데이터 줄과 빈 줄의 높이를 같게 하여 표 높이를 고정 */
 .custom-table td {
-  height: 44px;
-  padding: 8px 14px;
+  height: 34px;
+  padding: 5px 12px;
   overflow: hidden;
   border-bottom: 1px solid var(--border-color);
   text-overflow: ellipsis;
   white-space: nowrap;
   vertical-align: middle;
+}
+
+/* 업무용 표는 칸 구분이 뚜렷해야 읽기 쉬우므로, 모든 표의 열 사이에 세로선을 적용한다.
+   마지막 열도 생략하지 않는다 - 세로 스크롤바가 생기면 표 너비가 스크롤바만큼 줄어들어
+   마지막 열 끝과 컨테이너 테두리 사이에 선 없는 빈 틈이 생기기 때문 */
+.custom-table th,
+.custom-table td {
+  border-right: 1px solid var(--border-color);
 }
 
 .col-no {
@@ -717,6 +725,17 @@ a.btn-action {
   color: var(--text-muted);
 }
 
+.chart-split-title-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.chart-split-count {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
 .card-fill {
   display: flex;
   flex: 1;
@@ -736,6 +755,9 @@ a.btn-action {
   top: 0;
   z-index: 1;
   height: 44px;
+  /* border-collapse 상태에서는 sticky th의 border-bottom이 스크롤 시 사라지므로,
+     box-shadow로 같은 자리에 구분선을 그려 스크롤해도 항상 보이게 한다 */
+  box-shadow: inset 0 -1px 0 var(--border-color);
 }
 
 /* 표를 카드 높이에 맞추면 브라우저가 남는 공간을 줄마다 고르게 나눔 (최소 높이는 유지) */
@@ -762,8 +784,23 @@ a.btn-action {
   display: flex;
   flex-shrink: 0;
   justify-content: center;
+  align-items: center;
   gap: 6px;
   padding-top: 12px;
+  position: relative;
+}
+
+.pagination-size-slot {
+  position: absolute;
+  left: 0;
+}
+
+.page-size-select {
+  width: auto;
+  height: 30px;
+  padding: 2px 8px;
+  font-size: 12px;
+  flex-shrink: 0;
 }
 
 .title-success {
@@ -877,6 +914,18 @@ a.btn-action {
   background-color: rgba(245, 158, 11, 0.12);
 }
 
+.badge-unknown {
+  background-color: rgba(148, 163, 184, 0.15);
+  color: #64748b; 
+  border: 1px solid rgba(148, 163, 184, 0.3);
+}
+
+.badge-dga {
+  background-color: rgba(147, 51, 234, 0.15);
+  color: #9333ea; 
+  border: 1px solid rgba(147, 51, 234, 0.3);
+}
+
 .badge-score-yellow {
   color: var(--color-score-yellow);
   background-color: rgba(234, 179, 8, 0.12);
@@ -931,10 +980,6 @@ body.dark-mode .auth-admin {
 
 .auth-card-wide {
   max-width: 560px;
-}
-
-.captive-card {
-  border-top: 5px solid var(--color-primary);
 }
 
 .auth-header {
@@ -1206,14 +1251,6 @@ body.dark-mode .auth-admin {
 .cell-mono {
   font-size: 12px;
   font-family: var(--font-mono);
-}
-
-.row-danger td {
-  background-color: rgba(239, 68, 68, 0.06);
-}
-
-.row-warning td {
-  background-color: rgba(245, 158, 11, 0.06);
 }
 
 .row-selected td {
@@ -1592,7 +1629,7 @@ body.dark-mode .auth-admin {
   flex-direction: column;
   width: 1400px;
   max-width: 96vw;
-  height: 85vh;
+  height: 92vh;
   padding: 24px;
   background-color: var(--bg-main);
 }
@@ -2774,18 +2811,18 @@ textarea.custom-input {
 .mobile-user {
   margin-bottom: 10px;
   padding: 0 10px 15px;
-  border-bottom: 1px solid #334155;
+  border-bottom: 1px solid var(--border-color);
 }
 
 .mobile-user-name {
   font-size: 16px;
   font-weight: 700;
-  color: #38bdf8;
+  color: var(--color-primary);
 }
 
 .mobile-user-guest {
   font-size: 14px;
-  color: #94a3b8;
+  color: var(--text-muted);
 }
 
 .mobile-actions {
@@ -2806,6 +2843,11 @@ textarea.custom-input {
     display: none;
   }
 
+  /* 모바일 상단바는 데스크톱과 달리 고정 어두운색이 아니라 라이트/다크 설정을 그대로 따른다 */
+  .navbar {
+    background-color: var(--bg-card);
+  }
+
   .mobile-header-bar {
     display: flex;
     justify-content: space-between;
@@ -2819,7 +2861,7 @@ textarea.custom-input {
     flex: 0 0 auto;
     font-size: 20px;
     font-weight: 700;
-    color: #38bdf8;
+    color: var(--color-primary);
     text-decoration: none;
     white-space: nowrap;
   }
@@ -2830,7 +2872,7 @@ textarea.custom-input {
     border: none;
     font-size: 14px;
     font-weight: 600;
-    color: #94a3b8;
+    color: var(--text-muted);
     background: transparent;
     white-space: nowrap;
     cursor: pointer;
@@ -2849,14 +2891,14 @@ textarea.custom-input {
     padding: 20px;
     overflow-y: auto;
     box-shadow: var(--shadow-md);
-    background-color: var(--bg-header);
+    background-color: var(--bg-card);
   }
 
   .mobile-nav-link {
     padding: 15px;
-    border-bottom: 1px solid #334155;
+    border-bottom: 1px solid var(--border-color);
     font-size: 14px;
-    color: #f8fafc;
+    color: var(--text-main);
     text-decoration: none;
   }
 }

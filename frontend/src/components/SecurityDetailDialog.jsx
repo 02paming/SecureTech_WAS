@@ -2,14 +2,13 @@
 
 import { useMemo, useState } from "react";
 import { getSecurityTheme } from "../utils/securityTheme";
-import { padRows } from "../utils/table";
-import PaginationBar from "./PaginationBar";
+import { padRows, usePagination } from "../utils/table";
+import PaginationBar, { PageSizeSelect } from "./PaginationBar";
 
 function IpMacHistoryColumn({ logs }) {
   const [search, setSearch] = useState("");
   const [sortAsc, setSortAsc] = useState(false);
-  const [page, setPage] = useState(1);
-  const perPage = 10;
+  const { page, setPage, perPage, changePerPage } = usePagination(10);
 
   const filteredLogs = useMemo(
     () =>
@@ -42,7 +41,7 @@ function IpMacHistoryColumn({ logs }) {
     <div className="info-box sub-panel">
       <div className="info-box-row">
         <h4 className="info-box-title">
-          최근 접속 현황 <span className="text-primary">{filteredLogs.length}건</span>
+          최근 접속 현황 <span className="text-primary">{filteredLogs.length.toLocaleString()}건</span>
         </h4>
         <button
           type="button"
@@ -55,16 +54,19 @@ function IpMacHistoryColumn({ logs }) {
           {sortAsc ? "오래된순" : "최신순"}
         </button>
       </div>
-      <input
-        type="text"
-        className="custom-input search-input"
-        placeholder="IP, MAC 검색..."
-        value={search}
-        onChange={(e) => {
-          setSearch(e.target.value);
-          setPage(1);
-        }}
-      />
+      <div className="inline-form">
+        <input
+          type="text"
+          className="custom-input search-input"
+          placeholder="IP, MAC 검색..."
+          value={search}
+          onChange={(e) => {
+            setSearch(e.target.value);
+            setPage(1);
+          }}
+        />
+        <PageSizeSelect value={perPage} onChange={changePerPage} />
+      </div>
       <div className="table-responsive table-fill">
         <table className="custom-table table-sm">
           <thead>
@@ -111,8 +113,7 @@ function ExternalAccessColumn({ externalLogs }) {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [sortAsc, setSortAsc] = useState(false);
-  const [page, setPage] = useState(1);
-  const perPage = 10;
+  const { page, setPage, perPage, changePerPage } = usePagination(10);
 
   const filteredLogs = useMemo(
     () =>
@@ -150,7 +151,7 @@ function ExternalAccessColumn({ externalLogs }) {
       <div className="info-box-row">
         <div className="card-title-group">
           <h4 className="info-box-title">
-            활동 현황 <span className="text-primary">{filteredLogs.length}건</span>
+            활동 현황 <span className="text-primary">{filteredLogs.length.toLocaleString()}건</span>
           </h4>
           <div className="btn-group">
             {[
@@ -184,16 +185,19 @@ function ExternalAccessColumn({ externalLogs }) {
           {sortAsc ? "오래된순" : "최신순"}
         </button>
       </div>
-      <input
-        type="text"
-        className="custom-input search-input"
-        placeholder="도메인 검색..."
-        value={search}
-        onChange={(e) => {
-          setSearch(e.target.value);
-          setPage(1);
-        }}
-      />
+      <div className="inline-form">
+        <input
+          type="text"
+          className="custom-input search-input"
+          placeholder="도메인 검색..."
+          value={search}
+          onChange={(e) => {
+            setSearch(e.target.value);
+            setPage(1);
+          }}
+        />
+        <PageSizeSelect value={perPage} onChange={changePerPage} />
+      </div>
       <div className="table-responsive table-fill">
         <table className="custom-table table-sm">
           <colgroup>
@@ -294,8 +298,8 @@ function SecurityDetailDialog({ security, onClose, onRefresh, refreshing }) {
                 />
               </div>
               <div className="info-box-row info-box-note">
-                <span>최근 30일 통과: {security?.recent_pass_count || 0}건 (의심 {security?.recent_suspect_count || 0}건)</span>
-                <span>MAC 스푸핑: {security?.recent_mismatch_count || 0}건</span>
+                <span>최근 30일 통과: {(security?.recent_pass_count || 0).toLocaleString()}건 (의심 {(security?.recent_suspect_count || 0).toLocaleString()}건)</span>
+                <span>MAC 스푸핑: {(security?.recent_mismatch_count || 0).toLocaleString()}건</span>
               </div>
             </div>
             <div className="info-box info-box-row">
@@ -326,7 +330,7 @@ function SecurityDetailDialog({ security, onClose, onRefresh, refreshing }) {
             <div className="info-box tone-primary">
               <div className="info-box-row">
                 <span className="info-box-label">차단 누적</span>
-                <strong className="text-danger">{security.violation_count}건</strong>
+                <strong className="text-danger">{(security.violation_count || 0).toLocaleString()}건</strong>
               </div>
               <div className="progress is-danger-track">
                 <div className="progress-fill" style={{ width: `${safeRatio}%` }} />
@@ -335,8 +339,9 @@ function SecurityDetailDialog({ security, onClose, onRefresh, refreshing }) {
                 <span>준수율: {safeRatio}%</span>
                 <span>
                   총 접속:{" "}
-                  {security.normal_access_count +
-                    security.violation_count}
+                  {(
+                    security.normal_access_count + security.violation_count
+                  ).toLocaleString()}
                   건
                 </span>
               </div>

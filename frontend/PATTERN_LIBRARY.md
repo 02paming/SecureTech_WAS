@@ -129,7 +129,6 @@
 | 페이지 번호 | 표 아래 가운데 고정 | `components/PaginationBar.jsx` |
 | 정렬 | 기본 가운데, 주요 값은 왼쪽 | `th-main`, `cell-main`, `cell-left` |
 | 클릭 가능한 값 | 파란 밑줄 | `cell-link` |
-| 강조 줄 | 의심은 주황, 위험은 빨강 배경 | `row-warning`, `row-danger` |
 | 정렬 표시 | ▲ ▼ 문자 | `th-sortable` |
 
 | 고정 열 | 너비 | 클래스 |

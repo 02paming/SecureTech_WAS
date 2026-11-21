@@ -74,6 +74,18 @@ def _domain_access_stats(domains):
 NO_ACCESS_STATS = {"access_count": 0, "last_access": None}
 
 
+def _manual_info(obj):
+    emp = obj.added_by_emp
+    return {
+        "added_by_id": emp.employee_id if emp else "-",
+        "added_by_name": emp.name if emp else "-",
+        "added_at": obj.added_at.strftime("%Y-%m-%d %H:%M:%S") if obj.added_at else "-",
+        "description": obj.description or "-",
+    }
+
+
+
+
 @api_view(["GET"])
 def get_blocklist(request):
     results = []
@@ -147,15 +159,24 @@ def add_policy(request):
 
 
 @api_view(["POST"])
-@audited("차단 정책 해제", "blacklist_domain", "no_access_domain")
+@audited("차단 정책 해제", "blacklist_domain", "no_access_domain", actor_key="employee_id")
 def delete_policy(request):
     domain = sanitize_domain(
         request.data.get("no_access_domain") or request.data.get("blacklist_domain", "")
     )
+    emp_id, emp_pw = request.data.get("employee_id"), request.data.get("password")
+    is_valid, error_msg = verify_admin_auth(request, emp_id, emp_pw)
+    if not is_valid:
+        return Response({"error": error_msg}, status=403)
+
     try:
         p = BlacklistAddr.objects.get(
             blacklist_domain=domain, deleted_at__isnull=True, source="USER"
         )
+        admin_emp = Employees.objects.filter(employee_id=emp_id).first()
+        if admin_emp:
+            p.added_by_emp = admin_emp
+            p.added_at = timezone.now()
         p.deleted_at = timezone.now().date()
         p.save()
         notify_pcap_delta("black", "delete", domain)
@@ -164,6 +185,71 @@ def delete_policy(request):
         return Response(
             {"status": "error", "message": "정책을 찾을 수 없습니다."}, status=404
         )
+
+
+@api_view(["GET"])
+def get_deleted_blocklist(request):
+    policies = BlacklistAddr.objects.filter(
+        deleted_at__isnull=False, source="USER"
+    ).select_related("added_by_emp").order_by("-deleted_at")
+    return Response(
+        [
+            {
+                "blacklist_domain": p.blacklist_domain,
+                "description": p.description,
+                "deleted_at": p.deleted_at,
+                "manual_info": _manual_info(p),
+            }
+            for p in policies
+        ]
+    )
+
+
+@api_view(["POST"])
+@audited("차단 정책 복원", "blacklist_domain", "no_access_domain", actor_key="employee_id")
+def restore_policy(request):
+    domain = sanitize_domain(
+        request.data.get("no_access_domain") or request.data.get("blacklist_domain", "")
+    )
+    emp_id, emp_pw = request.data.get("employee_id"), request.data.get("password")
+    is_valid, error_msg = verify_admin_auth(request, emp_id, emp_pw)
+    if not is_valid:
+        return Response({"error": error_msg}, status=403)
+
+    p = (
+        BlacklistAddr.objects.filter(
+            blacklist_domain=domain, deleted_at__isnull=False, source="USER"
+        )
+        .order_by("-deleted_at")
+        .first()
+    )
+    if not p:
+        return Response({"error": "삭제된 차단 정책을 찾을 수 없습니다."}, status=404)
+
+    if BlacklistAddr.objects.filter(
+        blacklist_domain=domain, deleted_at__isnull=True
+    ).exists():
+        return Response(
+            {"error": f"'{domain}'은(는) 이미 차단 정책이 적용 중입니다."}, status=400
+        )
+    if WhitelistAddr.objects.filter(
+        whitelist_domain=domain, deleted_at__isnull=True
+    ).exists():
+        return Response(
+            {
+                "error": f"'{domain}'은(는) 현재 허용(White) 정책이 적용 중입니다. 먼저 허용을 해제해주세요."
+            },
+            status=400,
+        )
+
+    admin_emp = Employees.objects.filter(employee_id=emp_id).first()
+    if admin_emp:
+        p.added_by_emp = admin_emp
+        p.added_at = timezone.now()
+    p.deleted_at = None
+    p.save()
+    notify_pcap_delta("black", "add", domain)
+    return Response({"status": "success"})
 
 
 @api_view(["GET"])
@@ -243,9 +329,14 @@ def add_whitelist(request):
 
 
 @api_view(["POST"])
-@audited("허용 정책 해제", "domain")
+@audited("허용 정책 해제", "domain", actor_key="employee_id")
 def delete_whitelist(request):
     domain = sanitize_domain(request.data.get("domain", ""))
+    emp_id, emp_pw = request.data.get("employee_id"), request.data.get("password")
+    is_valid, error_msg = verify_admin_auth(request, emp_id, emp_pw)
+    if not is_valid:
+        return Response({"error": error_msg}, status=403)
+
     try:
         w_obj = WhitelistAddr.objects.filter(
             whitelist_domain=domain, deleted_at__isnull=True, source="USER"
@@ -258,6 +349,10 @@ def delete_whitelist(request):
                 {"error": "시스템 보호 도메인은 관리자 권한으로 강제 해제해야 합니다."},
                 status=403,
             )
+        admin_emp = Employees.objects.filter(employee_id=emp_id).first()
+        if admin_emp:
+            w_obj.added_by_emp = admin_emp
+            w_obj.added_at = timezone.now()
         w_obj.deleted_at = timezone.now().date()
         w_obj.save()
 
@@ -266,6 +361,69 @@ def delete_whitelist(request):
 
     except WhitelistAddr.DoesNotExist:
         return Response({"error": "도메인을 찾을 수 없습니다."}, status=404)
+
+
+@api_view(["GET"])
+def get_deleted_whitelist(request):
+    policies = WhitelistAddr.objects.filter(
+        deleted_at__isnull=False, source="USER"
+    ).select_related("added_by_emp").order_by("-deleted_at")
+    return Response(
+        [
+            {
+                "domain": w.whitelist_domain,
+                "description": w.description,
+                "deleted_at": w.deleted_at,
+                "manual_info": _manual_info(w),
+            }
+            for w in policies
+        ]
+    )
+
+
+@api_view(["POST"])
+@audited("허용 정책 복원", "domain", actor_key="employee_id")
+def restore_whitelist(request):
+    domain = sanitize_domain(request.data.get("domain", ""))
+    emp_id, emp_pw = request.data.get("employee_id"), request.data.get("password")
+    is_valid, error_msg = verify_admin_auth(request, emp_id, emp_pw)
+    if not is_valid:
+        return Response({"error": error_msg}, status=403)
+
+    w_obj = (
+        WhitelistAddr.objects.filter(
+            whitelist_domain=domain, deleted_at__isnull=False, source="USER"
+        )
+        .order_by("-deleted_at")
+        .first()
+    )
+    if not w_obj:
+        return Response({"error": "삭제된 허용 정책을 찾을 수 없습니다."}, status=404)
+
+    if WhitelistAddr.objects.filter(
+        whitelist_domain=domain, deleted_at__isnull=True
+    ).exists():
+        return Response(
+            {"error": f"'{domain}'은(는) 이미 허용 정책이 적용 중입니다."}, status=400
+        )
+    if BlacklistAddr.objects.filter(
+        blacklist_domain=domain, deleted_at__isnull=True
+    ).exists():
+        return Response(
+            {
+                "error": f"'{domain}'은(는) 현재 차단(Black) 정책이 적용 중입니다. 먼저 차단을 해제해주세요."
+            },
+            status=400,
+        )
+
+    admin_emp = Employees.objects.filter(employee_id=emp_id).first()
+    if admin_emp:
+        w_obj.added_by_emp = admin_emp
+        w_obj.added_at = timezone.now()
+    w_obj.deleted_at = None
+    w_obj.save()
+    notify_pcap_delta("white", "add", domain)
+    return Response({"status": "success"})
 
 
 @api_view(["POST"])
@@ -346,35 +504,42 @@ def promote_ai_policy(request):
                 if not domain:
                     continue
 
-                if action == "to_user_white":
-                    # 1. DB 처리 (블랙에서 논리적 삭제 후 화이트로 유저 등록)
-                    BlacklistAddr.objects.filter(
-                        blacklist_domain=domain, deleted_at__isnull=True
-                    ).update(deleted_at=today)
-                    _activate_as_user(WhitelistAddr, "whitelist_domain", domain)
+                # 💡 1. 팩트 체크: 현재 도메인이 DB의 어느 테이블에 소속되어 있는지 확인 (Doubt/AI 상태 포함)
+                is_in_white = WhitelistAddr.objects.filter(whitelist_domain=domain, deleted_at__isnull=True).exists()
+                is_in_black = BlacklistAddr.objects.filter(blacklist_domain=domain, deleted_at__isnull=True).exists()
 
-                    # 2. C PCAP 엔진(UDS) 실시간 동기화: 블랙에서 빼고 화이트에 추가
-                    notify_pcap_delta("black", "delete", domain)
+                if action == "to_user_white":
+                    # [블랙 의심 -> 허용 이관] 블랙리스트에 있었다면 지우고 C 엔진 통보
+                    if is_in_black:
+                        BlacklistAddr.objects.filter(blacklist_domain=domain, deleted_at__isnull=True).update(deleted_at=today)
+                        notify_pcap_delta("black", "delete", domain)
+                    
+                    # [화이트 의심 -> 허용 이관] 화이트리스트에 있었다면 덮어쓰기 위해 기존 AI 기록 지우고 통보
+                    if is_in_white:
+                        WhitelistAddr.objects.filter(whitelist_domain=domain, deleted_at__isnull=True).update(deleted_at=today)
+                        notify_pcap_delta("white", "delete", domain)
+
+                    # [공통] 사용자(USER) 권한으로 화이트리스트에 추가 및 C 엔진 통보
+                    _activate_as_user(WhitelistAddr, "whitelist_domain", domain)
                     notify_pcap_delta("white", "add", domain)
-                    released += 1  # 이관 성공 카운트용
+                    released += 1
 
                 elif action == "to_user_black":
-                    if WhitelistAddr.objects.filter(
-                        whitelist_domain=domain,
-                        deleted_at__isnull=True,
-                        is_protected=True,
-                    ).exists():
-                        raise ValueError(
-                            f"'{domain}'은(는) 시스템 보호 도메인이라 차단으로 이관할 수 없습니다."
-                        )
-                    # 1. DB 처리
-                    WhitelistAddr.objects.filter(
-                        whitelist_domain=domain, deleted_at__isnull=True
-                    ).update(deleted_at=today)
-                    _activate_as_user(BlacklistAddr, "blacklist_domain", domain)
+                    if WhitelistAddr.objects.filter(whitelist_domain=domain, deleted_at__isnull=True, is_protected=True).exists():
+                        raise ValueError(f"'{domain}'은(는) 시스템 보호 도메인이라 차단으로 이관할 수 없습니다.")
+                    
+                    # [화이트 의심 -> 차단 이관] 화이트리스트에 있었다면 지우고 C 엔진 통보
+                    if is_in_white:
+                        WhitelistAddr.objects.filter(whitelist_domain=domain, deleted_at__isnull=True).update(deleted_at=today)
+                        notify_pcap_delta("white", "delete", domain)
 
-                    # 2. C PCAP 엔진(UDS) 실시간 동기화: 화이트에서 빼고 블랙에 추가
-                    notify_pcap_delta("white", "delete", domain)
+                    # [블랙 의심 -> 차단 이관] 블랙리스트에 있었다면 덮어쓰기 위해 기존 AI 기록 지우고 통보
+                    if is_in_black:
+                         BlacklistAddr.objects.filter(blacklist_domain=domain, deleted_at__isnull=True).update(deleted_at=today)
+                         notify_pcap_delta("black", "delete", domain)
+
+                    # [공통] 사용자(USER) 권한으로 블랙리스트에 추가 및 C 엔진 통보
+                    _activate_as_user(BlacklistAddr, "blacklist_domain", domain)
                     notify_pcap_delta("black", "add", domain)
                     released += 1
 

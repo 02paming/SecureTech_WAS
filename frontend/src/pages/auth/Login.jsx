@@ -42,7 +42,11 @@ const Login = ({ setUser, isAdminMode = false }) => {
       sessionStorage.setItem("sessionToken", rawUser.session_token);
     }
 
-    if (isAdminMode) {
+    // 관리자 로그인 화면으로 들어왔든, 공개 도메인에서 사원 로그인으로 들어왔든
+    // 실제로 관리자(is_manager) 계정이면 관리자 모드로 인식한다. 어느 로그인 폼을
+    // 썼는지로만 판단하면, 사원 로그인으로 들어온 관리자 계정이 메뉴를 못 보는 문제가 생긴다.
+    const isAdmin = isAdminMode || Boolean(rawUser.is_manager);
+    if (isAdmin) {
       sessionStorage.setItem("adminPortalMode", "true");
     } else {
       sessionStorage.removeItem("adminPortalMode");
@@ -50,7 +54,7 @@ const Login = ({ setUser, isAdminMode = false }) => {
 
     if (setUser) setUser(userData);
 
-    if (isAdminMode) {
+    if (isAdmin) {
       window.location.href = "/dashboard";
     } else {
       window.location.href = "/";

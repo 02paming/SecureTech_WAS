@@ -4,6 +4,20 @@ from django.db import models
 from django.utils import timezone
 
 
+class UnauthThreatLog(models.Model):
+    id = models.AutoField(primary_key=True)
+    ip_address = models.CharField(max_length=45, verbose_name="Source IP")
+    mac_address = models.CharField(max_length=17, verbose_name="Source MAC")
+    threat_type = models.CharField(max_length=50, verbose_name="Threat Type")
+    target_info = models.CharField(max_length=255, null=True, blank=True, verbose_name="Target Domain/Payload")
+    detected_at = models.DateTimeField(default=timezone.now, verbose_name="Detected Time")
+    action_taken = models.CharField(max_length=20, default="BLOCKED", verbose_name="Action Taken")
+
+    class Meta:
+        managed = False
+        db_table = "unauth_threat_log"
+        ordering = ("-detected_at",)
+
 class DjangoMigrations(models.Model):
     id = models.BigAutoField(primary_key=True)
     app = models.CharField(max_length=255)

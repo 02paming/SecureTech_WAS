@@ -14,7 +14,7 @@ const TEST_KINDS = {
   protected_allow: { label: "보호 허용", result: "정상 통과", tone: "success", blocked: false, message: "관리자가 보호로 지정한 주소입니다." },
   manual_allow: { label: "수동 허용", result: "정상 통과", tone: "success", blocked: false, message: "허용 목록에 등록된 주소입니다." },
   ai_safe: { label: "AI 안전", result: "정상 통과", tone: "success", blocked: false, message: "AI가 안전으로 판별한 주소입니다." },
-  white_suspect: { label: "화이트 의심", result: "AI 의심 통과", tone: "score-yellow", blocked: false, suspect: true, message: "AI가 화이트 의심으로 판별한 주소입니다. 통과시키고 AI 의심으로 집계합니다." },
+  white_suspect: { label: "화이트 추정", result: "AI 의심 통과", tone: "score-yellow", blocked: false, suspect: true, message: "AI가 화이트 추정으로 판별한 주소입니다. 통과시키고 AI 의심으로 집계합니다." },
   black_suspect: { label: "블랙 의심", result: "AI 의심 차단", tone: "score-orange", blocked: true, suspect: true, message: "AI가 블랙 의심으로 판별한 주소입니다. 차단하고 AI 의심으로 집계합니다." },
   manual_block: { label: "수동 차단", result: "차단", tone: "danger", blocked: true, message: "차단 목록에 등록된 주소입니다." },
   ai_danger: { label: "AI 위험", result: "차단", tone: "danger", blocked: true, message: "AI가 위험으로 판별한 주소입니다." },
@@ -265,7 +265,7 @@ export default function TestLab() {
               <strong>캡티브 인증:</strong> 미인증 단말은 인증 요구 (웹 로그인과 별개)
             </li>
             <li>
-              <strong>도메인 정책:</strong> 허용과 화이트 의심은 통과, 블랙 의심과 차단은 차단. 수동 정책이 없으면 AI가 접속 시점에 판정
+              <strong>도메인 정책:</strong> 허용과 화이트 추정은 통과, 블랙 의심과 차단은 차단. 수동 정책이 없으면 AI가 접속 시점에 판정
             </li>
           </ol>
 

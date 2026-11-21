@@ -2,6 +2,7 @@
 
 import hashlib
 import hmac
+import ipaddress
 import json
 import logging
 import os
@@ -29,10 +30,15 @@ def encrypt_otp_secret(raw_secret):
 
 
 def decrypt_otp_secret(stored_value):
-    """DB에 평문으로 남아 있던 기존 값도 그대로 쓸 수 있게 복호화 실패 시 원문을 돌려준다."""
+    """DB에 평문으로 남아 있던 기존 값도 그대로 쓸 수 있게 복호화 실패 시 원문을 돌려준다.
+    다만 키가 바뀌었거나 값이 손상된 경우도 같은 경로를 타므로, 조용히 넘어가지 않고 경고를 남긴다."""
     try:
         return _otp_fernet.decrypt(stored_value.encode()).decode()
     except (InvalidToken, UnicodeDecodeError, ValueError):
+        logger.warning(
+            "otp_secret 복호화 실패 - 평문(또는 손상된 값)으로 간주하고 그대로 반환합니다. "
+            "OTP_SECRET_KEY가 바뀌었거나 값이 손상됐을 수 있습니다."
+        )
         return stored_value
 
 
@@ -41,10 +47,15 @@ def encrypt_jumin(raw_jumin):
 
 
 def decrypt_jumin(stored_value):
-    """DB에 평문으로 남아 있던 기존 값도 그대로 쓸 수 있게 복호화 실패 시 원문을 돌려준다."""
+    """DB에 평문으로 남아 있던 기존 값도 그대로 쓸 수 있게 복호화 실패 시 원문을 돌려준다.
+    다만 키가 바뀌었거나 값이 손상된 경우도 같은 경로를 타므로, 조용히 넘어가지 않고 경고를 남긴다."""
     try:
         return _jumin_fernet.decrypt(str(stored_value).encode()).decode()
     except (InvalidToken, UnicodeDecodeError, ValueError):
+        logger.warning(
+            "jumin_no 복호화 실패 - 평문(또는 손상된 값)으로 간주하고 그대로 반환합니다. "
+            "JUMIN_SECRET_KEY가 바뀌었거나 값이 손상됐을 수 있습니다."
+        )
         return stored_value
 
 
@@ -138,7 +149,7 @@ def resolve_domain_ip(domain):
         return "0.0.0.0"
 
 
-WHITE_POLICY_LABELS = {"USER": "수동 허용", "AI": "AI 안전", "DOUBT": "화이트 의심"}
+WHITE_POLICY_LABELS = {"USER": "수동 허용", "AI": "AI 안전", "DOUBT": "화이트 추정"}
 BLACK_POLICY_LABELS = {"USER": "수동 차단", "AI": "AI 위험", "DOUBT": "블랙 의심"}
 
 
@@ -169,13 +180,17 @@ ACCESS_JUDGEMENTS = {
     2: ("수동 허용", "정상"),
     3: ("AI 차단", "차단"),
     4: ("블랙 의심", "의심"),
-    5: ("화이트 의심", "의심"),
+    5: ("화이트 추정", "의심"),
     6: ("AI 안전", "정상"),
 }
 
 
 def judge_access(status_code, access_flag):
     """접속 시점의 판정 이름과 집계 구분을 돌려준다. 코드가 없으면 수동 정책 기록으로 본다."""
+    if access_flag == "DGA의심":
+        return ("미존재 도메인 (DGA)", "DGA의심")
+    if access_flag == "미지":
+        return ("분석 대기", "미지")
     if status_code in ACCESS_JUDGEMENTS:
         return ACCESS_JUDGEMENTS[status_code]
     return ("수동 차단", "차단") if access_flag == "차단" else ("수동 허용", "정상")
@@ -183,9 +198,12 @@ def judge_access(status_code, access_flag):
 
 def access_category_q(category):
     """judge_access와 같은 기준으로 DB에서 집계 구분을 거르는 조건을 돌려준다."""
+    if category == "DGA의심":
+        return Q(access_flag="DGA의심")
+    exclude_special = ~Q(access_flag__in=("DGA의심", "미지"))
     codes = [c for c, (_, cat) in ACCESS_JUDGEMENTS.items() if cat == category]
-    query = Q(ai_status_code__in=codes)
-    no_code = ~Q(ai_status_code__in=list(ACCESS_JUDGEMENTS))
+    query = Q(ai_status_code__in=codes) & exclude_special
+    no_code = ~Q(ai_status_code__in=list(ACCESS_JUDGEMENTS)) & exclude_special
     if category == "차단":
         return query | (no_code & Q(access_flag="차단"))
     if category == "정상":
@@ -194,11 +212,33 @@ def access_category_q(category):
 
 
 def is_admin_ip_allowed(ip):
-    """ADMIN_ALLOWED_IPS가 비어 있으면 제한하지 않는다. 시연 전에 .env에 주소를 넣어 막는다."""
+    """ADMIN_ALLOWED_IPS가 비어 있으면 제한하지 않는다.
+    쉼표로 구분한 개별 IP("192.168.3.23")와 대역("192.168.3.0/24")을 함께 쓸 수 있다."""
+
+    # 💡 원격 접속(포트포워딩) 시 들어오는 로컬 IP는 검사 없이 바로 관리자로 통과시킴
+    if ip == '127.0.0.1':
+        return True
+
     allowed = os.getenv("ADMIN_ALLOWED_IPS", "").strip()
     if not allowed:
         return True
-    return ip in {item.strip() for item in allowed.split(",")}
+    try:
+        client_ip = ipaddress.ip_address(ip)
+    except ValueError:
+        return False
+    for item in allowed.split(","):
+        item = item.strip()
+        if not item:
+            continue
+        try:
+            if "/" in item:
+                if client_ip in ipaddress.ip_network(item, strict=False):
+                    return True
+            elif client_ip == ipaddress.ip_address(item):
+                return True
+        except ValueError:
+            continue
+    return False
 
 
 def sync_pcap_json_files(sync_type="all"):

@@ -17,3 +17,15 @@ export const useResetPage = (values, reset) => {
     reset();
   }
 };
+
+// 표 하나가 독립적으로 쓰는 page/페이지당 건수 상태를 묶어서 제공한다.
+// 건수를 바꾸면 항상 1페이지로 되돌아간다.
+export const usePagination = (initialPerPage = 10) => {
+  const [page, setPage] = useState(1);
+  const [perPage, setPerPage] = useState(initialPerPage);
+  const changePerPage = (n) => {
+    setPerPage(n);
+    setPage(1);
+  };
+  return { page, setPage, perPage, setPerPage, changePerPage };
+};

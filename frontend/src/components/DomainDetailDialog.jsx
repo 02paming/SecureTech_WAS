@@ -6,22 +6,22 @@ import { API_BASE_URL } from "../api";
 import { hasAiScore } from "../utils/aiScore";
 import { appAlert } from "../utils/appDialog";
 import { POLICY_TONES, STATUS_LABELS, getResultTone } from "../utils/policyTone";
-import { padRows } from "../utils/table";
-import PaginationBar from "./PaginationBar";
+import { padRows, usePagination } from "../utils/table";
+import PaginationBar, { PageSizeSelect } from "./PaginationBar";
 import SecurityDetailDialog from "./SecurityDetailDialog";
 
-// 10줄 페이징으로 수정
-const PER_PAGE = 10;
-
 function EmployeeColumn({ employees, onEmployeeClick }) {
-  const [page, setPage] = useState(1);
-  const rows = padRows(employees.slice((page - 1) * PER_PAGE, page * PER_PAGE), PER_PAGE);
+  const { page, setPage, perPage, changePerPage } = usePagination(10);
+  const rows = padRows(employees.slice((page - 1) * perPage, page * perPage), perPage);
 
   return (
     <div className="info-box sub-panel">
-      <h4 className="info-box-title">
-        접속 사원 <span className="text-primary">{employees.length}명</span>
-      </h4>
+      <div className="info-box-row">
+        <h4 className="info-box-title">
+          접속 사원 <span className="text-primary">{employees.length.toLocaleString()}명</span>
+        </h4>
+        <PageSizeSelect value={perPage} onChange={changePerPage} />
+      </div>
       <div className="table-responsive table-fill">
         <table className="custom-table table-sm">
           <colgroup>
@@ -56,8 +56,8 @@ function EmployeeColumn({ employees, onEmployeeClick }) {
                       {e.name}
                     </td>
                     <td className="cell-ellipsis">{e.employee_id || "-"}</td>
-                    <td>{e.access_count}</td>
-                    <td className={e.blocked_count > 0 ? "text-danger fw-bold" : ""}>{e.blocked_count}</td>
+                    <td>{(e.access_count || 0).toLocaleString()}</td>
+                    <td className={e.blocked_count > 0 ? "text-danger fw-bold" : ""}>{(e.blocked_count || 0).toLocaleString()}</td>
                     <td className="text-muted">{e.last_access.slice(0, 16)}</td>
                   </>
                 )}
@@ -66,20 +66,27 @@ function EmployeeColumn({ employees, onEmployeeClick }) {
           </tbody>
         </table>
       </div>
-      <PaginationBar page={page} totalPages={Math.ceil(employees.length / PER_PAGE) || 1} onPageChange={setPage} />
+      <PaginationBar
+        page={page}
+        totalPages={Math.ceil(employees.length / perPage) || 1}
+        onPageChange={setPage}
+      />
     </div>
   );
 }
 
 function AccessLogColumn({ logs }) {
-  const [page, setPage] = useState(1);
-  const rows = padRows(logs.slice((page - 1) * PER_PAGE, page * PER_PAGE), PER_PAGE);
+  const { page, setPage, perPage, changePerPage } = usePagination(10);
+  const rows = padRows(logs.slice((page - 1) * perPage, page * perPage), perPage);
 
   return (
     <div className="info-box sub-panel">
-      <h4 className="info-box-title">
-        접속 기록 <span className="text-primary">{logs.length}건</span>
-      </h4>
+      <div className="info-box-row">
+        <h4 className="info-box-title">
+          접속 기록 <span className="text-primary">{logs.length.toLocaleString()}건</span>
+        </h4>
+        <PageSizeSelect value={perPage} onChange={changePerPage} />
+      </div>
       <div className="table-responsive table-fill">
         <table className="custom-table table-sm">
           <colgroup>
@@ -118,20 +125,30 @@ function AccessLogColumn({ logs }) {
           </tbody>
         </table>
       </div>
-      <PaginationBar page={page} totalPages={Math.ceil(logs.length / PER_PAGE) || 1} onPageChange={setPage} />
+      <PaginationBar
+        page={page}
+        totalPages={Math.ceil(logs.length / perPage) || 1}
+        onPageChange={setPage}
+      />
     </div>
   );
 }
 
 function PolicyHistoryColumn({ history }) {
-  const [page, setPage] = useState(1);
-  const rows = padRows(history.slice((page - 1) * PER_PAGE, page * PER_PAGE), PER_PAGE);
+  const { page, setPage, perPage, changePerPage } = usePagination(10);
+  const rows = padRows(history.slice((page - 1) * perPage, page * perPage), perPage);
 
   return (
     <div className="info-box sub-panel">
-      <h4 className="info-box-title">
-        정책 이력 <span className="text-primary">{history.length}건</span>
-      </h4>
+      <div className="info-box-row">
+        <h4 className="info-box-title">
+          정책 이력 <span className="text-primary">{history.length.toLocaleString()}건</span>
+        </h4>
+        <PageSizeSelect
+          value={perPage}
+          onChange={changePerPage}
+        />
+      </div>
       <div className="table-responsive table-fill">
         <table className="custom-table table-sm">
           <colgroup>
@@ -168,7 +185,11 @@ function PolicyHistoryColumn({ history }) {
           </tbody>
         </table>
       </div>
-      <PaginationBar page={page} totalPages={Math.ceil(history.length / PER_PAGE) || 1} onPageChange={setPage} />
+      <PaginationBar
+        page={page}
+        totalPages={Math.ceil(history.length / perPage) || 1}
+        onPageChange={setPage}
+      />
     </div>
   );
 }
@@ -244,9 +265,10 @@ function DomainDetailDialog({ domain, onClose }) {
                   {showManualInfo && (
                     <div className="settings-dropdown notice-box tone-primary">
                       <strong className="notice-title text-primary">수동 등록 정보</strong>
-                      <p className="notice-text">등록자: {detail.manual_info.added_by || "알 수 없음"}</p>
-                      <p className="notice-text">등록 시각: {detail.manual_info.added_at || "-"}</p>
-                      <p className="notice-text">사유: {detail.manual_info.description || "등록된 사유가 없습니다."}</p>
+                      <p className="notice-text">등록자 ID : {detail.manual_info.added_by_id || "-"}</p>
+                      <p className="notice-text">관리자 이름 : {detail.manual_info.added_by_name || "-"}</p>
+                      <p className="notice-text">등록 시간 : {detail.manual_info.added_at || "-"}</p>
+                      <p className="notice-text">등록 사유 : {detail.manual_info.description || "등록된 사유가 없습니다."}</p>
                     </div>
                   )}
                 </div>
@@ -290,7 +312,7 @@ function DomainDetailDialog({ domain, onClose }) {
                 <div className="info-box info-grid-2">
                   <div className="info-row is-compact">
                     <span className="info-label">전체 접속</span>
-                    <strong className="info-value">{detail.total_count}건</strong>
+                    <strong className="info-value">{(detail.total_count || 0).toLocaleString()}건</strong>
                   </div>
                   {[
                     ["정상", detail.pass_count],
@@ -299,7 +321,7 @@ function DomainDetailDialog({ domain, onClose }) {
                   ].map(([status, count]) => (
                     <div className="info-row is-compact" key={status}>
                       <span className="info-label">{STATUS_LABELS[status]}</span>
-                      <strong className={`info-value text-${getResultTone(status, detail.policy)}`}>{count}건</strong>
+                      <strong className={`info-value text-${getResultTone(status, detail.policy)}`}>{(count || 0).toLocaleString()}건</strong>
                     </div>
                   ))}
                 </div>

@@ -4,7 +4,14 @@ import { useState } from "react";
 
 // 보호 도메인 제어와 AI 정책 이관·해제가 함께 쓰는 관리자 인증 창
 function AdminAuthDialog({ title, target, danger = false, onSubmit, onCancel }) {
-  const [adminId, setAdminId] = useState("admin");
+  const [adminId, setAdminId] = useState(() => {
+    try {
+      const u = JSON.parse(sessionStorage.getItem("user"));
+      return u?.employee_id || u?.emp_id || "";
+    } catch {
+      return "";
+    }
+  });
   const [adminPw, setAdminPw] = useState("");
 
   const handleSubmit = (e) => {

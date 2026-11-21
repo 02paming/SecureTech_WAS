@@ -1,5 +1,6 @@
 # 사원 정보 관리, 가입 승인/반려, 상태 변경 및 사원별 보안 상세 조회를 처리하는 백엔드 API 뷰
 
+import re
 from datetime import timedelta
 
 from django.core.cache import cache
@@ -27,7 +28,9 @@ from .utils import (
     ANONYMIZED_ID_PREFIX,
     DUPLICATE_MEMBER_MESSAGE,
     SERVER_ERROR_MESSAGE,
+    decrypt_jumin,
     employee_ip,
+    encrypt_jumin,
     format_jumin_and_birth,
     hash_jumin,
     judge_access,
@@ -178,6 +181,35 @@ def update_employee(request):
         employee.phone_number = request.data.get("phone_number", employee.phone_number)
         employee.address = request.data.get("address", employee.address)
         employee.email = request.data.get("email", employee.email)
+        name = str(request.data.get("name", "")).strip()
+        if name:
+            employee.name = name
+
+        birth_date = request.data.get("birth_date")
+        if birth_date:
+            # 주민등록번호에는 생년월일이 포함돼 있어, 생년월일만 따로 저장된 컬럼이 없다.
+            # 기존 jumin_no를 복호화해 날짜 부분(앞 6자리)만 바꾸고 성별·일련번호는 그대로 둔다.
+            try:
+                y, m, d = birth_date.split("-")
+                digits = re.sub(r"[^0-9]", "", decrypt_jumin(employee.jumin_no))
+                if len(digits) >= 7:
+                    gender_digit = int(digits[6])
+                    # 1/2=1900년대, 3/4=2000년대 인코딩. 새 연도의 세기가 다르면 성별은
+                    # 유지한 채(홀수=남/짝수=여) 세기 인코딩만 맞춰 준다.
+                    is_2000s = int(y) >= 2000
+                    if is_2000s and gender_digit in (1, 2):
+                        gender_digit += 2
+                    elif not is_2000s and gender_digit in (3, 4):
+                        gender_digit -= 2
+                    new_jumin = f"{y[-2:]}{m.zfill(2)}{d.zfill(2)}{gender_digit}{digits[7:]}"
+                    employee.jumin_no = encrypt_jumin(new_jumin)
+                    employee.jumin_no_hash = hash_jumin(new_jumin)
+            except (ValueError, IndexError):
+                return Response(
+                    {"status": "error", "message": "생년월일 형식이 올바르지 않습니다."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
         employee.save()
         cache.delete("employee_list_data")
         return Response({"status": "success", "message": "수정 성공"})
@@ -185,6 +217,11 @@ def update_employee(request):
         return Response(
             {"status": "error", "message": "사원 없음"},
             status=status.HTTP_404_NOT_FOUND,
+        )
+    except IntegrityError:
+        return Response(
+            {"status": "error", "message": "이미 사용 중인 정보입니다."},
+            status=status.HTTP_400_BAD_REQUEST,
         )
 
 

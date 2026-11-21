@@ -35,11 +35,14 @@ def _save_last_id(last_id):
 def process_new_alerts():
   """엔진이 새로 기록한 MAC 불일치 행을 경보한다. 보낸 경보 수를 돌려준다."""
   last_id = _load_last_id()
+  latest = OnlineIpMacMismatchLog.objects.aggregate(m=Max("pk"))["m"] or 0
   if last_id is None:
     # 처음 실행할 때는 지난 기록을 한꺼번에 보내지 않고 지금부터 감시한다
-    latest = OnlineIpMacMismatchLog.objects.aggregate(m=Max("pk"))["m"] or 0
     _save_last_id(latest)
     return 0
+  if latest < last_id:
+    # 테이블 TRUNCATE 등으로 PK가 초기화된 경우 0부터 다시 감시
+    last_id = 0
 
   rows = (
     OnlineIpMacMismatchLog.objects.filter(pk__gt=last_id)

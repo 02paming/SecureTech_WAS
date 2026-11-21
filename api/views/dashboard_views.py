@@ -38,7 +38,7 @@ JUDGEMENT_COLORS = {
     "수동 차단": "#ef4444",
     "AI 차단": "#f97316",
     "블랙 의심": "#c2410c",
-    "화이트 의심": "#f59e0b",
+    "화이트 추정": "#f59e0b",
     "수동 허용": "#38bdf8",
     "AI 안전": "#10b981",
 }
@@ -229,14 +229,14 @@ def get_traffic_stats(request):
             ai_suspicious_list.append(
                 {
                     "domain": w.whitelist_domain,
-                    "status_text": "화이트 의심",
+                    "status_text": "화이트 추정",
                     "color": "#f59e0b",
                     "bgColor": "rgba(245, 158, 11, 0.1)",
                 }
             )
 
         # 판정 구성비: 모든 접속을 판정 주체로 나눠 겹치지 않게 보여준다.
-        # 수동 판정(수동 허용/수동 차단)과 AI 판정(안전/화이트 의심/블랙 의심/차단)의 합이 전체 접속 건수다.
+        # 수동 판정(수동 허용/수동 차단)과 AI 판정(안전/화이트 추정/블랙 의심/차단)의 합이 전체 접속 건수다.
         # 판정 코드가 없는 기록은 로그 분석실과 같이 access_flag로 수동 허용·차단으로 센다(judge_access).
         judgement_counts = {}
         for row in base_qs.values("ai_status_code", "access_flag").annotate(
@@ -258,7 +258,7 @@ def get_traffic_stats(request):
 
         policy_breakdown_manual = _breakdown(("수동 허용", "수동 차단"))
         policy_breakdown_ai = _breakdown(
-            ("AI 안전", "화이트 의심", "블랙 의심", "AI 차단")
+            ("AI 안전", "화이트 추정", "블랙 의심", "AI 차단")
         )
 
         return Response(
@@ -360,7 +360,7 @@ def manage_ai_thresholds(request):
             return Response({"status": "error", "message": "레벨과 기준 점수는 숫자로 입력해 주세요."}, status=400)
         if not 0 < white_start < black_start < block_start <= 100:
             return Response(
-                {"status": "error", "message": "화이트 의심 < 블랙 의심 < 차단 순서로, 1~100 사이에서 입력해 주세요."},
+                {"status": "error", "message": "화이트 추정 < 블랙 의심 < 차단 순서로, 1~100 사이에서 입력해 주세요."},
                 status=400,
             )
 

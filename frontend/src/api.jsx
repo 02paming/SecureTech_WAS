@@ -8,21 +8,27 @@ const getBaseUrl = () => {
   }
   try {
     const host = window.location.hostname;
+    // 내부망·로컬에서도 8000번 포트로 바로 가지 않고, 지금 접속한 origin(= nginx)을 그대로 쓴다.
+    // nginx가 /api/dashboard|policies|employees|approvals|threats/ 는 관리자망 IP만 허용하도록
+    // 걸러주므로, 프론트가 8000번을 직접 호출하면 그 필터를 모두 건너뛰게 된다.
+    
+    const hostWithPort = window.location.host;
+
     if (
       host === "localhost" ||
       host === "127.0.0.1" ||
       host.startsWith("192.168.") ||
       host.startsWith("100.")
     ) {
-      return `http://${host}:8000`;
+      return `${window.location.protocol}//${hostWithPort}`;
     }
     if (host.includes("securetechkg.digital")) {
-      return "https://api.securetechkg.digital";
+      return `${window.location.protocol}//${hostWithPort}`;
     }
   } catch {
     // 예외 발생 시 기본값
   }
-  return `http://${window.location.hostname}:8000`;
+  return `${window.location.protocol}//${window.location.host}`;
 };
 
 export const API_BASE_URL = getBaseUrl();

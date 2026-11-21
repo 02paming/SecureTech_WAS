@@ -4,7 +4,7 @@ export const POLICY_TONES = {
   "보호 허용": "success",
   "수동 허용": "success",
   "AI 안전": "success",
-  "화이트 의심": "score-yellow",
+  "화이트 추정": "score-yellow",
   "블랙 의심": "score-orange",
   "수동 차단": "danger",
   "AI 위험": "danger",

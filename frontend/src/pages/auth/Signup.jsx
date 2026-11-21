@@ -111,7 +111,7 @@ const Signup = () => {
       if (value.length === 14) {
         const isValid = validateRRN(value);
         if (isValid) {
-          setSuccessMsgs((prev) => ({ ...prev, jumin_no: "✓ 사용 가능" }));
+          setSuccessMsgs((prev) => ({ ...prev, jumin_no: "✓ 올바른 형식입니다." }));
           setDuplicateErrors((prev) => {
             const ne = { ...prev };
             delete ne.jumin_no;
@@ -159,7 +159,7 @@ const Signup = () => {
           return ne;
         });
         if (value) {
-          setSuccessMsgs((prev) => ({ ...prev, email: "✓ 사용 가능" }));
+          setSuccessMsgs((prev) => ({ ...prev, email: "✓ 올바른 형식입니다." }));
         } else {
           setSuccessMsgs((prev) => {
             const ns = { ...prev };

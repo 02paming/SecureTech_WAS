@@ -92,7 +92,7 @@ const AiModelMetrics = () => {
     const black = Number(lv.black_start);
     const block = Number(lv.block_start);
     if (!(white > 0 && white < black && black < block && block <= 100)) {
-      appAlert("화이트 의심 < 블랙 의심 < 차단 순서로, 1~100 사이에서 입력해 주세요.");
+      appAlert("화이트 추정 < 블랙 의심 < 차단 순서로, 1~100 사이에서 입력해 주세요.");
       return;
     }
 
@@ -204,7 +204,7 @@ const AiModelMetrics = () => {
                 type="button"
                 onClick={() => requestApplyLevel(lv)}
                 disabled={lv.active}
-                title={`화이트 의심 ${lv.white_start} · 블랙 의심 ${lv.black_start} · 차단 ${lv.block_start}`}
+                title={`화이트 추정 ${lv.white_start} · 블랙 의심 ${lv.black_start} · 차단 ${lv.block_start}`}
                 className={`level-btn level-btn-${LEVEL_TONES[lv.level] || "neutral"} ${lv.active ? "is-active" : ""}`}
               >
                 {lv.level}
@@ -230,7 +230,7 @@ const AiModelMetrics = () => {
                     {lv.active && <span className="count-badge badge-primary level-active-badge">적용중</span>}
                   </span>
                   <label>
-                    화이트 의심
+                    화이트 추정
                     <input
                       type="number" min="1" max="100" className="custom-input"
                       value={lv.white_start}
@@ -312,7 +312,7 @@ const AiModelMetrics = () => {
                     margin={{ top: 8, right: 24, left: -8, bottom: 0 }}
                   >
                     <CartesianGrid strokeDasharray="3 3" stroke="rgba(148, 163, 184, 0.2)" vertical={false} />
-                    <XAxis dataKey="version_name" stroke="var(--text-muted)" tick={{ fontSize: 11, fontFamily: "var(--font-sans)", fill: "var(--text-muted)" }} tickLine={false} axisLine={false} />
+                    <XAxis dataKey="version_name" padding={{ left: 56, right: 56 }} stroke="var(--text-muted)" tick={{ fontSize: 11, fontFamily: "var(--font-sans)", fill: "var(--text-muted)" }} tickLine={false} axisLine={false} />
                     <YAxis stroke="var(--text-muted)" tick={{ fontSize: 11, fontFamily: "var(--font-sans)", fill: "var(--text-muted)" }} tickLine={false} axisLine={false} domain={[yMin, 100]} unit="%" />
                     <RechartsTooltip
                       formatter={(value) => formatPercent(value)}
@@ -344,7 +344,7 @@ const AiModelMetrics = () => {
           <div className="card dashboard-card card-fill card-auto">
             <div className="card-header">
               <h3 className="card-title">모델 버전 목록</h3>
-              <span className="count-badge badge-primary">총 {metrics.length}건</span>
+              <span className="count-badge badge-primary">총 {metrics.length.toLocaleString()}건</span>
             </div>
             <div className="table-responsive table-fill">
               <table className="custom-table table-sm">

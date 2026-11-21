@@ -9,9 +9,11 @@ import DomainDetailDialog from "../../components/DomainDetailDialog";
 import PageHeader from "../../components/PageHeader";
 import PaginationBar from "../../components/PaginationBar";
 import { hasAiScore } from "../../utils/aiScore";
-import { appAlert } from "../../utils/appDialog";
+import { appAlert, appConfirm } from "../../utils/appDialog";
 import { formatTimeKR } from "../../utils/formatTime";
 import { padRows } from "../../utils/table";
+
+const REFRESH_MS = 600000;
 
 const AiPolicyManage = () => {
   const [searchParams] = useSearchParams();
@@ -34,7 +36,12 @@ const AiPolicyManage = () => {
 
   const [selectedWhite, setSelectedWhite] = useState([]);
   const [selectedBlack, setSelectedBlack] = useState([]);
-  const itemsPerPage = 10;
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+  const handlePageSizeChange = (n) => {
+    setItemsPerPage(n);
+    setWhitePage(1);
+    setBlackPage(1);
+  };
 
   const [authModal, setAuthModal] = useState({ isOpen: false, domains: [], action: "" });
 
@@ -54,7 +61,7 @@ const AiPolicyManage = () => {
 
   useEffect(() => {
     fetchAiPolicies();
-    const interval = setInterval(fetchAiPolicies, 600000);
+    const interval = setInterval(fetchAiPolicies, REFRESH_MS);
     return () => clearInterval(interval);
   }, [fetchAiPolicies]);
 
@@ -104,15 +111,20 @@ const AiPolicyManage = () => {
   const whiteListAll = useMemo(() => filteredData.filter((d) => d.source === "white" && (!whiteSuspiciousOnly || d.ai_status === "DOUBT")), [filteredData, whiteSuspiciousOnly]);
   const blackListAll = useMemo(() => filteredData.filter((d) => d.source === "black" && (!blackSuspiciousOnly || d.ai_status === "DOUBT")), [filteredData, blackSuspiciousOnly]);
 
-  const paginatedWhite = useMemo(() => padRows(whiteListAll.slice((whitePage - 1) * itemsPerPage, whitePage * itemsPerPage), itemsPerPage), [whiteListAll, whitePage]);
-  const paginatedBlack = useMemo(() => padRows(blackListAll.slice((blackPage - 1) * itemsPerPage, blackPage * itemsPerPage), itemsPerPage), [blackListAll, blackPage]);
+  const paginatedWhite = useMemo(() => padRows(whiteListAll.slice((whitePage - 1) * itemsPerPage, whitePage * itemsPerPage), itemsPerPage), [whiteListAll, whitePage, itemsPerPage]);
+  const paginatedBlack = useMemo(() => padRows(blackListAll.slice((blackPage - 1) * itemsPerPage, blackPage * itemsPerPage), itemsPerPage), [blackListAll, blackPage, itemsPerPage]);
 
   const toggleSelect = (domain, setSelectedList) => {
     setSelectedList((prev) => prev.includes(domain) ? prev.filter((d) => d !== domain) : [...prev, domain]);
   };
 
+  // 이관할 수 있는 건 "의심(DOUBT)" 판정뿐이다. 이미 AI 안전/위험으로 확정된 도메인은
+  // 개별 행에 이관 버튼도 없는데 체크박스는 눌려서 "선택 이관" 버튼만 활성화되는
+  // 불일치가 있었다. 체크 대상 자체를 의심 판정 행으로 제한해 기준을 맞춘다.
   const toggleSelectAll = (paginatedData, selectedList, setSelectedList) => {
-    const currentDomains = paginatedData.filter((p) => !p.isEmpty).map((p) => p.domain);
+    const currentDomains = paginatedData
+      .filter((p) => !p.isEmpty && p.ai_status === "DOUBT")
+      .map((p) => p.domain);
     const allSelected = currentDomains.length > 0 && currentDomains.every((d) => selectedList.includes(d));
     if (allSelected) setSelectedList((prev) => prev.filter((d) => !currentDomains.includes(d)));
     else setSelectedList((prev) => [...new Set([...prev, ...currentDomains])]);
@@ -120,7 +132,7 @@ const AiPolicyManage = () => {
 
   const renderBadge = (source, aiStatus) => {
     if (source === "white" && aiStatus === "AI") return <span className="status-badge badge-success">AI 안전</span>;
-    if (source === "white" && aiStatus === "DOUBT") return <span className="status-badge badge-score-yellow">화이트 의심</span>;
+    if (source === "white" && aiStatus === "DOUBT") return <span className="status-badge badge-score-yellow">화이트 추정</span>;
     if (source === "black" && aiStatus === "DOUBT") return <span className="status-badge badge-score-orange">블랙 의심</span>;
     if (source === "black" && aiStatus === "AI") return <span className="status-badge badge-danger">AI 위험</span>;
     return <span className="text-muted">-</span>;
@@ -132,11 +144,24 @@ const AiPolicyManage = () => {
     <span className={`fw-bold ${SCORE_TONES[`${source}-${aiStatus}`] || "text-muted"}`}>{hasAiScore(score) ? `${score}점` : "-"}</span>
   );
 
-  const renderActions = (domain, aiStatus) => {
+  // 블랙(위험) 의심으로 판별된 도메인을 바로 허용으로 이관하는 것은 위험도가 높은 조작이라,
+  // 관리자 인증 전에 한 번 더 확인을 받는다. 화이트 추정을 허용으로 이관하는 쪽은 원래도
+  // 안전 쪽으로 기운 판정이라 기존처럼 바로 인증 단계로 넘어간다.
+  const requestTransfer = async (domain, action, source) => {
+    if (action === "to_user_white" && source === "black") {
+      const ok = await appConfirm(
+        `'${domain}'은(는) AI가 위험(블랙) 의심으로 판별한 도메인입니다.\n정말 허용으로 이관하시겠습니까?`,
+      );
+      if (!ok) return;
+    }
+    openAuthModal([domain], action);
+  };
+
+  const renderActions = (domain, aiStatus, source) => {
     if (aiStatus === "DOUBT") {
       return (
         <div className="action-btn-group">
-          <button type="button" onClick={() => openAuthModal([domain], "to_user_white")} className="btn-action btn-success btn-w-sm">허용 이관</button>
+          <button type="button" onClick={() => requestTransfer(domain, "to_user_white", source)} className="btn-action btn-success btn-w-sm">허용 이관</button>
           <button type="button" onClick={() => openAuthModal([domain], "to_user_black")} className="btn-action btn-danger btn-w-sm">차단 이관</button>
         </div>
       );
@@ -184,7 +209,7 @@ const AiPolicyManage = () => {
           <div className="card-header">
             <div className="card-title-group">
               <h3 className="card-title title-success">AI 판별 (안전/의심)</h3>
-              <span className="count-badge badge-success">총 {whiteListAll.length}건</span>
+              <span className="count-badge badge-success">총 {whiteListAll.length.toLocaleString()}건</span>
             </div>
             <div className="btn-group">
               <button
@@ -208,7 +233,7 @@ const AiPolicyManage = () => {
             <table className="custom-table">
               <thead>
                 <tr>
-                  <th className="col-check"><input type="checkbox" onChange={() => toggleSelectAll(paginatedWhite, selectedWhite, setSelectedWhite)} checked={paginatedWhite.filter((p) => !p.isEmpty).length > 0 && paginatedWhite.filter((p) => !p.isEmpty).every((p) => selectedWhite.includes(p.domain))} /></th>
+                  <th className="col-check"><input type="checkbox" onChange={() => toggleSelectAll(paginatedWhite, selectedWhite, setSelectedWhite)} checked={paginatedWhite.filter((p) => !p.isEmpty && p.ai_status === "DOUBT").length > 0 && paginatedWhite.filter((p) => !p.isEmpty && p.ai_status === "DOUBT").every((p) => selectedWhite.includes(p.domain))} /></th>
                   <th className="col-status">정책 판단</th>
                   <th className="th-main">도메인</th>
                   <th className="col-status">AI 위협 점수</th>
@@ -220,11 +245,11 @@ const AiPolicyManage = () => {
                   <tr key={p.isEmpty ? `w-empty-${idx}` : p.domain}>
                     {p.isEmpty ? (<td colSpan="5">&nbsp;</td>) : (
                       <>
-                        <td className="cell-check"><input type="checkbox" checked={selectedWhite.includes(p.domain)} onChange={() => toggleSelect(p.domain, setSelectedWhite)} /></td>
+                        <td className="cell-check"><input type="checkbox" disabled={p.ai_status !== "DOUBT"} checked={selectedWhite.includes(p.domain)} onChange={() => toggleSelect(p.domain, setSelectedWhite)} /></td>
                         <td>{renderBadge("white", p.ai_status)}</td>
                         <td className="cell-main cell-clickable" onClick={() => setDetailDomain(p.domain)}>{p.domain}</td>
                         <td>{renderScore(p.ai_score, p.source, p.ai_status)}</td>
-                        <td>{renderActions(p.domain, p.ai_status)}</td>
+                        <td>{renderActions(p.domain, p.ai_status, p.source)}</td>
                       </>
                     )}
                   </tr>
@@ -232,14 +257,14 @@ const AiPolicyManage = () => {
               </tbody>
             </table>
           </div>
-          <PaginationBar page={whitePage} totalPages={Math.ceil(whiteListAll.length / itemsPerPage) || 1} onPageChange={setWhitePage} />
+          <PaginationBar page={whitePage} totalPages={Math.ceil(whiteListAll.length / itemsPerPage) || 1} onPageChange={setWhitePage} pageSize={itemsPerPage} onPageSizeChange={handlePageSizeChange} />
         </div>
 
         <div className="card dashboard-card card-fill">
           <div className="card-header">
             <div className="card-title-group">
               <h3 className="card-title title-danger">AI 판별 (위험/의심)</h3>
-              <span className="count-badge badge-danger">총 {blackListAll.length}건</span>
+              <span className="count-badge badge-danger">총 {blackListAll.length.toLocaleString()}건</span>
             </div>
             <div className="btn-group">
               <button
@@ -263,7 +288,7 @@ const AiPolicyManage = () => {
             <table className="custom-table">
               <thead>
                 <tr>
-                  <th className="col-check"><input type="checkbox" onChange={() => toggleSelectAll(paginatedBlack, selectedBlack, setSelectedBlack)} checked={paginatedBlack.filter((p) => !p.isEmpty).length > 0 && paginatedBlack.filter((p) => !p.isEmpty).every((p) => selectedBlack.includes(p.domain))} /></th>
+                  <th className="col-check"><input type="checkbox" onChange={() => toggleSelectAll(paginatedBlack, selectedBlack, setSelectedBlack)} checked={paginatedBlack.filter((p) => !p.isEmpty && p.ai_status === "DOUBT").length > 0 && paginatedBlack.filter((p) => !p.isEmpty && p.ai_status === "DOUBT").every((p) => selectedBlack.includes(p.domain))} /></th>
                   <th className="col-status">정책 판단</th>
                   <th className="th-main">도메인</th>
                   <th className="col-status">AI 위협 점수</th>
@@ -275,11 +300,11 @@ const AiPolicyManage = () => {
                   <tr key={p.isEmpty ? `b-empty-${idx}` : p.domain}>
                     {p.isEmpty ? (<td colSpan="5">&nbsp;</td>) : (
                       <>
-                        <td className="cell-check"><input type="checkbox" checked={selectedBlack.includes(p.domain)} onChange={() => toggleSelect(p.domain, setSelectedBlack)} /></td>
+                        <td className="cell-check"><input type="checkbox" disabled={p.ai_status !== "DOUBT"} checked={selectedBlack.includes(p.domain)} onChange={() => toggleSelect(p.domain, setSelectedBlack)} /></td>
                         <td>{renderBadge("black", p.ai_status)}</td>
                         <td className="cell-main cell-clickable" onClick={() => setDetailDomain(p.domain)}>{p.domain}</td>
                         <td>{renderScore(p.ai_score, p.source, p.ai_status)}</td>
-                        <td>{renderActions(p.domain, p.ai_status)}</td>
+                        <td>{renderActions(p.domain, p.ai_status, p.source)}</td>
                       </>
                     )}
                   </tr>
@@ -287,7 +312,7 @@ const AiPolicyManage = () => {
               </tbody>
             </table>
           </div>
-          <PaginationBar page={blackPage} totalPages={Math.ceil(blackListAll.length / itemsPerPage) || 1} onPageChange={setBlackPage} />
+          <PaginationBar page={blackPage} totalPages={Math.ceil(blackListAll.length / itemsPerPage) || 1} onPageChange={setBlackPage} pageSize={itemsPerPage} onPageSizeChange={handlePageSizeChange} />
         </div>
       </div>
     </div>

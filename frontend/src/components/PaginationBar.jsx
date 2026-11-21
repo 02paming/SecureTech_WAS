@@ -1,5 +1,24 @@
 // 모든 표(테이블) 하단에서 페이지 이동을 제어하는 공용 페이지네이션 컴포넌트
-function PaginationBar({ page, totalPages, onPageChange }) {
+const PAGE_SIZE_OPTIONS = [10, 20, 50];
+
+// 목록 헤더 우측에 배치하는 페이지당 표시 건수 선택 컨트롤
+export function PageSizeSelect({ value, onChange }) {
+  return (
+    <select
+      className="custom-input page-size-select"
+      value={value}
+      onChange={(e) => onChange(Number(e.target.value))}
+    >
+      {PAGE_SIZE_OPTIONS.map((n) => (
+        <option key={n} value={n}>
+          {n}건씩
+        </option>
+      ))}
+    </select>
+  );
+}
+
+function PaginationBar({ page, totalPages, onPageChange, pageSize, onPageSizeChange }) {
   const getPageNumbers = () => {
     const pages = [];
     let s = Math.max(1, page - 2);
@@ -11,6 +30,11 @@ function PaginationBar({ page, totalPages, onPageChange }) {
 
   return (
     <div className="pagination-bar">
+      {onPageSizeChange && (
+        <div className="pagination-size-slot">
+          <PageSizeSelect value={pageSize} onChange={onPageSizeChange} />
+        </div>
+      )}
       <button
         type="button"
         onClick={() => onPageChange(1)}

@@ -62,7 +62,7 @@ const CaptiveAuth = () => {
 
   return (
     <div className="auth-wrapper">
-      <div className="card auth-card captive-card">
+      <div className="card auth-card">
         <div className="auth-header">
           <h2 className="auth-title">사내망 접속 인증</h2>
           <p className="auth-subtitle">

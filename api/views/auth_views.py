@@ -40,6 +40,10 @@ MAX_AUTH_FAILURES = 5
 AUTH_LOCK_SECONDS = 300
 OTP_TICKET_SECONDS = 300
 SESSION_TTL_SECONDS = 180
+# 계정 하나가 아니라 같은 IP에서 여러 계정으로 분산 시도하는 경우를 막기 위한 IP 단위 잠금.
+# 같은 사무실 IP를 여러 사람이 같이 쓰는 경우를 고려해 계정 단위보다 느슨하게 둔다.
+MAX_AUTH_FAILURES_PER_IP = 20
+AUTH_LOCK_SECONDS_PER_IP = 300
 
 
 def _session_key(emp_id):
@@ -71,24 +75,24 @@ def _is_reserved_id(member_id):
     return member_id in RESTRICTED_IDS or member_id.startswith(ANONYMIZED_ID_PREFIX)
 
 
-def _is_locked(kind, emp_id):
-    return (cache.get(f"auth_fail:{kind}:{emp_id}") or 0) >= MAX_AUTH_FAILURES
+def _is_locked(kind, emp_id, max_failures=MAX_AUTH_FAILURES):
+    return (cache.get(f"auth_fail:{kind}:{emp_id}") or 0) >= max_failures
 
 
-def _add_failure(kind, emp_id):
+def _add_failure(kind, emp_id, lock_seconds=AUTH_LOCK_SECONDS):
     key = f"auth_fail:{kind}:{emp_id}"
-    cache.set(key, (cache.get(key) or 0) + 1, AUTH_LOCK_SECONDS)
+    cache.set(key, (cache.get(key) or 0) + 1, lock_seconds)
 
 
 def _clear_failures(kind, emp_id):
     cache.delete(f"auth_fail:{kind}:{emp_id}")
 
 
-def _locked_response():
+def _locked_response(max_failures=MAX_AUTH_FAILURES, lock_seconds=AUTH_LOCK_SECONDS):
     return Response(
         {
             "status": "error",
-            "message": f"인증 실패가 {MAX_AUTH_FAILURES}회를 넘어 {AUTH_LOCK_SECONDS // 60}분간 시도할 수 없습니다.",
+            "message": f"인증 실패가 {max_failures}회를 넘어 {lock_seconds // 60}분간 시도할 수 없습니다.",
         },
         status=status.HTTP_429_TOO_MANY_REQUESTS,
     )
@@ -116,18 +120,41 @@ def apply_signup(request):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        email = str(request.data.get("email", "")).strip()
+        phone = re.sub(r"[^0-9]", "", str(request.data.get("phone_number", "")))[:11]
         jumin_plain = re.sub(r"[^0-9]", "", str(request.data.get("jumin_no", "")))[:13]
+        jumin_hashed = hash_jumin(jumin_plain)
+
+        # prospective_members의 UNIQUE 제약은 신청 대기자끼리의 중복만 막는다.
+        # 이미 등록된 사원과 겹치는 신청은 승인 단계에서야 터지므로, 접수 시점에
+        # 두 테이블을 함께 조회해 어떤 항목이 겹치는지까지 알려 주고 거른다.
+        duplicate_checks = [
+            ("아이디", "member_id", "employee_id", member_id),
+            ("이메일", "email", "email", email),
+            ("전화번호", "phone_number", "phone_number", phone),
+            ("주민등록번호", "jumin_no_hash", "jumin_no_hash", jumin_hashed),
+        ]
+        for label, p_field, e_field, value in duplicate_checks:
+            if not value:
+                continue
+            if (
+                ProspectiveMembers.objects.filter(**{p_field: value}).exists()
+                or Employees.objects.filter(**{e_field: value}).exists()
+            ):
+                return Response(
+                    {"error": f"이미 사용 중이거나 가입 대기 중인 {label}입니다."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
         ProspectiveMembers.objects.create(
             member_id=member_id,
             password=make_password(request.data.get("password")),
             name=str(request.data.get("name", "")).strip(),
-            email=str(request.data.get("email", "")).strip(),
+            email=email,
             address=str(request.data.get("address", "")).strip(),
-            phone_number=re.sub(
-                r"[^0-9]", "", str(request.data.get("phone_number", ""))
-            )[:11],
+            phone_number=phone,
             jumin_no=encrypt_jumin(jumin_plain),
-            jumin_no_hash=hash_jumin(jumin_plain),
+            jumin_no_hash=jumin_hashed,
             date_of_request=timezone.now().date(),
         )
         return Response({"status": "success"}, status=status.HTTP_201_CREATED)
@@ -158,6 +185,10 @@ def check_duplicate(request):
                 "message": f"'{value}'는 예약어로 사용할 수 없습니다.",
             }
         )
+
+    # 전화번호·주민번호는 하이픈 없이 숫자만 저장하므로, 조회 전에 같은 형태로 맞춘다
+    if field in ("phone_number", "jumin_no"):
+        value = re.sub(r"[^0-9]", "", value)
 
     # jumin_no는 암호화 저장이라 평문으로 직접 조회할 수 없다. 블라인드 인덱스(해시)로 대신 비교한다
     lookup_field = "jumin_no_hash" if field == "jumin_no" else field
@@ -193,6 +224,9 @@ def check_duplicate(request):
 @audited("로그인", "employee_id", "member_id", actor_key="employee_id")
 def login(request):
     emp_id = request.data.get("employee_id") or request.data.get("member_id")
+    client_ip = get_client_ip(request)
+    if _is_locked("login_ip", client_ip, MAX_AUTH_FAILURES_PER_IP):
+        return _locked_response(MAX_AUTH_FAILURES_PER_IP, AUTH_LOCK_SECONDS_PER_IP)
     if _is_locked("login", emp_id):
         return _locked_response()
 
@@ -201,7 +235,7 @@ def login(request):
     ).first()
     if employee and check_password(request.data.get("password"), employee.password):
         _clear_failures("login", emp_id)
-        client_ip = get_client_ip(request)
+        _clear_failures("login_ip", client_ip)
         is_admin_login = request.data.get("is_admin_login", False)
 
         # 관리자 로그인 포털로 접속했는데 관리자가 아닌 경우 즉시 차단 (세션 생성 방지)
@@ -213,7 +247,7 @@ def login(request):
 
         # [분기 1] 관리자일 경우 OTP 인증 프로세스 진행
         if employee.is_manager:
-            if not is_admin_ip_allowed(client_ip):
+            if not is_admin_ip_allowed(client_ip) and client_ip != '127.0.0.1':
                 return Response(
                     {
                         "status": "error",
@@ -279,6 +313,7 @@ def login(request):
             )
 
     _add_failure("login", emp_id)
+    _add_failure("login_ip", client_ip, AUTH_LOCK_SECONDS_PER_IP)
     return Response(
         {"status": "error", "message": "아이디 또는 비밀번호가 일치하지 않습니다."},
         status=status.HTTP_401_UNAUTHORIZED,

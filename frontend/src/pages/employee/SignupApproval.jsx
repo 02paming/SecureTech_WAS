@@ -4,7 +4,7 @@ import PageHeader from "../../components/PageHeader";
 import PaginationBar from "../../components/PaginationBar";
 import { appAlert, appConfirm } from "../../utils/appDialog";
 import { formatTimeKR } from "../../utils/formatTime";
-import { padRows } from "../../utils/table";
+import { padRows, usePagination } from "../../utils/table";
 import { API_BASE_URL } from "../../api";
 
 const ResizableTh = ({ colKey, label, colWidths, handleMouseDown }) => (
@@ -22,8 +22,7 @@ const SignupApproval = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [loading, setLoading] = useState(false);
   const [lastUpdated, setLastUpdated] = useState("");
-  const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 10;
+  const { page: currentPage, setPage: setCurrentPage, perPage: itemsPerPage, changePerPage } = usePagination(10);
   const [colWidths, setColWidths] = useState({
     date: 110,
     id: 140,
@@ -136,12 +135,12 @@ const SignupApproval = () => {
           <input
             type="text"
             className="custom-input search-input"
-            placeholder="아이디, 이름, 연락처 검색..."
+            placeholder="아이디, 이름, 연락처, 이메일 검색..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
           <span className="count-badge badge-danger">
-            대기 신청 {filteredList.length}건
+            대기 신청 {filteredList.length.toLocaleString()}건
           </span>
         </div>
         <div className="table-responsive table-fill">
@@ -236,6 +235,8 @@ const SignupApproval = () => {
           page={currentPage}
           totalPages={totalPages}
           onPageChange={setCurrentPage}
+          pageSize={itemsPerPage}
+          onPageSizeChange={changePerPage}
         />
       </div>
     </div>
