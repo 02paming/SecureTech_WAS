@@ -175,6 +175,7 @@ def run_server():
     print(f" - AI 모델 훈련 성적표 수신 및 장고 ORM 다이렉트 저장 : POST /api/ai_metrics_update")
     print(f" - AI 프로세스 부팅 시 초기 설정 동기화 API : GET /api/get_active_ai_config")
     print(f" - MAC 주소 불일치 (IP 스푸핑) 로그 저장 : POST /api/mac_mismatch_log")
+    print(f" - 사내 위협 탐지 로그 저장 (NXDOMAIN 급증 등) : POST /api/threat_log")
     print(f"=========================================================")
 
     while True:
@@ -877,6 +878,35 @@ def run_server():
                 client_sock.sendall(create_http_response(200, res))
                 continue
 
+
+            # ---------------------------------------------------------
+            # 13. 사내 위협 탐지 로그 저장 (/api/threat_log) - 엔진의 NXDOMAIN 급증(감염 의심) 알림 등
+            #     세션이 없는 PC(미인증)도 남겨야 하므로 online_list_log 를 거치지 않고 IP·MAC 그대로 저장
+            # ---------------------------------------------------------
+            if method == "POST" and path.startswith('/api/threat_log'):
+                ip_address = str(parsed.get("ip_address") or "").strip()
+                mac_address = str(parsed.get("mac_address") or "").strip() or "00:00:00:00:00:00"
+                threat_type = str(parsed.get("threat_type") or "").strip()
+                target_info = str(parsed.get("target_info") or "")[:255]
+                action_taken = str(parsed.get("action_taken") or "DETECTED").strip()[:20]
+
+                if ip_address and threat_type:
+                    try:
+                        with connection.cursor() as cursor:
+                            cursor.execute(
+                                "INSERT INTO unauth_threat_log (ip_address, mac_address, threat_type, target_info, action_taken) VALUES (%s, %s, %s, %s, %s)",
+                                [ip_address[:45], mac_address[:17], threat_type[:50], target_info, action_taken]
+                            )
+                        print(f"  [위협 로그 저장 완료]: {threat_type} / IP({ip_address})")
+                        res = {"status": "success"}
+                    except Exception as e:
+                        print(f"  [위협 로그 DB 저장 에러]: {e}")
+                        res = {"status": "error", "error": str(e)}
+                else:
+                    res = {"status": "error", "error": "Missing ip_address or threat_type"}
+
+                client_sock.sendall(create_http_response(200, res))
+                continue
 
             # =========================================================
             # [테스트용 신규] 일반 사원(is_manager=0) 목록 조회 API 

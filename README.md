@@ -22,7 +22,7 @@
 |---|---|---|---|
 | 관리자 웹 (`frontend/`, React + Vite) | 5173 | 사원·정책·로그·대시보드·AI 임계치/모델 관리 화면 | 이 저장소 |
 | 관리 API (`api/`, Django + DRF, Nginx → Gunicorn 4 workers) | 80 → 8000 | 관리자 인증·사원 관리·정책 변경·로그 조회·대시보드 집계 | 이 저장소 |
-| 엔진 동기화 백엔드 (`pcap_checker.py`) | 8080 | 사원 인증 검증, 접속·차단 로그 저장, 정책·도메인·AI 설정을 엔진 쪽 프록시로 전달 | 이 저장소 |
+| 엔진 동기화 백엔드 (`api/pcap_checker.py`) | 8080 | 사원 인증 검증, 접속·차단 로그 저장, 사내 위협 로그(NXDOMAIN 급증 등) 저장, 정책·도메인·AI 설정을 엔진 쪽 프록시로 전달 | 이 저장소 |
 | MAC 불일치 알림 (`manage.py watch_mac_alerts`) | — | IP 스푸핑 의심 로그 감시·알림 | 이 저장소 |
 | C 패킷 제어 엔진 · AI 판정 서버 · 캡티브 포털 프록시 | 5000 등 | 트래픽 분석·차단, 악성 도메인 판정 | [Captive](https://github.com/02paming/Captive) |
 | MariaDB | 3306 | `internal_db` | DB망 |
@@ -48,7 +48,7 @@ cp .env.example .env          # 값 채우기 (DB 비밀번호·암호화 키 �
 python -m venv venv && venv/bin/pip install -r requirements.txt
 cd frontend && npm install && npm run build && cd ..
 pm2 start ecosystem.config.js # 8000(Gunicorn)·MAC 알림·5173(프론트)
-venv/bin/python pcap_checker.py   # 8080 엔진 동기화 백엔드
+venv/bin/python api/pcap_checker.py   # 8080 엔진 동기화 백엔드
 ```
 
 | 환경변수 (`.env`) | 설명 |
@@ -72,7 +72,7 @@ venv/bin/python pcap_checker.py   # 8080 엔진 동기화 백엔드
 
 | 한계 | 개선 방향 |
 |---|---|
-| `pcap_checker.py`(8080)는 내장 `socket` 으로 직접 구현 — **요청을 한 번에 하나씩** 처리하고 HTTP 를 수동 파싱. 로그 묶음 저장 중에는 로그인 검증 요청이 대기 | Django 뷰로 옮겨 별도 Gunicorn(8080)으로 실행, IP 허용은 미들웨어로 |
+| `api/pcap_checker.py`(8080)는 내장 `socket` 으로 직접 구현 — **요청을 한 번에 하나씩** 처리하고 HTTP 를 수동 파싱. 로그 묶음 저장 중에는 로그인 검증 요청이 대기 | Django 뷰로 옮겨 별도 Gunicorn(8080)으로 실행, IP 허용은 미들웨어로 |
 | 로그 묶음을 받아도 로그 1건마다 세션(`OnlineListLog`)·화이트리스트를 조회 (N+1 SELECT) | 묶음 안의 호스트·도메인을 한 번에 조회 |
 | 로그 누적에 따라 로그 조회 페이지가 느려짐 | 페이지네이션·인덱스·기간별 파티셔닝 |
 | 엔진 쪽 주소·허용 IP 일부가 코드에 고정 (`ALLOWED_IPS`, 프록시 URL) | 환경변수로 이전, 사람별 테스트 DB |
