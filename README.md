@@ -21,7 +21,7 @@
 | 구성 요소 | 포트 | 역할 | 저장소 |
 |---|---|---|---|
 | 관리자 웹 (`frontend/`, React + Vite) | 5173 | 사원·정책·로그·대시보드·AI 임계치/모델 관리 화면 | 이 저장소 |
-| 관리 API (`api/`, Django + DRF, Gunicorn 4 workers) | 8000 | 관리자 인증·사원 관리·정책 변경·로그 조회·대시보드 집계 | 이 저장소 |
+| 관리 API (`api/`, Django + DRF, Nginx → Gunicorn 4 workers) | 80 → 8000 | 관리자 인증·사원 관리·정책 변경·로그 조회·대시보드 집계 | 이 저장소 |
 | 엔진 동기화 백엔드 (`pcap_checker.py`) | 8080 | 사원 인증 검증, 접속·차단 로그 저장, 정책·도메인·AI 설정을 엔진 쪽 프록시로 전달 | 이 저장소 |
 | MAC 불일치 알림 (`manage.py watch_mac_alerts`) | — | IP 스푸핑 의심 로그 감시·알림 | 이 저장소 |
 | C 패킷 제어 엔진 · AI 판정 서버 · 캡티브 포털 프록시 | 5000 등 | 트래픽 분석·차단, 악성 도메인 판정 | [Captive](https://github.com/02paming/Captive) |
@@ -40,6 +40,8 @@
 ## 3. 실행
 
 요구 사항: Python 3.10+, Node.js(프론트 빌드), MariaDB, PM2
+
+운영 환경: Web Server(HP DL360 Gen9) — Python 3.11.13, Node.js 20, Nginx(80) → Gunicorn(8000, 4 workers). DB Server — MariaDB 10.3.39(192.168.4.15, Web Server 192.168.4.100 에서만 접속). 로그: `pm2 logs securetech-backend` (~/.pm2/logs).
 
 ```bash
 cp .env.example .env          # 값 채우기 (DB 비밀번호·암호화 키 등, Git 에 올리지 않음)
