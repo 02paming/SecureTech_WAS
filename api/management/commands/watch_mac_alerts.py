@@ -1,4 +1,4 @@
-# 백그라운드에서 MAC 스푸핑 및 정책 변경 이력을 상시 감시하고 웹훅 경보를 수행하는 관리 명령어 파일
+# 백그라운드에서 MAC 스푸핑·미존재 도메인 급증(DGA 감염 의심) 및 정책 변경 이력을 상시 감시하고 웹훅 경보를 수행하는 관리 명령어 파일
 
 import time
 
@@ -8,8 +8,8 @@ from django.core.management.base import BaseCommand
 from django.db import close_old_connections
 from django.db.models import Max
 
-from api.models import OnlineIpMacMismatchLog
-from api.views.alert_services import send_mac_mismatch_alert
+from api.models import OnlineIpMacMismatchLog, OnlineList, UnauthThreatLog
+from api.views.alert_services import send_mac_mismatch_alert, send_nxdomain_alert
 from api.views.policy_history import record_policy_changes, touch_heartbeat
 from api.views.threshold_history import record_threshold_changes
 from api.views.utils import employee_ip, logger
@@ -18,18 +18,19 @@ POLL_SECONDS = 10
 BATCH_SIZE = 50
 COOLDOWN_SECONDS = 600  # 같은 접속의 같은 MAC은 10분에 한 번만 경보
 STATE_FILE = settings.BASE_DIR / "cache_data" / "mac_alert_last_id"
+THREAT_STATE_FILE = settings.BASE_DIR / "cache_data" / "threat_alert_last_id"  # 사내 위협 로그(NXDOMAIN 급증) 경보 위치
 
 
-def _load_last_id():
+def _load_last_id(state_file=STATE_FILE):
   try:
-    return int(STATE_FILE.read_text())
+    return int(state_file.read_text())
   except (OSError, ValueError):
     return None
 
 
-def _save_last_id(last_id):
-  STATE_FILE.parent.mkdir(exist_ok=True)
-  STATE_FILE.write_text(str(last_id))
+def _save_last_id(last_id, state_file=STATE_FILE):
+  state_file.parent.mkdir(exist_ok=True)
+  state_file.write_text(str(last_id))
 
 
 def process_new_alerts():
@@ -72,8 +73,49 @@ def process_new_alerts():
   return sent
 
 
+def process_new_threat_alerts():
+  """엔진이 사내 위협 로그에 새로 남긴 '미존재 도메인 급증(DGA 감염 의심)' 행을 경보한다. 보낸 경보 수를 돌려준다.
+  엔진이 PC별로 구간(기본 60초)당 1건만 남기므로 여기서는 쿨다운 없이 그대로 보낸다."""
+  last_id = _load_last_id(THREAT_STATE_FILE)
+  latest = UnauthThreatLog.objects.aggregate(m=Max("pk"))["m"] or 0
+  if last_id is None:
+    # 처음 실행할 때는 지난 기록을 한꺼번에 보내지 않고 지금부터 감시한다
+    _save_last_id(latest, THREAT_STATE_FILE)
+    return 0
+  if latest < last_id:
+    last_id = 0
+
+  rows = UnauthThreatLog.objects.filter(pk__gt=last_id).order_by("pk")[:BATCH_SIZE]
+  sent = 0
+  for row in rows:
+    if row.threat_type == "DGA_NXDOMAIN":
+      # 인증된 PC면 사원 이름을 같이 보여 줌 (미인증 PC는 '미인증 단말')
+      employee = "미인증 단말"
+      try:
+        suffix = int(str(row.ip_address).split(".")[-1])
+        online = OnlineList.objects.select_related("employee").filter(online_ip=suffix).first()
+        if online and online.employee:
+          employee = f"{online.employee.name} ({online.employee.employee_id})"
+      except (ValueError, TypeError):
+        pass
+      ok = send_nxdomain_alert(
+        employee,
+        row.ip_address,
+        row.mac_address,
+        row.target_info,
+        row.detected_at.strftime("%Y-%m-%d %H:%M:%S") if row.detected_at else "-",
+      )
+      # 전송에 실패하면 이 행부터 다음 주기에 다시 시도한다
+      if not ok:
+        break
+      sent += 1
+    last_id = row.pk
+  _save_last_id(last_id, THREAT_STATE_FILE)
+  return sent
+
+
 class Command(BaseCommand):
-  help = "상시 실행: MAC 스푸핑 행을 Discord와 Slack으로 경보하고 정책 변경 이력을 기록"
+  help = "상시 실행: MAC 스푸핑·미존재 도메인 급증 행을 Discord와 Slack으로 경보하고 정책 변경 이력을 기록"
 
   def handle(self, *args, **options):
     while True:
@@ -83,6 +125,10 @@ class Command(BaseCommand):
         process_new_alerts()
       except Exception as e:
         logger.error("MAC 스푸핑 경보 처리 오류: %s", e)
+      try:
+        process_new_threat_alerts()
+      except Exception as e:
+        logger.error("사내 위협(NXDOMAIN) 경보 처리 오류: %s", e)
       try:
         record_policy_changes()
       except Exception as e:
